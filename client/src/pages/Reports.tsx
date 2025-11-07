@@ -462,7 +462,7 @@ export default function Reports() {
                       {item.inProgress}
                     </Badge>
                   </div>
-                  {item.rating !== undefined && (
+                  {typeof item.rating === 'number' && (
                     <div className="flex items-center justify-between text-sm pt-2 border-t">
                       <span className="text-muted-foreground">Рейтинг:</span>
                       <div className="flex items-center gap-1">
