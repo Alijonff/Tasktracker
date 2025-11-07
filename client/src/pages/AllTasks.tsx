@@ -16,6 +16,7 @@ export default function AllTasks() {
     search: "",
     status: "all",
     type: "all",
+    departmentId: "dept-1", // Default to first department
     managementId: "all",
     divisionId: "all",
   });
@@ -30,28 +31,9 @@ export default function AllTasks() {
     queryKey: ["/api/divisions"],
   });
 
-  // Build query params from filters
-  const buildQueryParams = () => {
-    const params = new URLSearchParams();
-    
-    if (filters.managementId !== "all") params.append("managementId", filters.managementId);
-    if (filters.divisionId !== "all") params.append("divisionId", filters.divisionId);
-    if (filters.status !== "all") params.append("status", filters.status);
-    if (filters.type !== "all") params.append("type", filters.type);
-    if (filters.search) params.append("search", filters.search);
-    
-    const queryString = params.toString();
-    return queryString ? `?${queryString}` : "";
-  };
-
-  // Fetch tasks with filters
+  // Fetch tasks with segmented query key for proper cache invalidation
   const { data: tasks = [], isLoading } = useQuery<Task[]>({
     queryKey: ["/api/tasks", filters],
-    queryFn: async () => {
-      const response = await fetch(`/api/tasks${buildQueryParams()}`);
-      if (!response.ok) throw new Error("Failed to fetch tasks");
-      return response.json();
-    },
   });
 
   const filteredTasks = tasks;

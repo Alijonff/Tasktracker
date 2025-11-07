@@ -72,17 +72,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         assigneeId 
       } = req.query;
       
+      // Department ID is required for security and data scoping
+      if (!departmentId) {
+        return res.status(400).json({ error: "departmentId is required" });
+      }
+      
       const filters: {
-        departmentId?: string;
+        departmentId: string;
         managementId?: string;
         divisionId?: string;
         status?: string;
         type?: string;
         search?: string;
         assigneeId?: string;
-      } = {};
+      } = {
+        departmentId: departmentId as string,
+      };
       
-      if (departmentId) filters.departmentId = departmentId as string;
       if (managementId) filters.managementId = managementId as string;
       if (divisionId) filters.divisionId = divisionId as string;
       if (status) filters.status = status as string;
@@ -90,7 +96,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (search) filters.search = search as string;
       if (assigneeId) filters.assigneeId = assigneeId as string;
       
-      const allTasks = await storage.getAllTasks(Object.keys(filters).length > 0 ? filters : undefined);
+      const allTasks = await storage.getAllTasks(filters);
       res.json(allTasks);
     } catch (error) {
       console.error("Error fetching tasks:", error);

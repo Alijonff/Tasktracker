@@ -11,7 +11,9 @@ import {
   type Division,
   type Employee,
   type Task,
-  type AuctionBid
+  type AuctionBid,
+  type InsertTask,
+  type InsertBid
 } from "@shared/schema";
 import { eq, and, or, like, desc } from "drizzle-orm";
 
@@ -33,8 +35,8 @@ export interface IStorage {
   getEmployee(id: string): Promise<Employee | undefined>;
 
   // Tasks
-  getAllTasks(filters?: {
-    departmentId?: string;
+  getAllTasks(filters: {
+    departmentId: string;
     managementId?: string;
     divisionId?: string;
     status?: string;
@@ -43,9 +45,12 @@ export interface IStorage {
     assigneeId?: string;
   }): Promise<Task[]>;
   getTask(id: string): Promise<Task | undefined>;
+  createTask(task: InsertTask): Promise<Task>;
+  updateTask(id: string, updates: Partial<InsertTask>): Promise<Task | undefined>;
 
   // Auction Bids
   getTaskBids(taskId: string): Promise<AuctionBid[]>;
+  createBid(bid: InsertBid): Promise<AuctionBid>;
 }
 
 export class DbStorage implements IStorage {
@@ -108,8 +113,8 @@ export class DbStorage implements IStorage {
   }
 
   // Tasks
-  async getAllTasks(filters?: {
-    departmentId?: string;
+  async getAllTasks(filters: {
+    departmentId: string;
     managementId?: string;
     divisionId?: string;
     status?: string;
@@ -118,27 +123,27 @@ export class DbStorage implements IStorage {
     assigneeId?: string;
   }): Promise<Task[]> {
     let query = db.select().from(tasks);
-    const conditions = [];
+    const conditions = [
+      // Always filter by department for security
+      eq(tasks.departmentId, filters.departmentId)
+    ];
     
-    if (filters?.departmentId) {
-      conditions.push(eq(tasks.departmentId, filters.departmentId));
-    }
-    if (filters?.managementId) {
+    if (filters.managementId) {
       conditions.push(eq(tasks.managementId, filters.managementId));
     }
-    if (filters?.divisionId) {
+    if (filters.divisionId) {
       conditions.push(eq(tasks.divisionId, filters.divisionId));
     }
-    if (filters?.status && filters.status !== "all") {
+    if (filters.status && filters.status !== "all") {
       conditions.push(eq(tasks.status, filters.status as any));
     }
-    if (filters?.type && filters.type !== "all") {
+    if (filters.type && filters.type !== "all") {
       conditions.push(eq(tasks.type, filters.type as any));
     }
-    if (filters?.assigneeId) {
+    if (filters.assigneeId) {
       conditions.push(eq(tasks.assigneeId, filters.assigneeId));
     }
-    if (filters?.search) {
+    if (filters.search) {
       conditions.push(
         or(
           like(tasks.title, `%${filters.search}%`),
@@ -147,15 +152,27 @@ export class DbStorage implements IStorage {
       );
     }
     
-    if (conditions.length > 0) {
-      query = query.where(and(...conditions)) as any;
-    }
-    
+    query = query.where(and(...conditions)) as any;
     return await query.orderBy(desc(tasks.createdAt));
   }
 
   async getTask(id: string): Promise<Task | undefined> {
     const [task] = await db.select().from(tasks).where(eq(tasks.id, id));
+    return task;
+  }
+
+  // Task mutations
+  async createTask(taskData: InsertTask): Promise<Task> {
+    const [task] = await db.insert(tasks).values(taskData as any).returning();
+    return task;
+  }
+
+  async updateTask(id: string, updates: Partial<InsertTask>): Promise<Task | undefined> {
+    const [task] = await db
+      .update(tasks)
+      .set({ ...updates as any, updatedAt: new Date() })
+      .where(eq(tasks.id, id))
+      .returning();
     return task;
   }
 
@@ -166,6 +183,11 @@ export class DbStorage implements IStorage {
       .from(auctionBids)
       .where(eq(auctionBids.taskId, taskId))
       .orderBy(auctionBids.hours);
+  }
+
+  async createBid(bidData: InsertBid): Promise<AuctionBid> {
+    const [bid] = await db.insert(auctionBids).values(bidData as any).returning();
+    return bid;
   }
 }
 
