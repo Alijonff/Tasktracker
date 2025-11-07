@@ -55,12 +55,12 @@ export default function MyTasks() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">My Tasks</h1>
-          <p className="text-muted-foreground">Tasks assigned to you</p>
+          <h1 className="text-3xl font-bold">Мои задачи</h1>
+          <p className="text-muted-foreground">Задачи, назначенные вам</p>
         </div>
         <Button onClick={() => setTimeLogOpen(true)} variant="outline" data-testid="button-log-time-header">
           <Clock size={18} />
-          Log Time
+          Записать время
         </Button>
       </div>
 

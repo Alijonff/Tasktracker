@@ -60,14 +60,14 @@ export default function TaskDetailDialog({ open, onOpenChange, task }: TaskDetai
         <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6 overflow-y-auto pr-2">
             <div>
-              <h3 className="font-semibold mb-2">Description</h3>
+              <h3 className="font-semibold mb-2">Описание</h3>
               <p className="text-sm text-muted-foreground">{task.description}</p>
             </div>
 
             <Separator />
 
             <div>
-              <h3 className="font-semibold mb-4">Comments ({task.comments.length})</h3>
+              <h3 className="font-semibold mb-4">Комментарии ({task.comments.length})</h3>
               <ScrollArea className="h-64">
                 <div className="space-y-4">
                   {task.comments.map((comment) => (
@@ -87,7 +87,7 @@ export default function TaskDetailDialog({ open, onOpenChange, task }: TaskDetai
 
               <div className="mt-4 flex gap-2">
                 <Textarea
-                  placeholder="Add a comment..."
+                  placeholder="Добавить комментарий..."
                   value={newComment}
                   onChange={(e) => setNewComment(e.target.value)}
                   rows={2}
@@ -107,40 +107,40 @@ export default function TaskDetailDialog({ open, onOpenChange, task }: TaskDetai
 
           <div className="space-y-4">
             <div className="p-4 rounded-md bg-card border space-y-3">
-              <h3 className="font-semibold">Details</h3>
+              <h3 className="font-semibold">Детали</h3>
               
               <div className="space-y-3 text-sm">
                 <div className="flex items-center gap-2">
                   <User size={16} className="text-muted-foreground" />
-                  <span className="text-muted-foreground">Creator:</span>
+                  <span className="text-muted-foreground">Создатель:</span>
                   <span className="font-medium">{task.creator}</span>
                 </div>
 
                 {task.assignee && (
                   <div className="flex items-center gap-2">
                     <User size={16} className="text-muted-foreground" />
-                    <span className="text-muted-foreground">Assignee:</span>
+                    <span className="text-muted-foreground">Исполнитель:</span>
                     <span className="font-medium">{task.assignee}</span>
                   </div>
                 )}
 
                 <div className="flex items-center gap-2">
                   <Calendar size={16} className="text-muted-foreground" />
-                  <span className="text-muted-foreground">Deadline:</span>
+                  <span className="text-muted-foreground">Дедлайн:</span>
                   <span className="font-medium font-mono">{task.deadline}</span>
                 </div>
 
                 <div className="flex items-center gap-2">
                   <Clock size={16} className="text-muted-foreground" />
-                  <span className="text-muted-foreground">Time:</span>
+                  <span className="text-muted-foreground">Время:</span>
                   <span className="font-medium font-mono">
-                    {task.actualHours ? `${task.actualHours}/${task.estimatedHours}h` : `${task.estimatedHours}h`}
+                    {task.actualHours ? `${task.actualHours}/${task.estimatedHours}ч` : `${task.estimatedHours}ч`}
                   </span>
                 </div>
 
                 {task.rating && (
                   <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground">Rating:</span>
+                    <span className="text-muted-foreground">Рейтинг:</span>
                     <RatingDisplay rating={task.rating} size="sm" />
                   </div>
                 )}
@@ -149,14 +149,14 @@ export default function TaskDetailDialog({ open, onOpenChange, task }: TaskDetai
 
             <div className="space-y-2">
               <Button className="w-full" data-testid="button-start-task">
-                Start Task
+                Начать задачу
               </Button>
               <Button variant="outline" className="w-full" data-testid="button-log-time">
-                Log Time
+                Записать время
               </Button>
               {task.status === "inProgress" && (
                 <Button variant="outline" className="w-full" data-testid="button-submit-review">
-                  Submit for Review
+                  Отправить на проверку
                 </Button>
               )}
             </div>

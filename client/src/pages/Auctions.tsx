@@ -69,8 +69,8 @@ export default function Auctions() {
           <Gavel className="text-primary" size={32} />
         </div>
         <div>
-          <h1 className="text-3xl font-bold">Active Auctions</h1>
-          <p className="text-muted-foreground">Bid on available tasks to add them to your workload</p>
+          <h1 className="text-3xl font-bold">Активные аукционы</h1>
+          <p className="text-muted-foreground">Делайте ставки на доступные задачи</p>
         </div>
       </div>
 

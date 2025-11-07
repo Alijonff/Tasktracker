@@ -94,7 +94,7 @@ export default function OrganizationTree({ data }: OrganizationTreeProps) {
   return (
     <Card data-testid="card-organization-tree">
       <CardHeader>
-        <CardTitle>Organization Structure</CardTitle>
+        <CardTitle>Структура организации</CardTitle>
       </CardHeader>
       <CardContent className="space-y-1">
         {data.map((node) => (

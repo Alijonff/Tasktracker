@@ -21,16 +21,16 @@ import {
 import { useLocation } from "wouter";
 
 const menuItems = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "My Tasks", url: "/my-tasks", icon: CheckSquare },
-  { title: "Auctions", url: "/auctions", icon: Gavel },
-  { title: "Create Task", url: "/create-task", icon: PlusCircle },
-  { title: "Reports", url: "/reports", icon: BarChart3 },
+  { title: "Панель управления", url: "/", icon: LayoutDashboard },
+  { title: "Мои задачи", url: "/my-tasks", icon: CheckSquare },
+  { title: "Аукционы", url: "/auctions", icon: Gavel },
+  { title: "Создать задачу", url: "/create-task", icon: PlusCircle },
+  { title: "Отчёты", url: "/reports", icon: BarChart3 },
 ];
 
 const adminItems = [
-  { title: "Organization", url: "/organization", icon: Building2 },
-  { title: "Settings", url: "/settings", icon: Settings },
+  { title: "Организация", url: "/organization", icon: Building2 },
+  { title: "Настройки", url: "/settings", icon: Settings },
 ];
 
 export default function AppSidebar() {
@@ -45,13 +45,13 @@ export default function AppSidebar() {
           </div>
           <div>
             <h2 className="font-bold text-xl">TaskFlow</h2>
-            <p className="text-xs text-muted-foreground">Enterprise Management</p>
+            <p className="text-xs text-muted-foreground">Управление задачами</p>
           </div>
         </div>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Main Menu</SidebarGroupLabel>
+          <SidebarGroupLabel>Главное меню</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {menuItems.map((item) => (
@@ -73,7 +73,7 @@ export default function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Administration</SidebarGroupLabel>
+          <SidebarGroupLabel>Администрирование</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {adminItems.map((item) => (

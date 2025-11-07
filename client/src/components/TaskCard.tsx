@@ -63,11 +63,11 @@ export default function TaskCard({
         <div className="flex items-center justify-between text-sm">
           <div className="flex items-center gap-2">
             <UserAvatar name={creator} size="sm" />
-            <span className="text-muted-foreground">Creator</span>
+            <span className="text-muted-foreground">Создатель</span>
           </div>
           {assignee && (
             <div className="flex items-center gap-2">
-              <span className="text-muted-foreground">Assignee</span>
+              <span className="text-muted-foreground">Исполнитель</span>
               <UserAvatar name={assignee} size="sm" />
             </div>
           )}
@@ -78,19 +78,19 @@ export default function TaskCard({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Users size={16} className="text-primary" />
-                <span className="text-sm font-medium">{bidCount} Bids</span>
+                <span className="text-sm font-medium">{bidCount} ставок</span>
               </div>
               {minBid !== undefined && (
                 <div className="flex items-center gap-1">
                   <Clock size={16} className="text-primary" />
-                  <span className="text-sm font-mono font-medium text-primary">{minBid}h</span>
+                  <span className="text-sm font-mono font-medium text-primary">{minBid}ч</span>
                 </div>
               )}
             </div>
             {timeRemaining && (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Timer size={14} />
-                <span>{timeRemaining} until time increase</span>
+                <span>{timeRemaining} до увеличения времени</span>
               </div>
             )}
             <Button 
@@ -102,7 +102,7 @@ export default function TaskCard({
               }}
               data-testid={`button-place-bid-${id}`}
             >
-              Place Bid
+              Сделать ставку
             </Button>
           </div>
         )}
@@ -116,7 +116,7 @@ export default function TaskCard({
             <div className="flex items-center gap-1">
               <Clock size={14} />
               <span className="font-mono">
-                {actualHours !== undefined ? `${actualHours}/${estimatedHours}h` : `${estimatedHours}h`}
+                {actualHours !== undefined ? `${actualHours}/${estimatedHours}ч` : `${estimatedHours}ч`}
               </span>
             </div>
           </div>

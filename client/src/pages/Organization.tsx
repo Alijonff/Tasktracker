@@ -83,12 +83,12 @@ export default function Organization() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Organization Structure</h1>
-          <p className="text-muted-foreground">Manage departments, teams, and employees</p>
+          <h1 className="text-3xl font-bold">Структура организации</h1>
+          <p className="text-muted-foreground">Управляйте отделами, командами и сотрудниками</p>
         </div>
         <Button data-testid="button-add-department">
           <Plus size={18} />
-          Add Department
+          Добавить департамент
         </Button>
       </div>
 

@@ -57,36 +57,36 @@ export default function Dashboard() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Dashboard</h1>
-          <p className="text-muted-foreground">Welcome back! Here's your overview</p>
+          <h1 className="text-3xl font-bold">Панель управления</h1>
+          <p className="text-muted-foreground">Добро пожаловать! Вот ваш обзор</p>
         </div>
         <Button onClick={() => setCreateDialogOpen(true)} data-testid="button-create-task-header">
           <Plus size={18} />
-          Create Task
+          Создать задачу
         </Button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatsCard
-          title="Completed Tasks"
+          title="Выполненные задачи"
           value={127}
           icon={CheckCircle2}
           trend={{ value: 12, isPositive: true }}
         />
         <StatsCard
-          title="Total Hours"
+          title="Всего часов"
           value="1,248"
           icon={Clock}
-          subtitle="This month"
+          subtitle="В этом месяце"
           trend={{ value: 8, isPositive: true }}
         />
         <StatsCard
-          title="Active Auctions"
+          title="Активные аукционы"
           value={15}
           icon={TrendingUp}
         />
         <StatsCard
-          title="Team Members"
+          title="Сотрудники"
           value={42}
           icon={Users}
           trend={{ value: 5, isPositive: true }}
@@ -94,7 +94,7 @@ export default function Dashboard() {
       </div>
 
       <div>
-        <h2 className="text-2xl font-bold mb-4">Recent Tasks</h2>
+        <h2 className="text-2xl font-bold mb-4">Последние задачи</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {mockRecentTasks.map((task) => (
             <TaskCard

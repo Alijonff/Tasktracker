@@ -31,8 +31,8 @@ export default function Reports() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Reports & Analytics</h1>
-          <p className="text-muted-foreground">Track performance and productivity metrics</p>
+          <h1 className="text-3xl font-bold">Отчёты и аналитика</h1>
+          <p className="text-muted-foreground">Отслеживайте показатели производительности</p>
         </div>
         <div className="flex gap-2">
           <Select defaultValue="month">
@@ -40,10 +40,10 @@ export default function Reports() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="week">This Week</SelectItem>
-              <SelectItem value="month">This Month</SelectItem>
-              <SelectItem value="quarter">This Quarter</SelectItem>
-              <SelectItem value="year">This Year</SelectItem>
+              <SelectItem value="week">Эта неделя</SelectItem>
+              <SelectItem value="month">Этот месяц</SelectItem>
+              <SelectItem value="quarter">Этот квартал</SelectItem>
+              <SelectItem value="year">Этот год</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -54,7 +54,7 @@ export default function Reports() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Clock className="text-primary" size={20} />
-              Hours Worked This Week
+              Часы работы на этой неделе
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -80,7 +80,7 @@ export default function Reports() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Award className="text-primary" size={20} />
-              Rating Trend
+              Тренд рейтинга
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -112,7 +112,7 @@ export default function Reports() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <BarChart3 className="text-primary" size={20} />
-              Department Performance
+              Производительность отделов
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -145,7 +145,7 @@ export default function Reports() {
                 <TrendingUp className="text-chart-3" size={24} />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Avg. Completion Rate</p>
+                <p className="text-sm text-muted-foreground">Среднее завершение</p>
                 <p className="text-2xl font-bold font-mono">87%</p>
               </div>
             </div>
@@ -159,8 +159,8 @@ export default function Reports() {
                 <Clock className="text-chart-1" size={24} />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Avg. Task Duration</p>
-                <p className="text-2xl font-bold font-mono">18.5h</p>
+                <p className="text-sm text-muted-foreground">Средняя длительность</p>
+                <p className="text-2xl font-bold font-mono">18.5ч</p>
               </div>
             </div>
           </CardContent>
@@ -173,7 +173,7 @@ export default function Reports() {
                 <Award className="text-chart-5" size={24} />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Team Avg. Rating</p>
+                <p className="text-sm text-muted-foreground">Средний рейтинг</p>
                 <p className="text-2xl font-bold font-mono">4.7</p>
               </div>
             </div>

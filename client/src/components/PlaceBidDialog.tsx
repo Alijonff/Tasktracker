@@ -42,40 +42,40 @@ export default function PlaceBidDialog({ open, onOpenChange, task }: PlaceBidDia
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl" data-testid="dialog-place-bid">
         <DialogHeader>
-          <DialogTitle>Place Bid</DialogTitle>
+          <DialogTitle>Сделать ставку</DialogTitle>
           <p className="text-sm text-muted-foreground">{task.title}</p>
         </DialogHeader>
 
         <div className="space-y-6">
           <div className="p-4 rounded-md bg-primary/5 border border-primary/20">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium">Current Minimum Bid</span>
+              <span className="text-sm font-medium">Текущая минимальная ставка</span>
               <div className="flex items-center gap-2">
                 <Clock className="text-primary" size={18} />
-                <span className="text-2xl font-bold font-mono text-primary">{task.currentMinBid}h</span>
+                <span className="text-2xl font-bold font-mono text-primary">{task.currentMinBid}ч</span>
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              You must bid less than the current minimum to win the task
+              Ваша ставка должна быть меньше текущей минимальной
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="bidHours">Your Bid (hours) *</Label>
+              <Label htmlFor="bidHours">Ваша ставка (часы) *</Label>
               <Input
                 id="bidHours"
                 type="number"
                 min="1"
                 max={task.currentMinBid - 1}
-                placeholder="Enter hours"
+                placeholder="Введите часы"
                 value={bidHours}
                 onChange={(e) => setBidHours(e.target.value)}
                 required
                 data-testid="input-bid-hours"
               />
               <p className="text-xs text-muted-foreground">
-                Must be less than {task.currentMinBid} hours
+                Должно быть меньше {task.currentMinBid} часов
               </p>
             </div>
 
@@ -83,7 +83,7 @@ export default function PlaceBidDialog({ open, onOpenChange, task }: PlaceBidDia
 
             <div>
               <h3 className="font-semibold mb-3 flex items-center gap-2">
-                Current Bids ({task.bids.length})
+                Текущие ставки ({task.bids.length})
                 <TrendingDown className="text-primary" size={16} />
               </h3>
               <ScrollArea className="h-48">
@@ -105,9 +105,9 @@ export default function PlaceBidDialog({ open, onOpenChange, task }: PlaceBidDia
                       <div className="flex items-center gap-3">
                         <RatingDisplay rating={bid.rating} size="sm" />
                         <div className="text-right">
-                          <p className="font-mono font-bold text-primary">{bid.hours}h</p>
+                          <p className="font-mono font-bold text-primary">{bid.hours}ч</p>
                           {index === 0 && (
-                            <p className="text-xs text-primary">Winning</p>
+                            <p className="text-xs text-primary">Побеждает</p>
                           )}
                         </div>
                       </div>
@@ -119,10 +119,10 @@ export default function PlaceBidDialog({ open, onOpenChange, task }: PlaceBidDia
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)} data-testid="button-cancel">
-                Cancel
+                Отмена
               </Button>
               <Button type="submit" data-testid="button-submit-bid">
-                Place Bid
+                Сделать ставку
               </Button>
             </DialogFooter>
           </form>

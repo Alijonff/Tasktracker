@@ -28,7 +28,7 @@ export default function TimeLogDialog({ open, onOpenChange, taskTitle }: TimeLog
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent data-testid="dialog-time-log">
         <DialogHeader>
-          <DialogTitle>Log Work Time</DialogTitle>
+          <DialogTitle>Записать рабочее время</DialogTitle>
           {taskTitle && (
             <p className="text-sm text-muted-foreground">{taskTitle}</p>
           )}
@@ -36,7 +36,7 @@ export default function TimeLogDialog({ open, onOpenChange, taskTitle }: TimeLog
         
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="date">Date *</Label>
+            <Label htmlFor="date">Дата *</Label>
             <Input
               id="date"
               type="date"
@@ -48,7 +48,7 @@ export default function TimeLogDialog({ open, onOpenChange, taskTitle }: TimeLog
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="hours">Hours Worked *</Label>
+            <Label htmlFor="hours">Отработанные часы *</Label>
             <Input
               id="hours"
               type="number"
@@ -63,10 +63,10 @@ export default function TimeLogDialog({ open, onOpenChange, taskTitle }: TimeLog
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="description">Activity Description</Label>
+            <Label htmlFor="description">Описание деятельности</Label>
             <Textarea
               id="description"
-              placeholder="What did you work on?"
+              placeholder="Над чем вы работали?"
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               rows={3}
@@ -76,10 +76,10 @@ export default function TimeLogDialog({ open, onOpenChange, taskTitle }: TimeLog
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} data-testid="button-cancel">
-              Cancel
+              Отмена
             </Button>
             <Button type="submit" data-testid="button-log-time">
-              Log Time
+              Записать время
             </Button>
           </DialogFooter>
         </form>

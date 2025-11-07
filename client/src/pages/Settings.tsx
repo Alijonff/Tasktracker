@@ -11,27 +11,27 @@ export default function Settings() {
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
-        <h1 className="text-3xl font-bold">Settings</h1>
-        <p className="text-muted-foreground">Manage your account and application preferences</p>
+        <h1 className="text-3xl font-bold">Настройки</h1>
+        <p className="text-muted-foreground">Управляйте своим аккаунтом и настройками приложения</p>
       </div>
 
       <Card data-testid="card-profile-settings">
         <CardHeader>
-          <CardTitle>Profile Settings</CardTitle>
-          <CardDescription>Update your personal information</CardDescription>
+          <CardTitle>Настройки профиля</CardTitle>
+          <CardDescription>Обновите свою личную информацию</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="flex items-center gap-4">
-            <UserAvatar name="Mike Chen" size="lg" />
+            <UserAvatar name="Михаил Чен" size="lg" />
             <Button variant="outline" size="sm" data-testid="button-change-avatar">
-              Change Avatar
+              Изменить аватар
             </Button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Full Name</Label>
-              <Input id="name" defaultValue="Mike Chen" data-testid="input-full-name" />
+              <Label htmlFor="name">Полное имя</Label>
+              <Input id="name" defaultValue="Михаил Чен" data-testid="input-full-name" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
@@ -41,64 +41,64 @@ export default function Settings() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="department">Department</Label>
+              <Label htmlFor="department">Подразделение</Label>
               <Select defaultValue="engineering">
                 <SelectTrigger id="department" data-testid="select-department-settings">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="engineering">Engineering</SelectItem>
-                  <SelectItem value="design">Design</SelectItem>
-                  <SelectItem value="marketing">Marketing</SelectItem>
+                  <SelectItem value="engineering">Инженерный отдел</SelectItem>
+                  <SelectItem value="design">Отдел дизайна</SelectItem>
+                  <SelectItem value="marketing">Отдел маркетинга</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="role">Role</Label>
+              <Label htmlFor="role">Роль</Label>
               <Select defaultValue="senior">
                 <SelectTrigger id="role" data-testid="select-role-settings">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="admin">Administrator</SelectItem>
-                  <SelectItem value="director">Department Director</SelectItem>
-                  <SelectItem value="senior">Senior Employee</SelectItem>
-                  <SelectItem value="employee">Employee</SelectItem>
+                  <SelectItem value="admin">Администратор</SelectItem>
+                  <SelectItem value="director">Директор департамента</SelectItem>
+                  <SelectItem value="senior">Старший сотрудник</SelectItem>
+                  <SelectItem value="employee">Сотрудник</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
 
-          <Button data-testid="button-save-profile">Save Changes</Button>
+          <Button data-testid="button-save-profile">Сохранить изменения</Button>
         </CardContent>
       </Card>
 
       <Card data-testid="card-notification-settings">
         <CardHeader>
-          <CardTitle>Notifications</CardTitle>
-          <CardDescription>Configure how you receive notifications</CardDescription>
+          <CardTitle>Уведомления</CardTitle>
+          <CardDescription>Настройте способ получения уведомлений</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label>Task Assignments</Label>
-              <p className="text-sm text-muted-foreground">Get notified when tasks are assigned to you</p>
+              <Label>Назначение задач</Label>
+              <p className="text-sm text-muted-foreground">Получать уведомления при назначении задач</p>
             </div>
             <Switch defaultChecked data-testid="switch-task-notifications" />
           </div>
           <Separator />
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label>Auction Updates</Label>
-              <p className="text-sm text-muted-foreground">Notifications when you win or lose auctions</p>
+              <Label>Обновления аукционов</Label>
+              <p className="text-sm text-muted-foreground">Уведомления о победе или проигрыше в аукционах</p>
             </div>
             <Switch defaultChecked data-testid="switch-auction-notifications" />
           </div>
           <Separator />
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label>Deadline Reminders</Label>
-              <p className="text-sm text-muted-foreground">Reminders for approaching deadlines</p>
+              <Label>Напоминания о дедлайнах</Label>
+              <p className="text-sm text-muted-foreground">Напоминания о приближающихся дедлайнах</p>
             </div>
             <Switch defaultChecked data-testid="switch-deadline-notifications" />
           </div>
@@ -107,26 +107,26 @@ export default function Settings() {
 
       <Card data-testid="card-system-settings">
         <CardHeader>
-          <CardTitle>System Preferences</CardTitle>
-          <CardDescription>Customize your application experience</CardDescription>
+          <CardTitle>Системные настройки</CardTitle>
+          <CardDescription>Настройте работу приложения</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="language">Language</Label>
-            <Select defaultValue="en">
+            <Label htmlFor="language">Язык</Label>
+            <Select defaultValue="ru">
               <SelectTrigger id="language" data-testid="select-language">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="en">English</SelectItem>
-                <SelectItem value="ru">Russian</SelectItem>
+                <SelectItem value="ru">Русский</SelectItem>
               </SelectContent>
             </Select>
           </div>
           
           <div className="space-y-2">
-            <Label htmlFor="timezone">Timezone</Label>
-            <Select defaultValue="utc">
+            <Label htmlFor="timezone">Часовой пояс</Label>
+            <Select defaultValue="msk">
               <SelectTrigger id="timezone" data-testid="select-timezone">
                 <SelectValue />
               </SelectTrigger>
@@ -134,7 +134,7 @@ export default function Settings() {
                 <SelectItem value="utc">UTC</SelectItem>
                 <SelectItem value="est">EST</SelectItem>
                 <SelectItem value="pst">PST</SelectItem>
-                <SelectItem value="msk">MSK</SelectItem>
+                <SelectItem value="msk">MSK (Москва)</SelectItem>
               </SelectContent>
             </Select>
           </div>

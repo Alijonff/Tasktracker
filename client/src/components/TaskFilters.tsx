@@ -34,7 +34,7 @@ export default function TaskFilters({ onFilterChange }: TaskFiltersProps) {
       <div className="relative flex-1">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
         <Input
-          placeholder="Search tasks..."
+          placeholder="Поиск задач..."
           value={filters.search}
           onChange={(e) => handleChange("search", e.target.value)}
           className="pl-10"
@@ -44,39 +44,39 @@ export default function TaskFilters({ onFilterChange }: TaskFiltersProps) {
       
       <Select value={filters.status} onValueChange={(v) => handleChange("status", v)}>
         <SelectTrigger className="w-full md:w-40" data-testid="select-filter-status">
-          <SelectValue placeholder="Status" />
+          <SelectValue placeholder="Статус" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">All Status</SelectItem>
-          <SelectItem value="backlog">Backlog</SelectItem>
-          <SelectItem value="inProgress">In Progress</SelectItem>
-          <SelectItem value="underReview">Under Review</SelectItem>
-          <SelectItem value="completed">Completed</SelectItem>
-          <SelectItem value="overdue">Overdue</SelectItem>
+          <SelectItem value="all">Все статусы</SelectItem>
+          <SelectItem value="backlog">Бэклог</SelectItem>
+          <SelectItem value="inProgress">В работе</SelectItem>
+          <SelectItem value="underReview">На проверке</SelectItem>
+          <SelectItem value="completed">Выполнена</SelectItem>
+          <SelectItem value="overdue">Просрочена</SelectItem>
         </SelectContent>
       </Select>
 
       <Select value={filters.type} onValueChange={(v) => handleChange("type", v)}>
         <SelectTrigger className="w-full md:w-40" data-testid="select-filter-type">
-          <SelectValue placeholder="Type" />
+          <SelectValue placeholder="Тип" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">All Types</SelectItem>
-          <SelectItem value="individual">Individual</SelectItem>
-          <SelectItem value="auction">Auction</SelectItem>
+          <SelectItem value="all">Все типы</SelectItem>
+          <SelectItem value="individual">Индивидуальная</SelectItem>
+          <SelectItem value="auction">Аукцион</SelectItem>
         </SelectContent>
       </Select>
 
       <Select value={filters.department} onValueChange={(v) => handleChange("department", v)}>
         <SelectTrigger className="w-full md:w-48" data-testid="select-filter-department">
-          <SelectValue placeholder="Department" />
+          <SelectValue placeholder="Подразделение" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">All Departments</SelectItem>
-          <SelectItem value="engineering">Engineering</SelectItem>
-          <SelectItem value="design">Design</SelectItem>
-          <SelectItem value="marketing">Marketing</SelectItem>
-          <SelectItem value="sales">Sales</SelectItem>
+          <SelectItem value="all">Все подразделения</SelectItem>
+          <SelectItem value="engineering">Инженерный отдел</SelectItem>
+          <SelectItem value="design">Отдел дизайна</SelectItem>
+          <SelectItem value="marketing">Отдел маркетинга</SelectItem>
+          <SelectItem value="sales">Отдел продаж</SelectItem>
         </SelectContent>
       </Select>
 

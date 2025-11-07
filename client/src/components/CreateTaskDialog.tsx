@@ -33,34 +33,34 @@ export default function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialo
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="dialog-create-task">
         <DialogHeader>
-          <DialogTitle>Create New Task</DialogTitle>
+          <DialogTitle>Создать новую задачу</DialogTitle>
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>Task Type</Label>
+              <Label>Тип задачи</Label>
               <RadioGroup value={taskType} onValueChange={(v: any) => setTaskType(v)}>
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="individual" id="individual" data-testid="radio-individual" />
                   <Label htmlFor="individual" className="font-normal cursor-pointer">
-                    Individual Task - Assign to specific person
+                    Индивидуальная задача - Назначить конкретному сотруднику
                   </Label>
                 </div>
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="auction" id="auction" data-testid="radio-auction" />
                   <Label htmlFor="auction" className="font-normal cursor-pointer">
-                    Auction Task - Let team members bid
+                    Аукционная задача - Сотрудники смогут делать ставки
                   </Label>
                 </div>
               </RadioGroup>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="title">Task Title *</Label>
+              <Label htmlFor="title">Название задачи *</Label>
               <Input
                 id="title"
-                placeholder="Enter task title..."
+                placeholder="Введите название задачи..."
                 value={formData.title}
                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                 required
@@ -69,10 +69,10 @@ export default function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialo
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="description">Description *</Label>
+              <Label htmlFor="description">Описание *</Label>
               <Textarea
                 id="description"
-                placeholder="Describe the task in detail..."
+                placeholder="Опишите задачу подробно..."
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 required
@@ -83,31 +83,31 @@ export default function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialo
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="department">Department *</Label>
+                <Label htmlFor="department">Подразделение *</Label>
                 <Select value={formData.department} onValueChange={(v) => setFormData({ ...formData, department: v })}>
                   <SelectTrigger id="department" data-testid="select-department">
-                    <SelectValue placeholder="Select department" />
+                    <SelectValue placeholder="Выберите подразделение" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="engineering">Engineering</SelectItem>
-                    <SelectItem value="design">Design</SelectItem>
-                    <SelectItem value="marketing">Marketing</SelectItem>
-                    <SelectItem value="sales">Sales</SelectItem>
+                    <SelectItem value="engineering">Инженерный отдел</SelectItem>
+                    <SelectItem value="design">Отдел дизайна</SelectItem>
+                    <SelectItem value="marketing">Отдел маркетинга</SelectItem>
+                    <SelectItem value="sales">Отдел продаж</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               {taskType === "individual" && (
                 <div className="space-y-2">
-                  <Label htmlFor="assignee">Assignee *</Label>
+                  <Label htmlFor="assignee">Исполнитель *</Label>
                   <Select value={formData.assignee} onValueChange={(v) => setFormData({ ...formData, assignee: v })}>
                     <SelectTrigger id="assignee" data-testid="select-assignee">
-                      <SelectValue placeholder="Select assignee" />
+                      <SelectValue placeholder="Выберите исполнителя" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="mike">Mike Chen</SelectItem>
-                      <SelectItem value="emma">Emma Wilson</SelectItem>
-                      <SelectItem value="alex">Alex Rivera</SelectItem>
+                      <SelectItem value="mike">Михаил Чен</SelectItem>
+                      <SelectItem value="emma">Эмма Уилсон</SelectItem>
+                      <SelectItem value="alex">Алекс Ривера</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -117,7 +117,7 @@ export default function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialo
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="estimatedHours">
-                  {taskType === "auction" ? "Initial Time (hours) *" : "Estimated Hours *"}
+                  {taskType === "auction" ? "Начальное время (часы) *" : "Плановое время (часы) *"}
                 </Label>
                 <Input
                   id="estimatedHours"
@@ -132,7 +132,7 @@ export default function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialo
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="deadline">Deadline *</Label>
+                <Label htmlFor="deadline">Дедлайн *</Label>
                 <Input
                   id="deadline"
                   type="date"
@@ -147,10 +147,10 @@ export default function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialo
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} data-testid="button-cancel">
-              Cancel
+              Отмена
             </Button>
             <Button type="submit" data-testid="button-create-task">
-              Create Task
+              Создать задачу
             </Button>
           </DialogFooter>
         </form>

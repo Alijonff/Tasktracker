@@ -8,6 +8,7 @@ import AppSidebar from "@/components/AppSidebar";
 import Dashboard from "@/pages/Dashboard";
 import MyTasks from "@/pages/MyTasks";
 import Auctions from "@/pages/Auctions";
+import CreateTask from "@/pages/CreateTask";
 import Reports from "@/pages/Reports";
 import Organization from "@/pages/Organization";
 import Settings from "@/pages/Settings";
@@ -20,6 +21,7 @@ function Router() {
       <Route path="/" component={Dashboard} />
       <Route path="/my-tasks" component={MyTasks} />
       <Route path="/auctions" component={Auctions} />
+      <Route path="/create-task" component={CreateTask} />
       <Route path="/reports" component={Reports} />
       <Route path="/organization" component={Organization} />
       <Route path="/settings" component={Settings} />
@@ -45,10 +47,10 @@ export default function App() {
                 <SidebarTrigger data-testid="button-sidebar-toggle" />
                 <div className="flex items-center gap-3">
                   <div className="text-right hidden sm:block">
-                    <p className="text-sm font-medium">Mike Chen</p>
-                    <p className="text-xs text-muted-foreground">Senior Engineer</p>
+                    <p className="text-sm font-medium">Михаил Чен</p>
+                    <p className="text-xs text-muted-foreground">Старший инженер</p>
                   </div>
-                  <UserAvatar name="Mike Chen" size="md" />
+                  <UserAvatar name="Михаил Чен" size="md" />
                 </div>
               </header>
               <main className="flex-1 overflow-auto p-6">
