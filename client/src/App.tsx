@@ -7,6 +7,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import AppSidebar from "@/components/AppSidebar";
 import Dashboard from "@/pages/Dashboard";
 import MyTasks from "@/pages/MyTasks";
+import AllTasks from "@/pages/AllTasks";
 import Auctions from "@/pages/Auctions";
 import CreateTask from "@/pages/CreateTask";
 import Reports from "@/pages/Reports";
@@ -20,6 +21,7 @@ function Router() {
     <Switch>
       <Route path="/" component={Dashboard} />
       <Route path="/my-tasks" component={MyTasks} />
+      <Route path="/all-tasks" component={AllTasks} />
       <Route path="/auctions" component={Auctions} />
       <Route path="/create-task" component={CreateTask} />
       <Route path="/reports" component={Reports} />

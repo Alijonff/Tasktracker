@@ -1,6 +1,7 @@
 import { 
   LayoutDashboard, 
   CheckSquare, 
+  ListTodo,
   Gavel, 
   PlusCircle, 
   BarChart3, 
@@ -23,6 +24,7 @@ import { useLocation } from "wouter";
 const menuItems = [
   { title: "Панель управления", url: "/", icon: LayoutDashboard },
   { title: "Мои задачи", url: "/my-tasks", icon: CheckSquare },
+  { title: "Все задачи", url: "/all-tasks", icon: ListTodo },
   { title: "Аукционы", url: "/auctions", icon: Gavel },
   { title: "Создать задачу", url: "/create-task", icon: PlusCircle },
   { title: "Отчёты", url: "/reports", icon: BarChart3 },
