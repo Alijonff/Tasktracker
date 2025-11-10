@@ -8,7 +8,7 @@ export interface OrgNode {
   id: string;
   name: string;
   type: "department" | "management" | "division" | "employee";
-  leader: string;
+  leader?: string;
   rating?: number;
   employeeCount?: number;
   children?: OrgNode[];
@@ -67,10 +67,12 @@ function OrgNodeItem({ node, level }: OrgNodeItemProps) {
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <UserAvatar name={node.leader} size="sm" />
-            <span className="text-sm text-muted-foreground hidden sm:inline">{node.leader}</span>
-          </div>
+          {node.leader && (
+            <div className="flex items-center gap-2">
+              <UserAvatar name={node.leader} size="sm" />
+              <span className="text-sm text-muted-foreground hidden sm:inline">{node.leader}</span>
+            </div>
+          )}
           {node.rating !== undefined && <RatingDisplay rating={node.rating} size="sm" />}
         </div>
       </div>

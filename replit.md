@@ -50,6 +50,15 @@ Preferred communication style: Simple, everyday language.
   - PATCH endpoints: load entity first, verify BOTH current and new departmentId (if changing)
   - Directors can only modify resources in their own department
   - Architect-reviewed: all privilege escalation vectors closed
+- **Implemented Organization Structure Creation UI:**
+  - Полностью переписан Organization.tsx с работой с реальным API
+  - Создан диалог для создания департамента с управлениями и отделами
+  - Упрощенный интерфейс: только названия структурных единиц, без обязательных руководителей
+  - Руководители назначаются позже при создании пользователей
+  - OrganizationTree обновлен: leader опциональный, условное отображение
+  - Toast notifications для успеха/ошибок создания
+  - Query invalidation для автообновления после создания
+  - E2E тест пройден: создание департамента с 2 управлениями и 2 отделами работает
 
 ## System Architecture
 
