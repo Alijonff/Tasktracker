@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Switch, Route } from "wouter";
 import { queryClient, apiRequest } from "./lib/queryClient";
 import { QueryClientProvider, useQuery, useMutation } from "@tanstack/react-query";
@@ -108,65 +109,90 @@ function UserMenu() {
   );
 }
 
-function ProtectedRoute({ component: Component }: { component: () => JSX.Element }) {
+function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const [, setLocation] = useLocation();
   const { data: response, isLoading } = useQuery<{ user: SelectUser | null }>({
     queryKey: ["/api/auth/me"],
   });
+
+  useEffect(() => {
+    if (!isLoading && !response?.user) {
+      setLocation("/login");
+    }
+  }, [isLoading, response, setLocation]);
 
   if (isLoading) {
     return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
   }
 
   if (!response?.user) {
-    setLocation("/login");
     return null;
   }
 
-  return <Component />;
-}
-
-function Router() {
-  return (
-    <Switch>
-      <Route path="/login" component={Login} />
-      <Route path="/" component={() => <ProtectedRoute component={Dashboard} />} />
-      <Route path="/my-tasks" component={() => <ProtectedRoute component={MyTasks} />} />
-      <Route path="/all-tasks" component={() => <ProtectedRoute component={AllTasks} />} />
-      <Route path="/auctions" component={() => <ProtectedRoute component={Auctions} />} />
-      <Route path="/create-task" component={() => <ProtectedRoute component={CreateTask} />} />
-      <Route path="/reports" component={() => <ProtectedRoute component={Reports} />} />
-      <Route path="/organization" component={() => <ProtectedRoute component={Organization} />} />
-      <Route path="/admin" component={() => <ProtectedRoute component={AdminPanel} />} />
-      <Route path="/settings" component={() => <ProtectedRoute component={Settings} />} />
-      <Route component={NotFound} />
-    </Switch>
-  );
-}
-
-export default function App() {
   const style = {
     "--sidebar-width": "20rem",
     "--sidebar-width-icon": "4rem",
   };
 
   return (
+    <SidebarProvider style={style as React.CSSProperties}>
+      <div className="flex h-screen w-full">
+        <AppSidebar />
+        <div className="flex flex-col flex-1 overflow-hidden">
+          <header className="flex items-center justify-between p-4 border-b bg-background">
+            <SidebarTrigger data-testid="button-sidebar-toggle" />
+            <UserMenu />
+          </header>
+          <main className="flex-1 overflow-auto p-6">
+            {children}
+          </main>
+        </div>
+      </div>
+    </SidebarProvider>
+  );
+}
+
+function Router() {
+  return (
+    <Switch>
+      <Route path="/login" component={Login} />
+      <Route path="/">
+        {() => <ProtectedLayout><Dashboard /></ProtectedLayout>}
+      </Route>
+      <Route path="/my-tasks">
+        {() => <ProtectedLayout><MyTasks /></ProtectedLayout>}
+      </Route>
+      <Route path="/all-tasks">
+        {() => <ProtectedLayout><AllTasks /></ProtectedLayout>}
+      </Route>
+      <Route path="/auctions">
+        {() => <ProtectedLayout><Auctions /></ProtectedLayout>}
+      </Route>
+      <Route path="/create-task">
+        {() => <ProtectedLayout><CreateTask /></ProtectedLayout>}
+      </Route>
+      <Route path="/reports">
+        {() => <ProtectedLayout><Reports /></ProtectedLayout>}
+      </Route>
+      <Route path="/organization">
+        {() => <ProtectedLayout><Organization /></ProtectedLayout>}
+      </Route>
+      <Route path="/admin">
+        {() => <ProtectedLayout><AdminPanel /></ProtectedLayout>}
+      </Route>
+      <Route path="/settings">
+        {() => <ProtectedLayout><Settings /></ProtectedLayout>}
+      </Route>
+      <Route component={NotFound} />
+    </Switch>
+  );
+}
+
+export default function App() {
+  return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <SidebarProvider style={style as React.CSSProperties}>
-          <div className="flex h-screen w-full">
-            <AppSidebar />
-            <div className="flex flex-col flex-1 overflow-hidden">
-              <header className="flex items-center justify-between p-4 border-b bg-background">
-                <SidebarTrigger data-testid="button-sidebar-toggle" />
-                <UserMenu />
-              </header>
-              <main className="flex-1 overflow-auto p-6">
-                <Router />
-              </main>
-            </div>
-          </div>
-        </SidebarProvider>
+        <Router />
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>

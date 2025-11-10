@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -18,9 +19,16 @@ export default function Login() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
 
-  const { data: currentUser } = useQuery<SelectUser | null>({
+  const { data: response } = useQuery<{ user: SelectUser | null }>({
     queryKey: ["/api/auth/me"],
   });
+
+  // Redirect to home if already logged in
+  useEffect(() => {
+    if (response?.user) {
+      setLocation("/");
+    }
+  }, [response, setLocation]);
 
   const form = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
@@ -55,11 +63,6 @@ export default function Login() {
   const onSubmit = (data: LoginForm) => {
     loginMutation.mutate(data);
   };
-
-  if (currentUser) {
-    setLocation("/");
-    return null;
-  }
 
   return (
     <div className="min-h-screen flex items-center justify-center p-6">
