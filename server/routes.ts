@@ -1,6 +1,24 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { authenticateUser, hashPassword } from "./auth";
+import { loginSchema, insertUserSchema } from "@shared/schema";
+
+// Authentication middleware
+function requireAuth(req: Request, res: Response, next: NextFunction) {
+  if (!req.session.userId || !req.session.user) {
+    return res.status(401).json({ error: "Authentication required" });
+  }
+  next();
+}
+
+// Authorization middleware for admin only
+function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!req.session.user || req.session.user.role !== "admin") {
+    return res.status(403).json({ error: "Admin access required" });
+  }
+  next();
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Get all departments
@@ -123,11 +141,98 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get auction bids for a task
   app.get("/api/tasks/:id/bids", async (req, res) => {
     try {
-      const { id } = req.params;
+      const { id} = req.params;
       const bids = await storage.getTaskBids(id);
       res.json(bids);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch bids" });
+    }
+  });
+
+  // Auth routes
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      const credentials = loginSchema.parse(req.body);
+      const user = await authenticateUser(storage, credentials);
+      
+      if (!user) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
+      
+      const { passwordHash, ...userWithoutPassword } = user;
+      req.session.userId = user.id;
+      req.session.user = userWithoutPassword;
+      res.json({ user: userWithoutPassword });
+    } catch (error) {
+      res.status(400).json({ error: "Invalid request" });
+    }
+  });
+
+  app.post("/api/auth/logout", async (req, res) => {
+    req.session.destroy((err) => {
+      if (err) {
+        return res.status(500).json({ error: "Failed to logout" });
+      }
+      res.json({ success: true });
+    });
+  });
+
+  app.get("/api/auth/me", async (req, res) => {
+    if (req.session.userId && req.session.user) {
+      res.json({ user: req.session.user });
+    } else {
+      res.json({ user: null });
+    }
+  });
+
+  // User management routes (for admin panel)
+  app.get("/api/users", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const users = await storage.getAllUsers();
+      const usersWithoutPasswords = users.map(({ passwordHash, ...user }) => user);
+      res.json(usersWithoutPasswords);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch users" });
+    }
+  });
+
+  app.post("/api/users", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const userData = insertUserSchema.parse(req.body);
+      const passwordHash = await hashPassword(userData.password);
+      
+      const user = await storage.createUser(
+        userData.username,
+        passwordHash,
+        userData.role || "employee",
+        userData.employeeId || null
+      );
+      
+      const { passwordHash: _, ...userWithoutPassword } = user;
+      res.json(userWithoutPassword);
+    } catch (error: any) {
+      if (error.code === '23505') {
+        return res.status(400).json({ error: "Username already exists" });
+      }
+      res.status(400).json({ error: "Failed to create user" });
+    }
+  });
+
+  app.patch("/api/users/:id", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updates = req.body;
+      
+      const user = await storage.updateUser(id, updates);
+      
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      const { passwordHash, ...userWithoutPassword } = user;
+      res.json(userWithoutPassword);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update user" });
     }
   });
 

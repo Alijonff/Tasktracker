@@ -6,18 +6,27 @@ import {
   employees, 
   tasks, 
   auctionBids,
+  users,
   type Department,
   type Management,
   type Division,
   type Employee,
   type Task,
   type AuctionBid,
+  type User,
   type InsertTask,
   type InsertBid
 } from "@shared/schema";
 import { eq, and, or, like, desc } from "drizzle-orm";
 
 export interface IStorage {
+  // Users
+  createUser(username: string, passwordHash: string, role: "admin" | "director" | "manager" | "senior" | "employee", employeeId?: string | null): Promise<User>;
+  getUserByUsername(username: string): Promise<User | undefined>;
+  getUserById(id: string): Promise<User | undefined>;
+  getAllUsers(): Promise<User[]>;
+  updateUser(id: string, updates: { role?: "admin" | "director" | "manager" | "senior" | "employee"; employeeId?: string | null }): Promise<User | undefined>;
+
   // Departments
   getAllDepartments(): Promise<Department[]>;
   getDepartment(id: string): Promise<Department | undefined>;
@@ -54,6 +63,39 @@ export interface IStorage {
 }
 
 export class DbStorage implements IStorage {
+  // Users
+  async createUser(username: string, passwordHash: string, role: "admin" | "director" | "manager" | "senior" | "employee", employeeId?: string | null): Promise<User> {
+    const [user] = await db.insert(users).values({
+      username,
+      passwordHash,
+      role,
+      employeeId: employeeId || null,
+    }).returning();
+    return user;
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
+  }
+
+  async getUserById(id: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return await db.select().from(users);
+  }
+
+  async updateUser(id: string, updates: { role?: "admin" | "director" | "manager" | "senior" | "employee"; employeeId?: string | null }): Promise<User | undefined> {
+    const [user] = await db.update(users)
+      .set(updates)
+      .where(eq(users.id, id))
+      .returning();
+    return user;
+  }
+
   // Departments
   async getAllDepartments(): Promise<Department[]> {
     return await db.select().from(departments);
