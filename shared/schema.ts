@@ -3,20 +3,6 @@ import { pgTable, text, varchar, integer, timestamp, decimal, pgEnum } from "dri
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
-});
-
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
-});
-
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
-
 // Enums
 export const roleEnum = pgEnum("role", ["admin", "director", "manager", "senior", "employee"]);
 export const taskStatusEnum = pgEnum("task_status", ["backlog", "inProgress", "underReview", "completed", "overdue"]);
@@ -121,6 +107,15 @@ export const timeLogs = pgTable("time_logs", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const users = pgTable("users", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  username: text("username").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  role: roleEnum("role").notNull().default("employee"),
+  employeeId: varchar("employee_id").references(() => employees.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // TypeScript types from tables
 export type Department = typeof departments.$inferSelect;
 export type Management = typeof managements.$inferSelect;
@@ -130,6 +125,7 @@ export type Task = typeof tasks.$inferSelect;
 export type AuctionBid = typeof auctionBids.$inferSelect;
 export type TaskComment = typeof taskComments.$inferSelect;
 export type TimeLog = typeof timeLogs.$inferSelect;
+export type User = typeof users.$inferSelect;
 
 // Insert schemas
 export const insertDepartmentSchema = createInsertSchema(departments).omit({
@@ -177,6 +173,19 @@ export const insertTimeLogSchema = createInsertSchema(timeLogs).omit({
   date: z.string().transform((val) => new Date(val)),
 });
 
+export const insertUserSchema = createInsertSchema(users).omit({
+  id: true,
+  passwordHash: true,
+  createdAt: true,
+}).extend({
+  password: z.string().min(6, "Пароль должен содержать минимум 6 символов"),
+});
+
+export const loginSchema = z.object({
+  username: z.string().min(1, "Введите имя пользователя"),
+  password: z.string().min(1, "Введите пароль"),
+});
+
 // Insert types
 export type InsertDepartment = z.infer<typeof insertDepartmentSchema>;
 export type InsertManagement = z.infer<typeof insertManagementSchema>;
@@ -186,6 +195,8 @@ export type InsertTask = z.infer<typeof insertTaskSchema>;
 export type InsertBid = z.infer<typeof insertBidSchema>;
 export type InsertComment = z.infer<typeof insertCommentSchema>;
 export type InsertTimeLog = z.infer<typeof insertTimeLogSchema>;
+export type InsertUser = z.infer<typeof insertUserSchema>;
+export type Login = z.infer<typeof loginSchema>;
 
 // Additional types for analytics
 export type AnalyticsLevel = "department" | "management" | "division" | "employee";
