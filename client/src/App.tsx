@@ -1,11 +1,20 @@
 import { Switch, Route } from "wouter";
-import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "./lib/queryClient";
+import { QueryClientProvider, useQuery, useMutation } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { LogOut, Settings as SettingsIcon } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import AppSidebar from "@/components/AppSidebar";
-import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import type { SelectUser } from "@shared/schema";
 import Dashboard from "@/pages/Dashboard";
@@ -21,9 +30,87 @@ import Login from "@/pages/Login";
 import NotFound from "@/pages/not-found";
 import UserAvatar from "@/components/UserAvatar";
 
+function UserMenu() {
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const { data: response } = useQuery<{ user: SelectUser | null }>({
+    queryKey: ["/api/auth/me"],
+  });
+
+  const user = response?.user;
+
+  const logoutMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/auth/logout"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      setLocation("/login");
+      toast({
+        title: "Logged out",
+        description: "You have been successfully logged out.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to logout. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  if (!user) return null;
+
+  const roleLabels: Record<string, string> = {
+    admin: "Administrator",
+    director: "Director",
+    manager: "Manager",
+    senior: "Senior Employee",
+    employee: "Employee",
+  };
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <div 
+          className="flex items-center gap-3 cursor-pointer hover-elevate active-elevate-2 rounded-md p-2 -m-2"
+          data-testid="button-user-menu"
+        >
+          <div className="text-right hidden sm:block">
+            <p className="text-sm font-medium" data-testid="text-user-name">{user.username}</p>
+            <p className="text-xs text-muted-foreground" data-testid="text-user-role">
+              {roleLabels[user.role] || user.role}
+            </p>
+          </div>
+          <UserAvatar name={user.username} size="md" />
+        </div>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuLabel>My Account</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem 
+          onClick={() => setLocation("/settings")}
+          data-testid="menu-item-settings"
+        >
+          <SettingsIcon className="mr-2 h-4 w-4" />
+          <span>Settings</span>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem 
+          onClick={() => logoutMutation.mutate()}
+          disabled={logoutMutation.isPending}
+          data-testid="menu-item-logout"
+        >
+          <LogOut className="mr-2 h-4 w-4" />
+          <span>Logout</span>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function ProtectedRoute({ component: Component }: { component: () => JSX.Element }) {
   const [, setLocation] = useLocation();
-  const { data: user, isLoading } = useQuery<SelectUser | null>({
+  const { data: response, isLoading } = useQuery<{ user: SelectUser | null }>({
     queryKey: ["/api/auth/me"],
   });
 
@@ -31,7 +118,7 @@ function ProtectedRoute({ component: Component }: { component: () => JSX.Element
     return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
   }
 
-  if (!user) {
+  if (!response?.user) {
     setLocation("/login");
     return null;
   }
@@ -72,13 +159,7 @@ export default function App() {
             <div className="flex flex-col flex-1 overflow-hidden">
               <header className="flex items-center justify-between p-4 border-b bg-background">
                 <SidebarTrigger data-testid="button-sidebar-toggle" />
-                <div className="flex items-center gap-3">
-                  <div className="text-right hidden sm:block">
-                    <p className="text-sm font-medium">Михаил Чен</p>
-                    <p className="text-xs text-muted-foreground">Старший инженер</p>
-                  </div>
-                  <UserAvatar name="Михаил Чен" size="md" />
-                </div>
+                <UserMenu />
               </header>
               <main className="flex-1 overflow-auto p-6">
                 <Router />
