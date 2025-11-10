@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, decimal, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, decimal, pgEnum, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -113,6 +113,7 @@ export const users = pgTable("users", {
   passwordHash: text("password_hash").notNull(),
   role: roleEnum("role").notNull().default("employee"),
   employeeId: varchar("employee_id").references(() => employees.id, { onDelete: "set null" }),
+  mustChangePassword: boolean("must_change_password").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -181,6 +182,7 @@ export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
   passwordHash: true,
   createdAt: true,
+  mustChangePassword: true,
 }).extend({
   password: z.string().min(6, "Пароль должен содержать минимум 6 символов"),
 });
@@ -188,6 +190,11 @@ export const insertUserSchema = createInsertSchema(users).omit({
 export const loginSchema = z.object({
   username: z.string().min(1, "Введите имя пользователя"),
   password: z.string().min(1, "Введите пароль"),
+});
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, "Введите текущий пароль"),
+  newPassword: z.string().min(6, "Новый пароль должен содержать минимум 6 символов"),
 });
 
 // Insert types

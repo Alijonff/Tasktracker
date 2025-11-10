@@ -21,11 +21,25 @@ import { eq, and, or, like, desc } from "drizzle-orm";
 
 export interface IStorage {
   // Users
-  createUser(username: string, passwordHash: string, role: "admin" | "director" | "manager" | "senior" | "employee", employeeId?: string | null): Promise<User>;
+  createUser(
+    username: string,
+    passwordHash: string,
+    role: "admin" | "director" | "manager" | "senior" | "employee",
+    employeeId?: string | null,
+    mustChangePassword?: boolean,
+  ): Promise<User>;
   getUserByUsername(username: string): Promise<User | undefined>;
   getUserById(id: string): Promise<User | undefined>;
   getAllUsers(): Promise<User[]>;
-  updateUser(id: string, updates: { role?: "admin" | "director" | "manager" | "senior" | "employee"; employeeId?: string | null }): Promise<User | undefined>;
+  updateUser(
+    id: string,
+    updates: {
+      role?: "admin" | "director" | "manager" | "senior" | "employee";
+      employeeId?: string | null;
+      passwordHash?: string;
+      mustChangePassword?: boolean;
+    }
+  ): Promise<User | undefined>;
 
   // Departments
   getAllDepartments(): Promise<Department[]>;
@@ -64,12 +78,19 @@ export interface IStorage {
 
 export class DbStorage implements IStorage {
   // Users
-  async createUser(username: string, passwordHash: string, role: "admin" | "director" | "manager" | "senior" | "employee", employeeId?: string | null): Promise<User> {
+  async createUser(
+    username: string,
+    passwordHash: string,
+    role: "admin" | "director" | "manager" | "senior" | "employee",
+    employeeId?: string | null,
+    mustChangePassword?: boolean,
+  ): Promise<User> {
     const [user] = await db.insert(users).values({
       username,
       passwordHash,
       role,
       employeeId: employeeId || null,
+      mustChangePassword: mustChangePassword ?? false,
     }).returning();
     return user;
   }
@@ -88,7 +109,15 @@ export class DbStorage implements IStorage {
     return await db.select().from(users);
   }
 
-  async updateUser(id: string, updates: { role?: "admin" | "director" | "manager" | "senior" | "employee"; employeeId?: string | null }): Promise<User | undefined> {
+  async updateUser(
+    id: string,
+    updates: {
+      role?: "admin" | "director" | "manager" | "senior" | "employee";
+      employeeId?: string | null;
+      passwordHash?: string;
+      mustChangePassword?: boolean;
+    }
+  ): Promise<User | undefined> {
     const [user] = await db.update(users)
       .set(updates)
       .where(eq(users.id, id))
