@@ -17,6 +17,28 @@ declare module 'express-session' {
 
 const app = express();
 
+const parseEnvBoolean = (value: string | undefined) => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const normalized = value.trim().toLowerCase();
+
+  if (["1", "true", "t", "yes", "y", "on"].includes(normalized)) {
+    return true;
+  }
+
+  if (["0", "false", "f", "no", "n", "off"].includes(normalized)) {
+    return false;
+  }
+
+  return undefined;
+};
+
+if (process.env.NODE_ENV === "production") {
+  app.set("trust proxy", 1);
+}
+
 declare module 'http' {
   interface IncomingMessage {
     rawBody: unknown
@@ -27,6 +49,8 @@ declare module 'http' {
 const PgStore = connectPgSimple(session);
 const sessionPool = new Pool({ connectionString: process.env.DATABASE_URL });
 
+const sessionCookieSecure = parseEnvBoolean(process.env.SESSION_COOKIE_SECURE);
+
 app.use(session({
   store: new PgStore({
     pool: sessionPool,
@@ -36,7 +60,7 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: process.env.NODE_ENV === 'production',
+    secure: sessionCookieSecure ?? process.env.NODE_ENV === 'production',
     httpOnly: true,
     maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
     sameSite: 'lax', // CSRF protection
