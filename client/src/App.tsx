@@ -29,6 +29,7 @@ import Settings from "@/pages/Settings";
 import AdminPanel from "@/pages/AdminPanel";
 import Login from "@/pages/Login";
 import NotFound from "@/pages/not-found";
+import ChangePassword from "@/pages/ChangePassword";
 import UserAvatar from "@/components/UserAvatar";
 
 function UserMenu() {
@@ -40,20 +41,37 @@ function UserMenu() {
 
   const user = response?.user;
 
+  const getErrorMessage = (error: any, fallback: string) => {
+    if (error?.message) {
+      const parts = String(error.message).split(": ");
+      const lastPart = parts[parts.length - 1];
+      try {
+        const parsed = JSON.parse(lastPart);
+        if (parsed?.error && typeof parsed.error === "string") {
+          return parsed.error;
+        }
+      } catch {
+        // ignore JSON parse errors
+      }
+      return String(error.message);
+    }
+    return fallback;
+  };
+
   const logoutMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/auth/logout"),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       setLocation("/login");
       toast({
-        title: "Logged out",
-        description: "You have been successfully logged out.",
+        title: "Вы вышли",
+        description: "Сеанс завершён",
       });
     },
-    onError: () => {
+    onError: (error: any) => {
       toast({
-        title: "Error",
-        description: "Failed to logout. Please try again.",
+        title: "Ошибка",
+        description: getErrorMessage(error, "Не удалось завершить сеанс, попробуйте снова"),
         variant: "destructive",
       });
     },
@@ -62,11 +80,11 @@ function UserMenu() {
   if (!user) return null;
 
   const roleLabels: Record<string, string> = {
-    admin: "Administrator",
-    director: "Director",
-    manager: "Manager",
-    senior: "Senior Employee",
-    employee: "Employee",
+    admin: "Администратор",
+    director: "Директор",
+    manager: "Менеджер",
+    senior: "Ведущий сотрудник",
+    employee: "Сотрудник",
   };
 
   return (
@@ -86,31 +104,33 @@ function UserMenu() {
         </div>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel>My Account</DropdownMenuLabel>
+        <DropdownMenuLabel>Мой аккаунт</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem 
+        <DropdownMenuItem
           onClick={() => setLocation("/settings")}
           data-testid="menu-item-settings"
         >
           <SettingsIcon className="mr-2 h-4 w-4" />
-          <span>Settings</span>
+          <span>Настройки</span>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem 
+        <DropdownMenuItem
           onClick={() => logoutMutation.mutate()}
           disabled={logoutMutation.isPending}
           data-testid="menu-item-logout"
         >
           <LogOut className="mr-2 h-4 w-4" />
-          <span>Logout</span>
+          <span>Выйти</span>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
 }
 
-function ProtectedLayout({ children }: { children: React.ReactNode }) {
-  const [, setLocation] = useLocation();
+type ProtectedLayoutMode = "default" | "passwordChange";
+
+function ProtectedLayout({ children, mode = "default" }: { children: React.ReactNode; mode?: ProtectedLayoutMode }) {
+  const [location, setLocation] = useLocation();
   const { data: response, isLoading } = useQuery<{ user: SelectUser | null }>({
     queryKey: ["/api/auth/me"],
   });
@@ -121,12 +141,46 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
     }
   }, [isLoading, response, setLocation]);
 
+  useEffect(() => {
+    if (isLoading || !response?.user) {
+      return;
+    }
+
+    const requiresPasswordChange = response.user.mustChangePassword;
+
+    if (requiresPasswordChange && mode !== "passwordChange" && location !== "/change-password") {
+      setLocation("/change-password");
+    }
+
+    if (!requiresPasswordChange && mode === "passwordChange" && location === "/change-password") {
+      setLocation("/");
+    }
+  }, [isLoading, response, mode, location, setLocation]);
+
   if (isLoading) {
-    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+    return <div className="flex items-center justify-center min-h-screen">Загрузка…</div>;
   }
 
   if (!response?.user) {
     return null;
+  }
+
+  const requiresPasswordChange = response.user.mustChangePassword;
+
+  if (mode !== "passwordChange" && requiresPasswordChange) {
+    return null;
+  }
+
+  if (mode === "passwordChange") {
+    if (!requiresPasswordChange) {
+      return null;
+    }
+
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center bg-background p-6">
+        {children}
+      </div>
+    );
   }
 
   const style = {
@@ -156,6 +210,9 @@ function Router() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
+      <Route path="/change-password">
+        {() => <ProtectedLayout mode="passwordChange"><ChangePassword /></ProtectedLayout>}
+      </Route>
       <Route path="/">
         {() => <ProtectedLayout><Dashboard /></ProtectedLayout>}
       </Route>

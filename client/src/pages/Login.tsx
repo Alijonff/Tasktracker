@@ -19,6 +19,23 @@ export default function Login() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
 
+  const getErrorMessage = (error: any, fallback: string) => {
+    if (error?.message) {
+      const parts = String(error.message).split(": ");
+      const lastPart = parts[parts.length - 1];
+      try {
+        const parsed = JSON.parse(lastPart);
+        if (parsed?.error && typeof parsed.error === "string") {
+          return parsed.error;
+        }
+      } catch {
+        // ignore JSON parse errors
+      }
+      return String(error.message);
+    }
+    return fallback;
+  };
+
   const { data: response } = useQuery<{ user: SelectUser | null }>({
     queryKey: ["/api/auth/me"],
   });
@@ -43,18 +60,22 @@ export default function Login() {
       const res = await apiRequest("POST", "/api/auth/login", data);
       return await res.json();
     },
-    onSuccess: async () => {
+    onSuccess: async (data: { user: SelectUser }) => {
       toast({
-        title: "Success",
-        description: "Logged in successfully",
+        title: "Добро пожаловать",
+        description: "Вы успешно вошли в систему",
       });
       await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      window.location.href = "/";
+      if (data?.user?.mustChangePassword) {
+        window.location.href = "/change-password";
+      } else {
+        window.location.href = "/";
+      }
     },
     onError: (error: any) => {
       toast({
-        title: "Login Failed",
-        description: error.message || "Invalid credentials",
+        title: "Не удалось войти",
+        description: getErrorMessage(error, "Проверьте имя пользователя и пароль"),
         variant: "destructive",
       });
     },
@@ -74,7 +95,7 @@ export default function Login() {
             </div>
           </div>
           <CardTitle className="text-2xl">TaskFlow</CardTitle>
-          <CardDescription>Sign in to your account</CardDescription>
+          <CardDescription>Войдите в свой аккаунт</CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>
@@ -84,9 +105,9 @@ export default function Login() {
                 name="username"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Username</FormLabel>
+                    <FormLabel>Имя пользователя</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="username" data-testid="input-login-username" />
+                      <Input {...field} placeholder="ivan.petrov" data-testid="input-login-username" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -98,7 +119,7 @@ export default function Login() {
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Password</FormLabel>
+                    <FormLabel>Пароль</FormLabel>
                     <FormControl>
                       <Input {...field} type="password" placeholder="••••••••" data-testid="input-login-password" />
                     </FormControl>
@@ -107,13 +128,13 @@ export default function Login() {
                 )}
               />
               
-              <Button 
-                type="submit" 
-                className="w-full" 
+              <Button
+                type="submit"
+                className="w-full"
                 disabled={loginMutation.isPending}
                 data-testid="button-login-submit"
               >
-                {loginMutation.isPending ? "Signing in..." : "Sign In"}
+                {loginMutation.isPending ? "Входим…" : "Войти"}
               </Button>
             </form>
           </Form>

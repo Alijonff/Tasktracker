@@ -1,13 +1,13 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { authenticateUser, hashPassword } from "./auth";
-import { loginSchema, insertUserSchema } from "@shared/schema";
+import { authenticateUser, hashPassword, verifyPassword } from "./auth";
+import { loginSchema, insertUserSchema, changePasswordSchema } from "@shared/schema";
 
 // Authentication middleware
 function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!req.session.userId || !req.session.user) {
-    return res.status(401).json({ error: "Authentication required" });
+    return res.status(401).json({ error: "Требуется авторизация" });
   }
   next();
 }
@@ -15,7 +15,7 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
 // Authorization middleware for admin only
 function requireAdmin(req: Request, res: Response, next: NextFunction) {
   if (!req.session.user || req.session.user.role !== "admin") {
-    return res.status(403).json({ error: "Admin access required" });
+    return res.status(403).json({ error: "Доступ только для администратора" });
   }
   next();
 }
@@ -27,7 +27,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const allDepartments = await storage.getAllDepartments();
       res.json(allDepartments);
     } catch (error) {
-      res.status(500).json({ error: "Failed to fetch departments" });
+      res.status(500).json({ error: "Не удалось получить список департаментов" });
     }
   });
 
@@ -40,7 +40,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
       res.json(allManagements);
     } catch (error) {
-      res.status(500).json({ error: "Failed to fetch managements" });
+      res.status(500).json({ error: "Не удалось получить список управлений" });
     }
   });
 
@@ -56,7 +56,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const allDivisions = await storage.getAllDivisions(Object.keys(filters).length > 0 ? filters : undefined);
       res.json(allDivisions);
     } catch (error) {
-      res.status(500).json({ error: "Failed to fetch divisions" });
+      res.status(500).json({ error: "Не удалось получить список подразделений" });
     }
   });
 
@@ -73,7 +73,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const allEmployees = await storage.getAllEmployees(Object.keys(filters).length > 0 ? filters : undefined);
       res.json(allEmployees);
     } catch (error) {
-      res.status(500).json({ error: "Failed to fetch employees" });
+      res.status(500).json({ error: "Не удалось получить список сотрудников" });
     }
   });
 
@@ -92,7 +92,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Department ID is required for security and data scoping
       if (!departmentId) {
-        return res.status(400).json({ error: "departmentId is required" });
+        return res.status(400).json({ error: "Не указан идентификатор департамента" });
       }
       
       const filters: {
@@ -117,8 +117,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const allTasks = await storage.getAllTasks(filters);
       res.json(allTasks);
     } catch (error) {
-      console.error("Error fetching tasks:", error);
-      res.status(500).json({ error: "Failed to fetch tasks" });
+      console.error("Ошибка при получении задач:", error);
+      res.status(500).json({ error: "Не удалось получить задачи" });
     }
   });
 
@@ -129,12 +129,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const task = await storage.getTask(id);
       
       if (!task) {
-        return res.status(404).json({ error: "Task not found" });
+        return res.status(404).json({ error: "Задача не найдена" });
       }
-      
+
       res.json(task);
     } catch (error) {
-      res.status(500).json({ error: "Failed to fetch task" });
+      res.status(500).json({ error: "Не удалось получить задачу" });
     }
   });
 
@@ -145,7 +145,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const bids = await storage.getTaskBids(id);
       res.json(bids);
     } catch (error) {
-      res.status(500).json({ error: "Failed to fetch bids" });
+      res.status(500).json({ error: "Не удалось получить ставки" });
     }
   });
 
@@ -156,7 +156,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = await authenticateUser(storage, credentials);
       
       if (!user) {
-        return res.status(401).json({ error: "Invalid credentials" });
+        return res.status(401).json({ error: "Неверное имя пользователя или пароль" });
       }
       
       const { passwordHash, ...userWithoutPassword } = user;
@@ -166,20 +166,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Explicitly save session before responding
       req.session.save((err) => {
         if (err) {
-          console.error("Session save error:", err);
-          return res.status(500).json({ error: "Failed to save session" });
+          console.error("Ошибка сохранения сессии:", err);
+          return res.status(500).json({ error: "Не удалось сохранить сессию" });
         }
         res.json({ user: userWithoutPassword });
       });
     } catch (error) {
-      res.status(400).json({ error: "Invalid request" });
+      res.status(400).json({ error: "Некорректный запрос" });
     }
   });
 
   app.post("/api/auth/logout", async (req, res) => {
     req.session.destroy((err) => {
       if (err) {
-        return res.status(500).json({ error: "Failed to logout" });
+        return res.status(500).json({ error: "Не удалось завершить сеанс" });
       }
       res.json({ success: true });
     });
@@ -193,6 +193,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/auth/change-password", requireAuth, async (req, res) => {
+    const parsed = changePasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Некорректные данные формы" });
+    }
+
+    try {
+      const userId = req.session.userId!;
+      const user = await storage.getUserById(userId);
+
+      if (!user) {
+        return res.status(404).json({ error: "Пользователь не найден" });
+      }
+
+      const { currentPassword, newPassword } = parsed.data;
+      const isValid = await verifyPassword(currentPassword, user.passwordHash);
+
+      if (!isValid) {
+        return res.status(400).json({ error: "Неверный текущий пароль" });
+      }
+
+      const newHash = await hashPassword(newPassword);
+      const updatedUser = await storage.updateUser(userId, { passwordHash: newHash, mustChangePassword: false });
+
+      if (!updatedUser) {
+        return res.status(500).json({ error: "Не удалось обновить пароль" });
+      }
+
+      const { passwordHash: _, ...userWithoutPassword } = updatedUser;
+      req.session.user = userWithoutPassword;
+
+      res.json({ user: userWithoutPassword });
+    } catch (error) {
+      console.error("Ошибка при смене пароля:", error);
+      res.status(500).json({ error: "Не удалось обновить пароль" });
+    }
+  });
+
   // User management routes (for admin panel)
   app.get("/api/users", requireAuth, requireAdmin, async (req, res) => {
     try {
@@ -200,7 +238,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const usersWithoutPasswords = users.map(({ passwordHash, ...user }) => user);
       res.json(usersWithoutPasswords);
     } catch (error) {
-      res.status(500).json({ error: "Failed to fetch users" });
+      res.status(500).json({ error: "Не удалось получить список пользователей" });
     }
   });
 
@@ -213,16 +251,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userData.username,
         passwordHash,
         userData.role || "employee",
-        userData.employeeId || null
+        userData.employeeId || null,
+        true
       );
       
       const { passwordHash: _, ...userWithoutPassword } = user;
       res.json(userWithoutPassword);
     } catch (error: any) {
       if (error.code === '23505') {
-        return res.status(400).json({ error: "Username already exists" });
+        return res.status(400).json({ error: "Имя пользователя уже занято" });
       }
-      res.status(400).json({ error: "Failed to create user" });
+      res.status(400).json({ error: "Не удалось создать пользователя" });
     }
   });
 
@@ -234,13 +273,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = await storage.updateUser(id, updates);
       
       if (!user) {
-        return res.status(404).json({ error: "User not found" });
+        return res.status(404).json({ error: "Пользователь не найден" });
       }
       
       const { passwordHash, ...userWithoutPassword } = user;
       res.json(userWithoutPassword);
     } catch (error) {
-      res.status(500).json({ error: "Failed to update user" });
+      res.status(500).json({ error: "Не удалось обновить пользователя" });
     }
   });
 

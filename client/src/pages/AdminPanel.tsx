@@ -16,12 +16,7 @@ import { insertUserSchema, type SelectUser, type SelectEmployee } from "@shared/
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Edit2 } from "lucide-react";
 
-const createUserFormSchema = insertUserSchema.extend({
-  confirmPassword: z.string().min(1, "Confirm password is required"),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "Passwords don't match",
-  path: ["confirmPassword"],
-});
+const createUserFormSchema = insertUserSchema;
 
 type CreateUserForm = z.infer<typeof createUserFormSchema>;
 
@@ -37,6 +32,23 @@ export default function AdminPanel() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<SelectUser | null>(null);
 
+  const getErrorMessage = (error: any, fallback: string) => {
+    if (error?.message) {
+      const parts = String(error.message).split(": ");
+      const lastPart = parts[parts.length - 1];
+      try {
+        const parsed = JSON.parse(lastPart);
+        if (parsed?.error && typeof parsed.error === "string") {
+          return parsed.error;
+        }
+      } catch {
+        // ignore JSON parse errors
+      }
+      return String(error.message);
+    }
+    return fallback;
+  };
+
   const { data: users = [], isLoading: usersLoading } = useQuery<SelectUser[]>({
     queryKey: ["/api/users"],
   });
@@ -50,7 +62,6 @@ export default function AdminPanel() {
     defaultValues: {
       username: "",
       password: "",
-      confirmPassword: "",
       role: "employee",
       employeeId: null,
     },
@@ -66,8 +77,7 @@ export default function AdminPanel() {
 
   const createUserMutation = useMutation({
     mutationFn: async (data: CreateUserForm) => {
-      const { confirmPassword, ...userData } = data;
-      const res = await apiRequest("POST", "/api/users", userData);
+      const res = await apiRequest("POST", "/api/users", data);
       return await res.json();
     },
     onSuccess: () => {
@@ -75,14 +85,14 @@ export default function AdminPanel() {
       setIsCreateDialogOpen(false);
       createForm.reset();
       toast({
-        title: "Success",
-        description: "User created successfully",
+        title: "Пользователь создан",
+        description: "Новый пользователь успешно добавлен",
       });
     },
     onError: (error: any) => {
       toast({
-        title: "Error",
-        description: error.message || "Failed to create user",
+        title: "Ошибка",
+        description: getErrorMessage(error, "Не удалось создать пользователя"),
         variant: "destructive",
       });
     },
@@ -98,14 +108,14 @@ export default function AdminPanel() {
       setEditingUser(null);
       editForm.reset();
       toast({
-        title: "Success",
-        description: "User updated successfully",
+        title: "Пользователь обновлён",
+        description: "Данные пользователя сохранены",
       });
     },
     onError: (error: any) => {
       toast({
-        title: "Error",
-        description: error.message || "Failed to update user",
+        title: "Ошибка",
+        description: getErrorMessage(error, "Не удалось обновить пользователя"),
         variant: "destructive",
       });
     },
@@ -140,6 +150,16 @@ export default function AdminPanel() {
     return colors[role] || colors.employee;
   };
 
+  const roleLabels: Record<string, string> = {
+    admin: "Администратор",
+    director: "Директор",
+    manager: "Менеджер",
+    senior: "Ведущий сотрудник",
+    employee: "Сотрудник",
+  };
+
+  const getRoleLabel = (role: string) => roleLabels[role] || role;
+
   const getEmployeeName = (employeeId: string | null) => {
     if (!employeeId) return "—";
     const employee = employees.find(e => e.id === employeeId);
@@ -151,22 +171,22 @@ export default function AdminPanel() {
       <div className="max-w-7xl mx-auto space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold" data-testid="text-admin-panel-title">Admin Panel</h1>
-            <p className="text-muted-foreground mt-1">Manage user accounts and permissions</p>
+            <h1 className="text-3xl font-bold" data-testid="text-admin-panel-title">Панель администратора</h1>
+            <p className="text-muted-foreground mt-1">Управляйте учётными записями и правами доступа</p>
           </div>
-          
+
           <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
             <DialogTrigger asChild>
               <Button data-testid="button-create-user">
                 <Plus className="mr-2 h-4 w-4" />
-                Create User
+                Создать пользователя
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Create New User</DialogTitle>
+                <DialogTitle>Новый пользователь</DialogTitle>
                 <DialogDescription>
-                  Add a new user account to the system
+                  Добавьте новую учётную запись в систему
                 </DialogDescription>
               </DialogHeader>
               
@@ -177,9 +197,9 @@ export default function AdminPanel() {
                     name="username"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Username</FormLabel>
+                        <FormLabel>Имя пользователя</FormLabel>
                         <FormControl>
-                          <Input {...field} placeholder="username" data-testid="input-username" />
+                          <Input {...field} placeholder="ivan.petrov" data-testid="input-username" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -191,23 +211,9 @@ export default function AdminPanel() {
                     name="password"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Password</FormLabel>
+                        <FormLabel>Пароль</FormLabel>
                         <FormControl>
                           <Input {...field} type="password" placeholder="••••••••" data-testid="input-password" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <FormField
-                    control={createForm.control}
-                    name="confirmPassword"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Confirm Password</FormLabel>
-                        <FormControl>
-                          <Input {...field} type="password" placeholder="••••••••" data-testid="input-confirm-password" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -219,43 +225,43 @@ export default function AdminPanel() {
                     name="role"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Role</FormLabel>
+                        <FormLabel>Роль</FormLabel>
                         <Select onValueChange={field.onChange} defaultValue={field.value}>
                           <FormControl>
                             <SelectTrigger data-testid="select-role">
-                              <SelectValue placeholder="Select role" />
+                              <SelectValue placeholder="Выберите роль" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="admin">Admin</SelectItem>
-                            <SelectItem value="director">Director</SelectItem>
-                            <SelectItem value="manager">Manager</SelectItem>
-                            <SelectItem value="senior">Senior Employee</SelectItem>
-                            <SelectItem value="employee">Employee</SelectItem>
+                            <SelectItem value="admin">Администратор</SelectItem>
+                            <SelectItem value="director">Директор</SelectItem>
+                            <SelectItem value="manager">Менеджер</SelectItem>
+                            <SelectItem value="senior">Ведущий сотрудник</SelectItem>
+                            <SelectItem value="employee">Сотрудник</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                  
+
                   <FormField
                     control={createForm.control}
                     name="employeeId"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Link to Employee (Optional)</FormLabel>
-                        <Select 
-                          onValueChange={(value) => field.onChange(value === "__none__" ? null : value)} 
+                        <FormLabel>Привязать к сотруднику (необязательно)</FormLabel>
+                        <Select
+                          onValueChange={(value) => field.onChange(value === "__none__" ? null : value)}
                           value={field.value || "__none__"}
                         >
                           <FormControl>
                             <SelectTrigger data-testid="select-employee">
-                              <SelectValue placeholder="Select employee" />
+                              <SelectValue placeholder="Выберите сотрудника" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="__none__">None</SelectItem>
+                            <SelectItem value="__none__">Без привязки</SelectItem>
                             {employees.map((emp) => (
                               <SelectItem key={emp.id} value={emp.id}>
                                 {emp.name}
@@ -267,10 +273,10 @@ export default function AdminPanel() {
                       </FormItem>
                     )}
                   />
-                  
+
                   <DialogFooter>
                     <Button type="submit" disabled={createUserMutation.isPending} data-testid="button-submit-create">
-                      {createUserMutation.isPending ? "Creating..." : "Create User"}
+                      {createUserMutation.isPending ? "Создание…" : "Создать"}
                     </Button>
                   </DialogFooter>
                 </form>
@@ -281,22 +287,22 @@ export default function AdminPanel() {
 
         <Card>
           <CardHeader>
-            <CardTitle>User Accounts</CardTitle>
-            <CardDescription>Manage all user accounts and their permissions</CardDescription>
+            <CardTitle>Учётные записи</CardTitle>
+            <CardDescription>Управляйте пользователями и их правами доступа</CardDescription>
           </CardHeader>
           <CardContent>
             {usersLoading ? (
-              <div className="text-center py-8 text-muted-foreground">Loading...</div>
+              <div className="text-center py-8 text-muted-foreground">Загрузка…</div>
             ) : users.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">No users found</div>
+              <div className="text-center py-8 text-muted-foreground">Пользователи не найдены</div>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Username</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Linked Employee</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead>Имя пользователя</TableHead>
+                    <TableHead>Роль</TableHead>
+                    <TableHead>Привязанный сотрудник</TableHead>
+                    <TableHead className="text-right">Действия</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -307,7 +313,7 @@ export default function AdminPanel() {
                       </TableCell>
                       <TableCell>
                         <span className={`px-2 py-1 rounded-md text-xs font-medium ${getRoleBadgeColor(user.role)}`} data-testid={`badge-role-${user.id}`}>
-                          {user.role}
+                          {getRoleLabel(user.role)}
                         </span>
                       </TableCell>
                       <TableCell data-testid={`text-employee-${user.id}`}>
@@ -334,12 +340,12 @@ export default function AdminPanel() {
         <Dialog open={!!editingUser} onOpenChange={(open) => !open && setEditingUser(null)}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Edit User</DialogTitle>
+              <DialogTitle>Редактирование пользователя</DialogTitle>
               <DialogDescription>
-                Update user role and employee link for {editingUser?.username}
+                Обновите роль и привязку сотрудника для {editingUser?.username}
               </DialogDescription>
             </DialogHeader>
-            
+
             <Form {...editForm}>
               <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4">
                 <FormField
@@ -347,19 +353,19 @@ export default function AdminPanel() {
                   name="role"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Role</FormLabel>
+                      <FormLabel>Роль</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
                           <SelectTrigger data-testid="select-edit-role">
-                            <SelectValue placeholder="Select role" />
+                            <SelectValue placeholder="Выберите роль" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="admin">Admin</SelectItem>
-                          <SelectItem value="director">Director</SelectItem>
-                          <SelectItem value="manager">Manager</SelectItem>
-                          <SelectItem value="senior">Senior Employee</SelectItem>
-                          <SelectItem value="employee">Employee</SelectItem>
+                          <SelectItem value="admin">Администратор</SelectItem>
+                          <SelectItem value="director">Директор</SelectItem>
+                          <SelectItem value="manager">Менеджер</SelectItem>
+                          <SelectItem value="senior">Ведущий сотрудник</SelectItem>
+                          <SelectItem value="employee">Сотрудник</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -372,18 +378,18 @@ export default function AdminPanel() {
                   name="employeeId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Link to Employee</FormLabel>
-                      <Select 
-                        onValueChange={(value) => field.onChange(value === "__none__" ? null : value)} 
+                      <FormLabel>Привязка к сотруднику</FormLabel>
+                      <Select
+                        onValueChange={(value) => field.onChange(value === "__none__" ? null : value)}
                         value={field.value || "__none__"}
                       >
                         <FormControl>
                           <SelectTrigger data-testid="select-edit-employee">
-                            <SelectValue placeholder="Select employee" />
+                            <SelectValue placeholder="Выберите сотрудника" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="__none__">None</SelectItem>
+                          <SelectItem value="__none__">Без привязки</SelectItem>
                           {employees.map((emp) => (
                             <SelectItem key={emp.id} value={emp.id}>
                               {emp.name}
@@ -395,10 +401,10 @@ export default function AdminPanel() {
                     </FormItem>
                   )}
                 />
-                
+
                 <DialogFooter>
                   <Button type="submit" disabled={updateUserMutation.isPending} data-testid="button-submit-edit">
-                    {updateUserMutation.isPending ? "Updating..." : "Update User"}
+                    {updateUserMutation.isPending ? "Сохранение…" : "Сохранить"}
                   </Button>
                 </DialogFooter>
               </form>

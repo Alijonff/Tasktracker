@@ -15,13 +15,13 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
 export async function createAdminUser(storage: IStorage): Promise<User | null> {
   const existingAdmin = await storage.getUserByUsername("admin");
   if (existingAdmin) {
-    console.log("Admin user already exists");
+    console.log("Администратор уже создан");
     return existingAdmin;
   }
 
   const passwordHash = await hashPassword("qwerty");
-  const admin = await storage.createUser("admin", passwordHash, "admin", null);
-  console.log("Admin user created successfully");
+  const admin = await storage.createUser("admin", passwordHash, "admin", null, false);
+  console.log("Администратор создан");
   return admin;
 }
 
