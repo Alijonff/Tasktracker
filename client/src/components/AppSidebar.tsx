@@ -6,7 +6,8 @@ import {
   PlusCircle, 
   BarChart3, 
   Settings,
-  Building2
+  Building2,
+  Shield
 } from "lucide-react";
 import {
   Sidebar,
@@ -31,6 +32,7 @@ const menuItems = [
 ];
 
 const adminItems = [
+  { title: "Admin Panel", url: "/admin", icon: Shield },
   { title: "Организация", url: "/organization", icon: Building2 },
   { title: "Настройки", url: "/settings", icon: Settings },
 ];

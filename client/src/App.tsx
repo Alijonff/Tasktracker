@@ -5,6 +5,9 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import AppSidebar from "@/components/AppSidebar";
+import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
+import type { SelectUser } from "@shared/schema";
 import Dashboard from "@/pages/Dashboard";
 import MyTasks from "@/pages/MyTasks";
 import AllTasks from "@/pages/AllTasks";
@@ -13,20 +16,42 @@ import CreateTask from "@/pages/CreateTask";
 import Reports from "@/pages/Reports";
 import Organization from "@/pages/Organization";
 import Settings from "@/pages/Settings";
+import AdminPanel from "@/pages/AdminPanel";
+import Login from "@/pages/Login";
 import NotFound from "@/pages/not-found";
 import UserAvatar from "@/components/UserAvatar";
+
+function ProtectedRoute({ component: Component }: { component: () => JSX.Element }) {
+  const [, setLocation] = useLocation();
+  const { data: user, isLoading } = useQuery<SelectUser | null>({
+    queryKey: ["/api/auth/me"],
+  });
+
+  if (isLoading) {
+    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+  }
+
+  if (!user) {
+    setLocation("/login");
+    return null;
+  }
+
+  return <Component />;
+}
 
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Dashboard} />
-      <Route path="/my-tasks" component={MyTasks} />
-      <Route path="/all-tasks" component={AllTasks} />
-      <Route path="/auctions" component={Auctions} />
-      <Route path="/create-task" component={CreateTask} />
-      <Route path="/reports" component={Reports} />
-      <Route path="/organization" component={Organization} />
-      <Route path="/settings" component={Settings} />
+      <Route path="/login" component={Login} />
+      <Route path="/" component={() => <ProtectedRoute component={Dashboard} />} />
+      <Route path="/my-tasks" component={() => <ProtectedRoute component={MyTasks} />} />
+      <Route path="/all-tasks" component={() => <ProtectedRoute component={AllTasks} />} />
+      <Route path="/auctions" component={() => <ProtectedRoute component={Auctions} />} />
+      <Route path="/create-task" component={() => <ProtectedRoute component={CreateTask} />} />
+      <Route path="/reports" component={() => <ProtectedRoute component={Reports} />} />
+      <Route path="/organization" component={() => <ProtectedRoute component={Organization} />} />
+      <Route path="/admin" component={() => <ProtectedRoute component={AdminPanel} />} />
+      <Route path="/settings" component={() => <ProtectedRoute component={Settings} />} />
       <Route component={NotFound} />
     </Switch>
   );

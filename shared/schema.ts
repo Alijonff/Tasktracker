@@ -127,6 +127,10 @@ export type TaskComment = typeof taskComments.$inferSelect;
 export type TimeLog = typeof timeLogs.$inferSelect;
 export type User = typeof users.$inferSelect;
 
+// Aliases for consistency
+export type SelectUser = User;
+export type SelectEmployee = Employee;
+
 // Insert schemas
 export const insertDepartmentSchema = createInsertSchema(departments).omit({
   id: true,
