@@ -12,7 +12,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { insertUserSchema, type SelectUser, type SelectEmployee } from "@shared/schema";
+import { insertUserSchema, type SelectUser, type Department, type Management, type Division } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Edit2 } from "lucide-react";
 
@@ -21,8 +21,12 @@ const createUserFormSchema = insertUserSchema;
 type CreateUserForm = z.infer<typeof createUserFormSchema>;
 
 const editUserFormSchema = z.object({
+  name: z.string().min(1, "Введите имя"),
+  email: z.string().email("Введите корректный email"),
   role: z.enum(["admin", "director", "manager", "senior", "employee"]),
-  employeeId: z.string().nullable(),
+  departmentId: z.string().nullable(),
+  managementId: z.string().nullable(),
+  divisionId: z.string().nullable(),
 });
 
 type EditUserForm = z.infer<typeof editUserFormSchema>;
@@ -53,8 +57,16 @@ export default function AdminPanel() {
     queryKey: ["/api/users"],
   });
 
-  const { data: employees = [] } = useQuery<SelectEmployee[]>({
-    queryKey: ["/api/employees"],
+  const { data: departments = [] } = useQuery<Department[]>({
+    queryKey: ["/api/departments"],
+  });
+
+  const { data: managements = [] } = useQuery<Management[]>({
+    queryKey: ["/api/managements"],
+  });
+
+  const { data: divisions = [] } = useQuery<Division[]>({
+    queryKey: ["/api/divisions"],
   });
 
   const createForm = useForm<CreateUserForm>({
@@ -62,16 +74,24 @@ export default function AdminPanel() {
     defaultValues: {
       username: "",
       password: "",
+      name: "",
+      email: "",
       role: "employee",
-      employeeId: null,
+      departmentId: null,
+      managementId: null,
+      divisionId: null,
     },
   });
 
   const editForm = useForm<EditUserForm>({
     resolver: zodResolver(editUserFormSchema),
     defaultValues: {
+      name: "",
+      email: "",
       role: "employee",
-      employeeId: null,
+      departmentId: null,
+      managementId: null,
+      divisionId: null,
     },
   });
 
@@ -134,8 +154,12 @@ export default function AdminPanel() {
   const handleEditClick = (user: SelectUser) => {
     setEditingUser(user);
     editForm.reset({
+      name: user.name,
+      email: user.email,
       role: user.role,
-      employeeId: user.employeeId,
+      departmentId: user.departmentId,
+      managementId: user.managementId,
+      divisionId: user.divisionId,
     });
   };
 
@@ -160,10 +184,10 @@ export default function AdminPanel() {
 
   const getRoleLabel = (role: string) => roleLabels[role] || role;
 
-  const getEmployeeName = (employeeId: string | null) => {
-    if (!employeeId) return "—";
-    const employee = employees.find(e => e.id === employeeId);
-    return employee?.name || "—";
+  const getDepartmentName = (departmentId: string | null) => {
+    if (!departmentId) return "—";
+    const department = departments.find(d => d.id === departmentId);
+    return department?.name || "—";
   };
 
   return (
@@ -222,6 +246,34 @@ export default function AdminPanel() {
                   
                   <FormField
                     control={createForm.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Имя</FormLabel>
+                        <FormControl>
+                          <Input {...field} placeholder="Иван Петров" data-testid="input-name" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  
+                  <FormField
+                    control={createForm.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email</FormLabel>
+                        <FormControl>
+                          <Input {...field} type="email" placeholder="ivan.petrov@company.com" data-testid="input-email" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  
+                  <FormField
+                    control={createForm.control}
                     name="role"
                     render={({ field }) => (
                       <FormItem>
@@ -247,24 +299,82 @@ export default function AdminPanel() {
 
                   <FormField
                     control={createForm.control}
-                    name="employeeId"
+                    name="departmentId"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Привязать к сотруднику (необязательно)</FormLabel>
+                        <FormLabel>Департамент (необязательно)</FormLabel>
                         <Select
                           onValueChange={(value) => field.onChange(value === "__none__" ? null : value)}
                           value={field.value || "__none__"}
                         >
                           <FormControl>
-                            <SelectTrigger data-testid="select-employee">
-                              <SelectValue placeholder="Выберите сотрудника" />
+                            <SelectTrigger data-testid="select-department">
+                              <SelectValue placeholder="Выберите департамент" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
                             <SelectItem value="__none__">Без привязки</SelectItem>
-                            {employees.map((emp) => (
-                              <SelectItem key={emp.id} value={emp.id}>
-                                {emp.name}
+                            {departments.map((dept) => (
+                              <SelectItem key={dept.id} value={dept.id}>
+                                {dept.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={createForm.control}
+                    name="managementId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Управление (необязательно)</FormLabel>
+                        <Select
+                          onValueChange={(value) => field.onChange(value === "__none__" ? null : value)}
+                          value={field.value || "__none__"}
+                        >
+                          <FormControl>
+                            <SelectTrigger data-testid="select-management">
+                              <SelectValue placeholder="Выберите управление" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="__none__">Без привязки</SelectItem>
+                            {managements.map((mgmt) => (
+                              <SelectItem key={mgmt.id} value={mgmt.id}>
+                                {mgmt.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={createForm.control}
+                    name="divisionId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Отдел (необязательно)</FormLabel>
+                        <Select
+                          onValueChange={(value) => field.onChange(value === "__none__" ? null : value)}
+                          value={field.value || "__none__"}
+                        >
+                          <FormControl>
+                            <SelectTrigger data-testid="select-division">
+                              <SelectValue placeholder="Выберите отдел" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="__none__">Без привязки</SelectItem>
+                            {divisions.map((div) => (
+                              <SelectItem key={div.id} value={div.id}>
+                                {div.name}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -300,8 +410,10 @@ export default function AdminPanel() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Имя пользователя</TableHead>
+                    <TableHead>Имя</TableHead>
+                    <TableHead>Email</TableHead>
                     <TableHead>Роль</TableHead>
-                    <TableHead>Привязанный сотрудник</TableHead>
+                    <TableHead>Департамент</TableHead>
                     <TableHead className="text-right">Действия</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -311,13 +423,19 @@ export default function AdminPanel() {
                       <TableCell className="font-medium" data-testid={`text-username-${user.id}`}>
                         {user.username}
                       </TableCell>
+                      <TableCell data-testid={`text-name-${user.id}`}>
+                        {user.name}
+                      </TableCell>
+                      <TableCell data-testid={`text-email-${user.id}`}>
+                        {user.email}
+                      </TableCell>
                       <TableCell>
                         <span className={`px-2 py-1 rounded-md text-xs font-medium ${getRoleBadgeColor(user.role)}`} data-testid={`badge-role-${user.id}`}>
                           {getRoleLabel(user.role)}
                         </span>
                       </TableCell>
-                      <TableCell data-testid={`text-employee-${user.id}`}>
-                        {getEmployeeName(user.employeeId)}
+                      <TableCell data-testid={`text-department-${user.id}`}>
+                        {getDepartmentName(user.departmentId)}
                       </TableCell>
                       <TableCell className="text-right">
                         <Button
@@ -342,12 +460,40 @@ export default function AdminPanel() {
             <DialogHeader>
               <DialogTitle>Редактирование пользователя</DialogTitle>
               <DialogDescription>
-                Обновите роль и привязку сотрудника для {editingUser?.username}
+                Обновите данные пользователя {editingUser?.username}
               </DialogDescription>
             </DialogHeader>
 
             <Form {...editForm}>
               <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4">
+                <FormField
+                  control={editForm.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Имя</FormLabel>
+                      <FormControl>
+                        <Input {...field} placeholder="Иван Петров" data-testid="input-edit-name" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={editForm.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email</FormLabel>
+                      <FormControl>
+                        <Input {...field} type="email" placeholder="ivan.petrov@company.com" data-testid="input-edit-email" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
                 <FormField
                   control={editForm.control}
                   name="role"
@@ -375,24 +521,82 @@ export default function AdminPanel() {
                 
                 <FormField
                   control={editForm.control}
-                  name="employeeId"
+                  name="departmentId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Привязка к сотруднику</FormLabel>
+                      <FormLabel>Департамент (необязательно)</FormLabel>
                       <Select
                         onValueChange={(value) => field.onChange(value === "__none__" ? null : value)}
                         value={field.value || "__none__"}
                       >
                         <FormControl>
-                          <SelectTrigger data-testid="select-edit-employee">
-                            <SelectValue placeholder="Выберите сотрудника" />
+                          <SelectTrigger data-testid="select-edit-department">
+                            <SelectValue placeholder="Выберите департамент" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
                           <SelectItem value="__none__">Без привязки</SelectItem>
-                          {employees.map((emp) => (
-                            <SelectItem key={emp.id} value={emp.id}>
-                              {emp.name}
+                          {departments.map((dept) => (
+                            <SelectItem key={dept.id} value={dept.id}>
+                              {dept.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={editForm.control}
+                  name="managementId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Управление (необязательно)</FormLabel>
+                      <Select
+                        onValueChange={(value) => field.onChange(value === "__none__" ? null : value)}
+                        value={field.value || "__none__"}
+                      >
+                        <FormControl>
+                          <SelectTrigger data-testid="select-edit-management">
+                            <SelectValue placeholder="Выберите управление" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="__none__">Без привязки</SelectItem>
+                          {managements.map((mgmt) => (
+                            <SelectItem key={mgmt.id} value={mgmt.id}>
+                              {mgmt.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={editForm.control}
+                  name="divisionId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Отдел (необязательно)</FormLabel>
+                      <Select
+                        onValueChange={(value) => field.onChange(value === "__none__" ? null : value)}
+                        value={field.value || "__none__"}
+                      >
+                        <FormControl>
+                          <SelectTrigger data-testid="select-edit-division">
+                            <SelectValue placeholder="Выберите отдел" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="__none__">Без привязки</SelectItem>
+                          {divisions.map((div) => (
+                            <SelectItem key={div.id} value={div.id}>
+                              {div.name}
                             </SelectItem>
                           ))}
                         </SelectContent>

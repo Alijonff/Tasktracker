@@ -3,19 +3,20 @@ import {
   departments, 
   managements, 
   divisions, 
-  employees, 
   tasks, 
   auctionBids,
   users,
   type Department,
   type Management,
   type Division,
-  type Employee,
   type Task,
   type AuctionBid,
   type User,
   type InsertTask,
-  type InsertBid
+  type InsertBid,
+  type InsertDepartment,
+  type InsertManagement,
+  type InsertDivision
 } from "@shared/schema";
 import { eq, and, or, like, desc } from "drizzle-orm";
 
@@ -24,18 +25,26 @@ export interface IStorage {
   createUser(
     username: string,
     passwordHash: string,
+    name: string,
+    email: string,
     role: "admin" | "director" | "manager" | "senior" | "employee",
-    employeeId?: string | null,
+    departmentId?: string | null,
+    managementId?: string | null,
+    divisionId?: string | null,
     mustChangePassword?: boolean,
   ): Promise<User>;
   getUserByUsername(username: string): Promise<User | undefined>;
   getUserById(id: string): Promise<User | undefined>;
-  getAllUsers(): Promise<User[]>;
+  getAllUsers(filters?: { divisionId?: string; managementId?: string; departmentId?: string }): Promise<User[]>;
   updateUser(
     id: string,
     updates: {
+      name?: string;
+      email?: string;
       role?: "admin" | "director" | "manager" | "senior" | "employee";
-      employeeId?: string | null;
+      departmentId?: string | null;
+      managementId?: string | null;
+      divisionId?: string | null;
       passwordHash?: string;
       mustChangePassword?: boolean;
     }
@@ -44,18 +53,20 @@ export interface IStorage {
   // Departments
   getAllDepartments(): Promise<Department[]>;
   getDepartment(id: string): Promise<Department | undefined>;
+  createDepartment(data: InsertDepartment): Promise<Department>;
+  updateDepartment(id: string, updates: Partial<InsertDepartment>): Promise<Department | undefined>;
 
   // Managements
   getAllManagements(filters?: { departmentId?: string }): Promise<Management[]>;
   getManagement(id: string): Promise<Management | undefined>;
+  createManagement(data: InsertManagement): Promise<Management>;
+  updateManagement(id: string, updates: Partial<InsertManagement>): Promise<Management | undefined>;
 
   // Divisions
   getAllDivisions(filters?: { managementId?: string; departmentId?: string }): Promise<Division[]>;
   getDivision(id: string): Promise<Division | undefined>;
-
-  // Employees
-  getAllEmployees(filters?: { divisionId?: string; managementId?: string; departmentId?: string }): Promise<Employee[]>;
-  getEmployee(id: string): Promise<Employee | undefined>;
+  createDivision(data: InsertDivision): Promise<Division>;
+  updateDivision(id: string, updates: Partial<InsertDivision>): Promise<Division | undefined>;
 
   // Tasks
   getAllTasks(filters: {
@@ -81,15 +92,23 @@ export class DbStorage implements IStorage {
   async createUser(
     username: string,
     passwordHash: string,
+    name: string,
+    email: string,
     role: "admin" | "director" | "manager" | "senior" | "employee",
-    employeeId?: string | null,
+    departmentId?: string | null,
+    managementId?: string | null,
+    divisionId?: string | null,
     mustChangePassword?: boolean,
   ): Promise<User> {
     const [user] = await db.insert(users).values({
       username,
       passwordHash,
+      name,
+      email,
       role,
-      employeeId: employeeId || null,
+      departmentId: departmentId || null,
+      managementId: managementId || null,
+      divisionId: divisionId || null,
       mustChangePassword: mustChangePassword ?? false,
     }).returning();
     return user;
@@ -105,15 +124,28 @@ export class DbStorage implements IStorage {
     return user;
   }
 
-  async getAllUsers(): Promise<User[]> {
+  async getAllUsers(filters?: { divisionId?: string; managementId?: string; departmentId?: string }): Promise<User[]> {
+    if (filters?.divisionId) {
+      return await db.select().from(users).where(eq(users.divisionId, filters.divisionId));
+    }
+    if (filters?.managementId) {
+      return await db.select().from(users).where(eq(users.managementId, filters.managementId));
+    }
+    if (filters?.departmentId) {
+      return await db.select().from(users).where(eq(users.departmentId, filters.departmentId));
+    }
     return await db.select().from(users);
   }
 
   async updateUser(
     id: string,
     updates: {
+      name?: string;
+      email?: string;
       role?: "admin" | "director" | "manager" | "senior" | "employee";
-      employeeId?: string | null;
+      departmentId?: string | null;
+      managementId?: string | null;
+      divisionId?: string | null;
       passwordHash?: string;
       mustChangePassword?: boolean;
     }
@@ -135,6 +167,20 @@ export class DbStorage implements IStorage {
     return dept;
   }
 
+  async createDepartment(data: InsertDepartment): Promise<Department> {
+    const [department] = await db.insert(departments).values(data).returning();
+    return department;
+  }
+
+  async updateDepartment(id: string, updates: Partial<InsertDepartment>): Promise<Department | undefined> {
+    const [department] = await db
+      .update(departments)
+      .set(updates)
+      .where(eq(departments.id, id))
+      .returning();
+    return department;
+  }
+
   // Managements
   async getAllManagements(filters?: { departmentId?: string }): Promise<Management[]> {
     if (filters?.departmentId) {
@@ -146,6 +192,20 @@ export class DbStorage implements IStorage {
   async getManagement(id: string): Promise<Management | undefined> {
     const [mgmt] = await db.select().from(managements).where(eq(managements.id, id));
     return mgmt;
+  }
+
+  async createManagement(data: InsertManagement): Promise<Management> {
+    const [management] = await db.insert(managements).values(data).returning();
+    return management;
+  }
+
+  async updateManagement(id: string, updates: Partial<InsertManagement>): Promise<Management | undefined> {
+    const [management] = await db
+      .update(managements)
+      .set(updates)
+      .where(eq(managements.id, id))
+      .returning();
+    return management;
   }
 
   // Divisions
@@ -164,23 +224,18 @@ export class DbStorage implements IStorage {
     return div;
   }
 
-  // Employees
-  async getAllEmployees(filters?: { divisionId?: string; managementId?: string; departmentId?: string }): Promise<Employee[]> {
-    if (filters?.divisionId) {
-      return await db.select().from(employees).where(eq(employees.divisionId, filters.divisionId));
-    }
-    if (filters?.managementId) {
-      return await db.select().from(employees).where(eq(employees.managementId, filters.managementId));
-    }
-    if (filters?.departmentId) {
-      return await db.select().from(employees).where(eq(employees.departmentId, filters.departmentId));
-    }
-    return await db.select().from(employees);
+  async createDivision(data: InsertDivision): Promise<Division> {
+    const [division] = await db.insert(divisions).values(data).returning();
+    return division;
   }
 
-  async getEmployee(id: string): Promise<Employee | undefined> {
-    const [emp] = await db.select().from(employees).where(eq(employees.id, id));
-    return emp;
+  async updateDivision(id: string, updates: Partial<InsertDivision>): Promise<Division | undefined> {
+    const [division] = await db
+      .update(divisions)
+      .set(updates)
+      .where(eq(divisions.id, id))
+      .returning();
+    return division;
   }
 
   // Tasks

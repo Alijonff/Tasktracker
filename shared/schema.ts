@@ -42,17 +42,20 @@ export const divisions = pgTable("divisions", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const employees = pgTable("employees", {
+export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  username: text("username").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
-  divisionId: varchar("division_id").notNull().references(() => divisions.id, { onDelete: "cascade" }),
-  managementId: varchar("management_id").notNull().references(() => managements.id, { onDelete: "cascade" }),
-  departmentId: varchar("department_id").notNull().references(() => departments.id, { onDelete: "cascade" }),
   role: roleEnum("role").notNull().default("employee"),
+  divisionId: varchar("division_id").references(() => divisions.id, { onDelete: "set null" }),
+  managementId: varchar("management_id").references(() => managements.id, { onDelete: "set null" }),
+  departmentId: varchar("department_id").references(() => departments.id, { onDelete: "set null" }),
   rating: decimal("rating", { precision: 3, scale: 2 }).default("0"),
   completedTasks: integer("completed_tasks").default(0),
   totalHours: decimal("total_hours", { precision: 10, scale: 2 }).default("0"),
+  mustChangePassword: boolean("must_change_password").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -65,9 +68,9 @@ export const tasks = pgTable("tasks", {
   departmentId: varchar("department_id").notNull().references(() => departments.id, { onDelete: "cascade" }),
   managementId: varchar("management_id").references(() => managements.id, { onDelete: "set null" }),
   divisionId: varchar("division_id").references(() => divisions.id, { onDelete: "set null" }),
-  creatorId: varchar("creator_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  creatorId: varchar("creator_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   creatorName: text("creator_name").notNull(),
-  assigneeId: varchar("assignee_id").references(() => employees.id, { onDelete: "set null" }),
+  assigneeId: varchar("assignee_id").references(() => users.id, { onDelete: "set null" }),
   assigneeName: text("assignee_name"),
   deadline: timestamp("deadline").notNull(),
   estimatedHours: decimal("estimated_hours", { precision: 6, scale: 2 }).notNull(),
@@ -80,7 +83,7 @@ export const tasks = pgTable("tasks", {
 export const auctionBids = pgTable("auction_bids", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   taskId: varchar("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
-  bidderId: varchar("bidder_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  bidderId: varchar("bidder_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   bidderName: text("bidder_name").notNull(),
   bidderRating: decimal("bidder_rating", { precision: 3, scale: 2 }).notNull(),
   hours: decimal("hours", { precision: 6, scale: 2 }).notNull(),
@@ -90,7 +93,7 @@ export const auctionBids = pgTable("auction_bids", {
 export const taskComments = pgTable("task_comments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   taskId: varchar("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
-  authorId: varchar("author_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  authorId: varchar("author_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   authorName: text("author_name").notNull(),
   content: text("content").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
@@ -99,21 +102,11 @@ export const taskComments = pgTable("task_comments", {
 export const timeLogs = pgTable("time_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   taskId: varchar("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
-  employeeId: varchar("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
-  employeeName: text("employee_name").notNull(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  userName: text("user_name").notNull(),
   hours: decimal("hours", { precision: 6, scale: 2 }).notNull(),
   date: timestamp("date").notNull(),
   description: text("description"),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  passwordHash: text("password_hash").notNull(),
-  role: roleEnum("role").notNull().default("employee"),
-  employeeId: varchar("employee_id").references(() => employees.id, { onDelete: "set null" }),
-  mustChangePassword: boolean("must_change_password").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -121,16 +114,14 @@ export const users = pgTable("users", {
 export type Department = typeof departments.$inferSelect;
 export type Management = typeof managements.$inferSelect;
 export type Division = typeof divisions.$inferSelect;
-export type Employee = typeof employees.$inferSelect;
+export type User = typeof users.$inferSelect;
 export type Task = typeof tasks.$inferSelect;
 export type AuctionBid = typeof auctionBids.$inferSelect;
 export type TaskComment = typeof taskComments.$inferSelect;
 export type TimeLog = typeof timeLogs.$inferSelect;
-export type User = typeof users.$inferSelect;
 
 // Aliases for consistency
 export type SelectUser = User;
-export type SelectEmployee = Employee;
 
 // Insert schemas
 export const insertDepartmentSchema = createInsertSchema(departments).omit({
@@ -144,11 +135,6 @@ export const insertManagementSchema = createInsertSchema(managements).omit({
 });
 
 export const insertDivisionSchema = createInsertSchema(divisions).omit({
-  id: true,
-  createdAt: true,
-});
-
-export const insertEmployeeSchema = createInsertSchema(employees).omit({
   id: true,
   createdAt: true,
 });
@@ -183,6 +169,9 @@ export const insertUserSchema = createInsertSchema(users).omit({
   passwordHash: true,
   createdAt: true,
   mustChangePassword: true,
+  rating: true,
+  completedTasks: true,
+  totalHours: true,
 }).extend({
   password: z.string().min(6, "Пароль должен содержать минимум 6 символов"),
 });
@@ -201,7 +190,6 @@ export const changePasswordSchema = z.object({
 export type InsertDepartment = z.infer<typeof insertDepartmentSchema>;
 export type InsertManagement = z.infer<typeof insertManagementSchema>;
 export type InsertDivision = z.infer<typeof insertDivisionSchema>;
-export type InsertEmployee = z.infer<typeof insertEmployeeSchema>;
 export type InsertTask = z.infer<typeof insertTaskSchema>;
 export type InsertBid = z.infer<typeof insertBidSchema>;
 export type InsertComment = z.infer<typeof insertCommentSchema>;
@@ -248,14 +236,14 @@ export type DivisionAnalytics = {
   management: Management;
   department: Department;
   metrics: AnalyticsMetrics;
-  employees: Array<{
-    employee: Employee;
+  users: Array<{
+    user: User;
     metrics: AnalyticsMetrics;
   }>;
 };
 
-export type EmployeeAnalytics = {
-  employee: Employee;
+export type UserAnalytics = {
+  user: User;
   division: Division;
   management: Management;
   department: Department;

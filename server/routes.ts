@@ -20,9 +20,16 @@ function requireAdmin(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+// Helper to check if user can modify a resource in a specific department
+function canModifyDepartment(user: any, departmentId: string): boolean {
+  if (user.role === "admin") return true;
+  if (user.role === "director" && user.departmentId === departmentId) return true;
+  return false;
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Get all departments
-  app.get("/api/departments", async (req, res) => {
+  app.get("/api/departments", requireAuth, async (req, res) => {
     try {
       const allDepartments = await storage.getAllDepartments();
       res.json(allDepartments);
@@ -32,7 +39,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get all managements (optionally filtered by department)
-  app.get("/api/managements", async (req, res) => {
+  app.get("/api/managements", requireAuth, async (req, res) => {
     try {
       const { departmentId } = req.query;
       const allManagements = await storage.getAllManagements(
@@ -45,7 +52,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get all divisions (optionally filtered by management or department)
-  app.get("/api/divisions", async (req, res) => {
+  app.get("/api/divisions", requireAuth, async (req, res) => {
     try {
       const { managementId, departmentId } = req.query;
       const filters: { managementId?: string; departmentId?: string } = {};
@@ -60,8 +67,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get all employees (optionally filtered)
-  app.get("/api/employees", async (req, res) => {
+  // Get all users (employees) - optionally filtered
+  app.get("/api/employees", requireAuth, async (req, res) => {
     try {
       const { divisionId, managementId, departmentId } = req.query;
       const filters: { divisionId?: string; managementId?: string; departmentId?: string } = {};
@@ -70,8 +77,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (managementId) filters.managementId = managementId as string;
       if (departmentId) filters.departmentId = departmentId as string;
       
-      const allEmployees = await storage.getAllEmployees(Object.keys(filters).length > 0 ? filters : undefined);
-      res.json(allEmployees);
+      const allUsers = await storage.getAllUsers(Object.keys(filters).length > 0 ? filters : undefined);
+      res.json(allUsers);
     } catch (error) {
       res.status(500).json({ error: "Не удалось получить список сотрудников" });
     }
@@ -250,8 +257,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = await storage.createUser(
         userData.username,
         passwordHash,
+        userData.name,
+        userData.email,
         userData.role || "employee",
-        userData.employeeId || null,
+        userData.departmentId || null,
+        userData.managementId || null,
+        userData.divisionId || null,
         true
       );
       
@@ -259,7 +270,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(userWithoutPassword);
     } catch (error: any) {
       if (error.code === '23505') {
-        return res.status(400).json({ error: "Имя пользователя уже занято" });
+        return res.status(400).json({ error: "Имя пользователя или email уже используется" });
       }
       res.status(400).json({ error: "Не удалось создать пользователя" });
     }
