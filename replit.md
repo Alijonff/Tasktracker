@@ -21,11 +21,21 @@ Preferred communication style: Simple, everyday language.
 **November 10, 2025:**
 - Implemented full authentication system with session-based auth (bcrypt password hashing, httpOnly cookies with CSRF protection)
 - Created Admin Panel (/admin) for user management: create users, edit roles and employee assignments
-- Added Login page (/login) with form validation and ProtectedRoute component for auth guards
+- Added Login page (/login) with form validation and ProtectedLayout component for auth guards
 - Fixed critical bug: employeeId null handling in Admin Panel (was sending string "null" instead of true null)
 - Admin user automatically created on server start: username="admin", password="qwerty"
 - All protected routes now require authentication and redirect to /login if not authenticated
-- End-to-end tested: login flow, user creation, role editing all working correctly
+- **Added UserMenu component with logout functionality:**
+  - Dropdown menu in header showing username and role (with role mapping: admin → "Administrator")
+  - Settings and Logout menu items
+  - POST /api/auth/logout destroys session and redirects to /login
+  - Cache invalidation on logout for security
+- **Refactored App.tsx architecture:**
+  - Separated layouts: /login without sidebar, protected routes with ProtectedLayout
+  - ProtectedLayout component guards all private routes using /api/auth/me query
+  - Fixed "Maximum update depth exceeded" bug by moving redirects to useEffect
+  - SidebarProvider now inside ProtectedLayout for better separation
+- End-to-end tested: login flow, user creation, role editing, logout flow all working correctly
 
 ## System Architecture
 
