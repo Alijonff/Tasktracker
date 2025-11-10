@@ -22,7 +22,7 @@ export default function Settings() {
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="flex items-center gap-4">
-            <UserAvatar name="Михаил Чен" size="lg" />
+            <UserAvatar name="Админ Админ" size="lg" />
             <Button variant="outline" size="sm" data-testid="button-change-avatar">
               Изменить аватар
             </Button>
@@ -31,22 +31,23 @@ export default function Settings() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="name">Полное имя</Label>
-              <Input id="name" defaultValue="Михаил Чен" data-testid="input-full-name" />
+              <Input id="name" defaultValue="Админ Админ" data-testid="input-full-name" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" defaultValue="mike.chen@company.com" data-testid="input-email" />
+              <Input id="email" type="email" defaultValue="admin@company.com" data-testid="input-email" />
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="department">Подразделение</Label>
-              <Select defaultValue="engineering">
+              <Select defaultValue="admin">
                 <SelectTrigger id="department" data-testid="select-department-settings">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="admin">Администрация</SelectItem>
                   <SelectItem value="engineering">Инженерный отдел</SelectItem>
                   <SelectItem value="design">Отдел дизайна</SelectItem>
                   <SelectItem value="marketing">Отдел маркетинга</SelectItem>
@@ -55,7 +56,7 @@ export default function Settings() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="role">Роль</Label>
-              <Select defaultValue="senior">
+              <Select defaultValue="admin">
                 <SelectTrigger id="role" data-testid="select-role-settings">
                   <SelectValue />
                 </SelectTrigger>

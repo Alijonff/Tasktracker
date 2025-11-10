@@ -25,7 +25,7 @@ import {
   Legend,
   Cell
 } from "recharts";
-import type { Task, Management, Division, Employee } from "@shared/schema";
+import type { Task, Management, Division, User as UserModel } from "@shared/schema";
 
 type DrillLevel = "department" | "management" | "division" | "employee";
 
@@ -50,7 +50,7 @@ export default function Reports() {
     queryKey: ["/api/divisions"],
   });
 
-  const { data: employees = [] } = useQuery<Employee[]>({
+  const { data: employees = [] } = useQuery<UserModel[]>({
     queryKey: ["/api/employees"],
   });
 
@@ -86,12 +86,12 @@ export default function Reports() {
     // Calculate employee count at current level
     let employeeCount = employees.length;
     if (drilldown.divisionId) {
-      employeeCount = employees.filter(e => e.divisionId === drilldown.divisionId).length;
+      employeeCount = employees.filter((e) => e.divisionId === drilldown.divisionId).length;
     } else if (drilldown.managementId) {
       const divIds = divisions
         .filter(d => d.managementId === drilldown.managementId)
         .map(d => d.id);
-      employeeCount = employees.filter(e => divIds.includes(e.divisionId)).length;
+      employeeCount = employees.filter((e) => (e.divisionId ? divIds.includes(e.divisionId) : false)).length;
     }
 
     return {
@@ -128,10 +128,10 @@ export default function Reports() {
 
       case "management":
         // Show divisions in selected management
-        const mgmtDivisions = divisions.filter(d => d.managementId === drilldown.managementId);
-        return mgmtDivisions.map(div => {
-          const divTasks = tasks.filter(t => t.divisionId === div.id);
-          const divEmployees = employees.filter(e => e.divisionId === div.id);
+        const mgmtDivisions = divisions.filter((d) => d.managementId === drilldown.managementId);
+        return mgmtDivisions.map((div) => {
+          const divTasks = tasks.filter((t) => t.divisionId === div.id);
+          const divEmployees = employees.filter((e) => e.divisionId === div.id);
           return {
             id: div.id,
             name: div.name,
@@ -145,9 +145,9 @@ export default function Reports() {
 
       case "division":
         // Show employees in selected division
-        const divEmployees = employees.filter(e => e.divisionId === drilldown.divisionId);
-        return divEmployees.map(emp => {
-          const empTasks = tasks.filter(t => t.assigneeId === emp.id);
+        const divEmployees = employees.filter((e) => e.divisionId === drilldown.divisionId);
+        return divEmployees.map((emp) => {
+          const empTasks = tasks.filter((t) => t.assigneeId === emp.id);
           return {
             id: emp.id,
             name: emp.name,
