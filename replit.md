@@ -16,6 +16,17 @@ TaskFlow is a comprehensive enterprise task management system designed for hiera
 
 Preferred communication style: Simple, everyday language.
 
+## Recent Changes
+
+**November 10, 2025:**
+- Implemented full authentication system with session-based auth (bcrypt password hashing, httpOnly cookies with CSRF protection)
+- Created Admin Panel (/admin) for user management: create users, edit roles and employee assignments
+- Added Login page (/login) with form validation and ProtectedRoute component for auth guards
+- Fixed critical bug: employeeId null handling in Admin Panel (was sending string "null" instead of true null)
+- Admin user automatically created on server start: username="admin", password="qwerty"
+- All protected routes now require authentication and redirect to /login if not authenticated
+- End-to-end tested: login flow, user creation, role editing all working correctly
+
 ## System Architecture
 
 ### Frontend Architecture
