@@ -2,7 +2,14 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { authenticateUser, hashPassword, verifyPassword } from "./auth";
-import { loginSchema, insertUserSchema, changePasswordSchema } from "@shared/schema";
+import { 
+  loginSchema, 
+  insertUserSchema, 
+  changePasswordSchema,
+  insertDepartmentSchema,
+  insertManagementSchema,
+  insertDivisionSchema
+} from "@shared/schema";
 
 // Authentication middleware
 function requireAuth(req: Request, res: Response, next: NextFunction) {
@@ -64,6 +71,131 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(allDivisions);
     } catch (error) {
       res.status(500).json({ error: "Не удалось получить список подразделений" });
+    }
+  });
+
+  // Create department (admin only)
+  app.post("/api/departments", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const parsed = insertDepartmentSchema.parse(req.body);
+      const newDepartment = await storage.createDepartment(parsed);
+      res.status(201).json(newDepartment);
+    } catch (error) {
+      res.status(400).json({ error: "Ошибка при создании департамента" });
+    }
+  });
+
+  // Update department (admin or director of that department)
+  app.patch("/api/departments/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const existing = await storage.getDepartment(id);
+      
+      if (!existing) {
+        return res.status(404).json({ error: "Департамент не найден" });
+      }
+      
+      // Check authorization using ACTUAL departmentId from DB
+      if (!canModifyDepartment(req.session.user, existing.id)) {
+        return res.status(403).json({ error: "Недостаточно прав для изменения департамента" });
+      }
+      
+      const updated = await storage.updateDepartment(id, req.body);
+      res.json(updated);
+    } catch (error) {
+      res.status(400).json({ error: "Ошибка при обновлении департамента" });
+    }
+  });
+
+  // Create management (admin or director of that department)
+  app.post("/api/managements", requireAuth, async (req, res) => {
+    try {
+      const parsed = insertManagementSchema.parse(req.body);
+      
+      // Check authorization - must be able to modify the parent department
+      if (!canModifyDepartment(req.session.user, parsed.departmentId)) {
+        return res.status(403).json({ error: "Недостаточно прав для создания управления" });
+      }
+      
+      const newManagement = await storage.createManagement(parsed);
+      res.status(201).json(newManagement);
+    } catch (error) {
+      res.status(400).json({ error: "Ошибка при создании управления" });
+    }
+  });
+
+  // Update management (admin or director of that department)
+  app.patch("/api/managements/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const existing = await storage.getManagement(id);
+      
+      if (!existing) {
+        return res.status(404).json({ error: "Управление не найдено" });
+      }
+      
+      // Check authorization for current department
+      if (!canModifyDepartment(req.session.user, existing.departmentId)) {
+        return res.status(403).json({ error: "Недостаточно прав для изменения управления" });
+      }
+      
+      // If trying to change departmentId, verify rights to new department too
+      if (req.body.departmentId && req.body.departmentId !== existing.departmentId) {
+        if (!canModifyDepartment(req.session.user, req.body.departmentId)) {
+          return res.status(403).json({ error: "Недостаточно прав для перемещения управления в другой департамент" });
+        }
+      }
+      
+      const updated = await storage.updateManagement(id, req.body);
+      res.json(updated);
+    } catch (error) {
+      res.status(400).json({ error: "Ошибка при обновлении управления" });
+    }
+  });
+
+  // Create division (admin or director of that department)
+  app.post("/api/divisions", requireAuth, async (req, res) => {
+    try {
+      const parsed = insertDivisionSchema.parse(req.body);
+      
+      // Check authorization - must be able to modify the parent department
+      if (!canModifyDepartment(req.session.user, parsed.departmentId)) {
+        return res.status(403).json({ error: "Недостаточно прав для создания подразделения" });
+      }
+      
+      const newDivision = await storage.createDivision(parsed);
+      res.status(201).json(newDivision);
+    } catch (error) {
+      res.status(400).json({ error: "Ошибка при создании подразделения" });
+    }
+  });
+
+  // Update division (admin or director of that department)
+  app.patch("/api/divisions/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const existing = await storage.getDivision(id);
+      
+      if (!existing) {
+        return res.status(404).json({ error: "Подразделение не найдено" });
+      }
+      
+      // Check authorization for current department
+      if (!canModifyDepartment(req.session.user, existing.departmentId)) {
+        return res.status(403).json({ error: "Недостаточно прав для изменения подразделения" });
+      }
+      
+      // If trying to change departmentId, verify rights to new department too
+      if (req.body.departmentId && req.body.departmentId !== existing.departmentId) {
+        if (!canModifyDepartment(req.session.user, req.body.departmentId)) {
+          return res.status(403).json({ error: "Недостаточно прав для перемещения подразделения в другой департамент" });
+        }
+      }
+      
+      const updated = await storage.updateDivision(id, req.body);
+      res.json(updated);
+    } catch (error) {
+      res.status(400).json({ error: "Ошибка при обновлении подразделения" });
     }
   });
 

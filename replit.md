@@ -36,6 +36,20 @@ Preferred communication style: Simple, everyday language.
   - Fixed "Maximum update depth exceeded" bug by moving redirects to useEffect
   - SidebarProvider now inside ProtectedLayout for better separation
 - End-to-end tested: login flow, user creation, role editing, logout flow all working correctly
+- **Merged users and employees tables into unified schema:**
+  - Removed separate employees table, added organizational fields to users table
+  - Users table now includes: name, email, departmentId, managementId, divisionId, rating
+  - Fixed session persistence using PostgreSQL session store (connect-pg-simple)
+  - Updated AdminPanel.tsx with department/management/division selectors
+- **Implemented Organization CRUD API with security:**
+  - Added storage methods: createDepartment/Management/Division, updateDepartment/Management/Division
+  - Created secure endpoints: POST/PATCH /api/departments, /api/managements, /api/divisions
+  - Authorization helper `canModifyDepartment(user, departmentId)` prevents privilege escalation
+  - POST /api/departments: admin-only
+  - POST /api/managements + divisions: checks departmentId authorization
+  - PATCH endpoints: load entity first, verify BOTH current and new departmentId (if changing)
+  - Directors can only modify resources in their own department
+  - Architect-reviewed: all privilege escalation vectors closed
 
 ## System Architecture
 
