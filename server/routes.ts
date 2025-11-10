@@ -162,7 +162,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { passwordHash, ...userWithoutPassword } = user;
       req.session.userId = user.id;
       req.session.user = userWithoutPassword;
-      res.json({ user: userWithoutPassword });
+      
+      // Explicitly save session before responding
+      req.session.save((err) => {
+        if (err) {
+          console.error("Session save error:", err);
+          return res.status(500).json({ error: "Failed to save session" });
+        }
+        res.json({ user: userWithoutPassword });
+      });
     } catch (error) {
       res.status(400).json({ error: "Invalid request" });
     }
