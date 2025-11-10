@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { departments, managements, divisions, employees, tasks, auctionBids } from "@shared/schema";
+import { departments, managements, divisions, users, tasks, auctionBids } from "@shared/schema";
 
 async function seed() {
   console.log("🌱 Seeding database...");
@@ -7,7 +7,7 @@ async function seed() {
   // Clear existing data
   await db.delete(auctionBids);
   await db.delete(tasks);
-  await db.delete(employees);
+  await db.delete(users);
   await db.delete(divisions);
   await db.delete(managements);
   await db.delete(departments);
@@ -125,7 +125,13 @@ async function seed() {
     { id: "emp-18", name: "Светлана Захарова", email: "s.zakharova@company.com", divisionId: div4[0].id, managementId: mgmt2[0].id, departmentId: dept.id, role: "employee" as const, rating: "4.2", completedTasks: 58, totalHours: "1180" },
   ];
 
-  await db.insert(employees).values(employeesData);
+  const usersData = employeesData.map((employee) => ({
+    ...employee,
+    username: employee.email.split("@")[0],
+    passwordHash: "seed-placeholder-hash",
+  }));
+
+  await db.insert(users).values(usersData);
   console.log("✓ Created 18 employees");
 
   // Create tasks

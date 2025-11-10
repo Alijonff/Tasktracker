@@ -4,7 +4,7 @@ import { useState } from "react";
 import UserAvatar from "./UserAvatar";
 import RatingDisplay from "./RatingDisplay";
 
-interface OrgNode {
+export interface OrgNode {
   id: string;
   name: string;
   type: "department" | "management" | "division" | "employee";
