@@ -44,11 +44,12 @@ export default function Login() {
       return await res.json();
     },
     onSuccess: async () => {
-      await queryClient.refetchQueries({ queryKey: ["/api/auth/me"] });
       toast({
         title: "Success",
         description: "Logged in successfully",
       });
+      await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      window.location.href = "/";
     },
     onError: (error: any) => {
       toast({
