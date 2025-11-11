@@ -72,6 +72,15 @@ Preferred communication style: Simple, everyday language.
     * Schema default value (users.points default changed from 35 to 0)
   - E2E tested: all positions receive correct starting points (director=95, employee=35, senior=50)
   - Architect-reviewed: production-ready implementation with proper error handling
+- **Completed grade/points display across all employee components:**
+  - GradeBadge component now displays in OrganizationTree (employee nodes)
+  - GradeBadge shown in PositionCell for assigned employees
+  - AdminPanel user table includes "Грейд" column with GradeBadge
+  - TaskCard updated to show assignee grade/points when provided
+  - Implementation uses two-prop approach: assignee (string), assigneePoints (optional number)
+  - No API changes required - backward compatible design
+  - Future enhancement: API can return assigneePoints for task lists (Dashboard, Auctions)
+  - showPoints prop added to TaskCard's GradeBadge for consistent display
 
 ## System Architecture
 

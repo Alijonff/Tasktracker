@@ -30,6 +30,7 @@ import Login from "@/pages/Login";
 import NotFound from "@/pages/not-found";
 import ChangePassword from "@/pages/ChangePassword";
 import PointHistory from "@/pages/PointHistory";
+import AdminPanel from "@/pages/AdminPanel";
 import UserAvatar from "@/components/UserAvatar";
 
 function UserMenu() {
@@ -239,6 +240,9 @@ function Router() {
       </Route>
       <Route path="/point-history">
         {() => <ProtectedLayout><PointHistory /></ProtectedLayout>}
+      </Route>
+      <Route path="/admin">
+        {() => <ProtectedLayout><AdminPanel /></ProtectedLayout>}
       </Route>
       <Route component={NotFound} />
     </Switch>
