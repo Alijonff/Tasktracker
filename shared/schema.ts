@@ -5,6 +5,7 @@ import { z } from "zod";
 
 // Enums
 export const roleEnum = pgEnum("role", ["admin", "director", "manager", "senior", "employee"]);
+export const gradeEnum = pgEnum("grade", ["A", "B", "C", "D"]);
 export const taskStatusEnum = pgEnum("task_status", ["backlog", "inProgress", "underReview", "completed", "overdue"]);
 export const taskTypeEnum = pgEnum("task_type", ["individual", "auction"]);
 export const positionTypeEnum = pgEnum("position_type", [
@@ -57,6 +58,7 @@ export const users = pgTable("users", {
   name: text("name").notNull(),
   email: text("email").unique(),
   role: roleEnum("role").notNull().default("employee"),
+  grade: gradeEnum("grade").notNull().default("D"),
   divisionId: varchar("division_id").references(() => divisions.id, { onDelete: "set null" }),
   managementId: varchar("management_id").references(() => managements.id, { onDelete: "set null" }),
   departmentId: varchar("department_id").references(() => departments.id, { onDelete: "set null" }),
@@ -80,10 +82,18 @@ export const tasks = pgTable("tasks", {
   creatorName: text("creator_name").notNull(),
   assigneeId: varchar("assignee_id").references(() => users.id, { onDelete: "set null" }),
   assigneeName: text("assignee_name"),
+  minimumGrade: gradeEnum("minimum_grade").notNull().default("D"),
   deadline: timestamp("deadline").notNull(),
   estimatedHours: decimal("estimated_hours", { precision: 6, scale: 2 }).notNull(),
   actualHours: decimal("actual_hours", { precision: 6, scale: 2 }),
   rating: decimal("rating", { precision: 3, scale: 2 }),
+  auctionStartAt: timestamp("auction_start_at"),
+  auctionEndAt: timestamp("auction_end_at"),
+  auctionInitialPrice: decimal("auction_initial_price", { precision: 10, scale: 2 }),
+  auctionMaxPrice: decimal("auction_max_price", { precision: 10, scale: 2 }),
+  auctionAssignedPrice: decimal("auction_assigned_price", { precision: 10, scale: 2 }),
+  auctionWinnerId: varchar("auction_winner_id").references(() => users.id, { onDelete: "set null" }),
+  auctionWinnerName: text("auction_winner_name"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -128,6 +138,8 @@ export type AuctionBid = typeof auctionBids.$inferSelect;
 export type TaskComment = typeof taskComments.$inferSelect;
 export type TimeLog = typeof timeLogs.$inferSelect;
 
+export type Grade = (typeof gradeEnum.enumValues)[number];
+
 // Aliases for consistency
 export type SelectUser = User;
 
@@ -147,12 +159,18 @@ export const insertDivisionSchema = createInsertSchema(divisions).omit({
   createdAt: true,
 });
 
+const dateTransform = z
+  .union([z.string(), z.date()])
+  .transform((value) => (value instanceof Date ? value : new Date(value)));
+
 export const insertTaskSchema = createInsertSchema(tasks).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
 }).extend({
-  deadline: z.string().transform((val) => new Date(val)),
+  deadline: dateTransform,
+  auctionStartAt: dateTransform.optional(),
+  auctionEndAt: dateTransform.optional(),
 });
 
 export const insertBidSchema = createInsertSchema(auctionBids).omit({
@@ -180,6 +198,7 @@ export const insertUserSchema = createInsertSchema(users).omit({
   rating: true,
   completedTasks: true,
   totalHours: true,
+  grade: true,
 }).extend({
   email: z
     .string()

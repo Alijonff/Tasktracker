@@ -26,6 +26,7 @@ export async function createAdminUser(storage: IStorage): Promise<User | null> {
     "Администратор",
     "admin@system.local",
     "admin",
+    "A",
     null,
     null,
     null,
