@@ -1,6 +1,7 @@
 import { Plus, UserCircle } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import UserAvatar from "./UserAvatar";
+import GradeBadge from "./GradeBadge";
 
 export type PositionType = 
   | "director"          // Директор департамента
@@ -16,6 +17,7 @@ interface PositionCellProps {
     id: string;
     name: string;
     rating?: number;
+    points?: number;
   };
   onClick?: () => void;
   canEdit?: boolean;
@@ -71,9 +73,16 @@ export default function PositionCell({
           )}
         </div>
 
-        {!isVacant && employee.rating && (
-          <div className="text-xs text-muted-foreground">
-            ★ {Number(employee.rating).toFixed(1)}
+        {!isVacant && (
+          <div className="flex items-center gap-2">
+            {employee.points !== undefined && (
+              <GradeBadge points={employee.points} showPoints />
+            )}
+            {employee.rating && (
+              <div className="text-xs text-muted-foreground">
+                ★ {Number(employee.rating).toFixed(1)}
+              </div>
+            )}
           </div>
         )}
       </div>

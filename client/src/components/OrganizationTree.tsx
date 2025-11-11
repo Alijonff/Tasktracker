@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight, Building2, Users, User } from "lucide-react"
 import { useState } from "react";
 import UserAvatar from "./UserAvatar";
 import RatingDisplay from "./RatingDisplay";
+import GradeBadge from "./GradeBadge";
 
 export interface OrgNode {
   id: string;
@@ -10,6 +11,7 @@ export interface OrgNode {
   type: "department" | "management" | "division" | "employee";
   leader?: string;
   rating?: number;
+  points?: number;
   employeeCount?: number;
   children?: OrgNode[];
 }
@@ -72,6 +74,9 @@ function OrgNodeItem({ node, level }: OrgNodeItemProps) {
               <UserAvatar name={node.leader} size="sm" />
               <span className="text-sm text-muted-foreground hidden sm:inline">{node.leader}</span>
             </div>
+          )}
+          {node.type === "employee" && node.points !== undefined && (
+            <GradeBadge points={node.points} showPoints tooltip />
           )}
           {node.rating !== undefined && <RatingDisplay rating={node.rating} size="sm" />}
         </div>
