@@ -7,6 +7,14 @@ import { z } from "zod";
 export const roleEnum = pgEnum("role", ["admin", "director", "manager", "senior", "employee"]);
 export const taskStatusEnum = pgEnum("task_status", ["backlog", "inProgress", "underReview", "completed", "overdue"]);
 export const taskTypeEnum = pgEnum("task_type", ["individual", "auction"]);
+export const positionTypeEnum = pgEnum("position_type", [
+  "department_director",
+  "department_deputy",
+  "management_head",
+  "division_head",
+  "division_senior",
+  "division_employee"
+]);
 
 // Organization structure tables
 export const departments = pgTable("departments", {

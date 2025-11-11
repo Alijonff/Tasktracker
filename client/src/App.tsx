@@ -26,7 +26,6 @@ import CreateTask from "@/pages/CreateTask";
 import Reports from "@/pages/Reports";
 import Organization from "@/pages/Organization";
 import Settings from "@/pages/Settings";
-import AdminPanel from "@/pages/AdminPanel";
 import Login from "@/pages/Login";
 import NotFound from "@/pages/not-found";
 import ChangePassword from "@/pages/ChangePassword";
@@ -233,9 +232,6 @@ function Router() {
       </Route>
       <Route path="/organization">
         {() => <ProtectedLayout><Organization /></ProtectedLayout>}
-      </Route>
-      <Route path="/admin">
-        {() => <ProtectedLayout><AdminPanel /></ProtectedLayout>}
       </Route>
       <Route path="/settings">
         {() => <ProtectedLayout><Settings /></ProtectedLayout>}
