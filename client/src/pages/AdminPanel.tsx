@@ -15,6 +15,7 @@ import { z } from "zod";
 import { insertUserSchema, type SelectUser, type Department, type Management, type Division } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Edit2 } from "lucide-react";
+import GradeBadge from "@/components/GradeBadge";
 
 const createUserFormSchema = insertUserSchema;
 
@@ -413,6 +414,7 @@ export default function AdminPanel() {
                     <TableHead>Имя</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Роль</TableHead>
+                    <TableHead>Грейд</TableHead>
                     <TableHead>Департамент</TableHead>
                     <TableHead className="text-right">Действия</TableHead>
                   </TableRow>
@@ -433,6 +435,9 @@ export default function AdminPanel() {
                         <span className={`px-2 py-1 rounded-md text-xs font-medium ${getRoleBadgeColor(user.role)}`} data-testid={`badge-role-${user.id}`}>
                           {getRoleLabel(user.role)}
                         </span>
+                      </TableCell>
+                      <TableCell>
+                        <GradeBadge points={user.points} showPoints data-testid={`badge-grade-${user.id}`} />
                       </TableCell>
                       <TableCell data-testid={`text-department-${user.id}`}>
                         {getDepartmentName(user.departmentId)}

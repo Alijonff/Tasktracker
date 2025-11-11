@@ -4,6 +4,7 @@ import { Clock, Calendar, Users, Timer } from "lucide-react";
 import UserAvatar from "./UserAvatar";
 import StatusBadge, { TaskStatus } from "./StatusBadge";
 import RatingDisplay from "./RatingDisplay";
+import GradeBadge from "./GradeBadge";
 
 interface TaskCardProps {
   id: string;
@@ -13,6 +14,7 @@ interface TaskCardProps {
   type: "individual" | "auction";
   creator: string;
   assignee?: string;
+  assigneePoints?: number;
   deadline: string;
   estimatedHours: number;
   actualHours?: number;
@@ -32,6 +34,7 @@ export default function TaskCard({
   type,
   creator,
   assignee,
+  assigneePoints,
   deadline,
   estimatedHours,
   actualHours,
@@ -69,6 +72,9 @@ export default function TaskCard({
             <div className="flex items-center gap-2">
               <span className="text-muted-foreground">Исполнитель</span>
               <UserAvatar name={assignee} size="sm" />
+              {assigneePoints !== undefined && (
+                <GradeBadge points={assigneePoints} showPoints />
+              )}
             </div>
           )}
         </div>
