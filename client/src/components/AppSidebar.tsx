@@ -6,7 +6,8 @@ import {
   PlusCircle, 
   BarChart3, 
   Settings,
-  Building2
+  Building2,
+  Award
 } from "lucide-react";
 import {
   Sidebar,
@@ -27,6 +28,7 @@ const menuItems = [
   { title: "Все задачи", url: "/all-tasks", icon: ListTodo },
   { title: "Аукционы", url: "/auctions", icon: Gavel },
   { title: "Создать задачу", url: "/create-task", icon: PlusCircle },
+  { title: "Мои баллы", url: "/point-history", icon: Award },
   { title: "Отчёты", url: "/reports", icon: BarChart3 },
 ];
 

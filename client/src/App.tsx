@@ -29,6 +29,7 @@ import Settings from "@/pages/Settings";
 import Login from "@/pages/Login";
 import NotFound from "@/pages/not-found";
 import ChangePassword from "@/pages/ChangePassword";
+import PointHistory from "@/pages/PointHistory";
 import UserAvatar from "@/components/UserAvatar";
 
 function UserMenu() {
@@ -235,6 +236,9 @@ function Router() {
       </Route>
       <Route path="/settings">
         {() => <ProtectedLayout><Settings /></ProtectedLayout>}
+      </Route>
+      <Route path="/point-history">
+        {() => <ProtectedLayout><PointHistory /></ProtectedLayout>}
       </Route>
       <Route component={NotFound} />
     </Switch>
