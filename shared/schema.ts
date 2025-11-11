@@ -55,7 +55,7 @@ export const users = pgTable("users", {
   username: text("username").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   name: text("name").notNull(),
-  email: text("email").notNull().unique(),
+  email: text("email").unique(),
   role: roleEnum("role").notNull().default("employee"),
   divisionId: varchar("division_id").references(() => divisions.id, { onDelete: "set null" }),
   managementId: varchar("management_id").references(() => managements.id, { onDelete: "set null" }),
@@ -181,6 +181,13 @@ export const insertUserSchema = createInsertSchema(users).omit({
   completedTasks: true,
   totalHours: true,
 }).extend({
+  email: z
+    .string()
+    .trim()
+    .email("Введите корректный email")
+    .optional()
+    .or(z.literal(""))
+    .transform((value) => (value === "" ? undefined : value)),
   password: z.string().min(6, "Пароль должен содержать минимум 6 символов"),
 });
 

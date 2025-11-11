@@ -10,20 +10,41 @@ interface StatsCardProps {
     isPositive: boolean;
   };
   subtitle?: string;
+  isEmpty?: boolean;
+  emptyMessage?: string;
 }
 
-export default function StatsCard({ title, value, icon: Icon, trend, subtitle }: StatsCardProps) {
+export default function StatsCard({
+  title,
+  value,
+  icon: Icon,
+  trend,
+  subtitle,
+  isEmpty = false,
+  emptyMessage = "Нет данных за период",
+}: StatsCardProps) {
+  const formattedValue = typeof value === "number" ? value.toLocaleString("ru-RU") : value;
+  const valueClassName = isEmpty ? "text-muted-foreground" : "text-foreground";
+
   return (
     <Card data-testid={`card-stats-${title.toLowerCase().replace(/\s+/g, '-')}`}>
       <CardContent className="p-6">
         <div className="flex items-start justify-between">
           <div className="space-y-2 flex-1">
             <p className="text-sm text-muted-foreground font-medium">{title}</p>
-            <p className="text-3xl font-bold font-mono" data-testid="text-stats-value">{value}</p>
-            {subtitle && (
-              <p className="text-xs text-muted-foreground">{subtitle}</p>
+            <p
+              className={`text-3xl font-bold font-mono ${valueClassName}`}
+              data-testid="text-stats-value"
+            >
+              {formattedValue}
+            </p>
+            {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
+            {isEmpty && (
+              <p className="text-xs text-muted-foreground" data-testid="text-stats-empty">
+                {emptyMessage}
+              </p>
             )}
-            {trend && (
+            {!isEmpty && trend && (
               <div className={`text-sm font-medium ${trend.isPositive ? 'text-status-completed' : 'text-status-overdue'}`}>
                 {trend.isPositive ? '+' : ''}{trend.value}% from last month
               </div>

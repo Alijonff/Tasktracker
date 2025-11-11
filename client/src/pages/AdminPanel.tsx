@@ -155,7 +155,7 @@ export default function AdminPanel() {
     setEditingUser(user);
     editForm.reset({
       name: user.name,
-      email: user.email,
+      email: user.email ?? "",
       role: user.role,
       departmentId: user.departmentId,
       managementId: user.managementId,
@@ -221,7 +221,7 @@ export default function AdminPanel() {
                     name="username"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Имя пользователя</FormLabel>
+                        <FormLabel>Логин</FormLabel>
                         <FormControl>
                           <Input {...field} placeholder="ivan.petrov" data-testid="input-username" />
                         </FormControl>
@@ -409,7 +409,7 @@ export default function AdminPanel() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Имя пользователя</TableHead>
+                    <TableHead>Логин</TableHead>
                     <TableHead>Имя</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Роль</TableHead>
@@ -427,7 +427,7 @@ export default function AdminPanel() {
                         {user.name}
                       </TableCell>
                       <TableCell data-testid={`text-email-${user.id}`}>
-                        {user.email}
+                        {user.email ?? "—"}
                       </TableCell>
                       <TableCell>
                         <span className={`px-2 py-1 rounded-md text-xs font-medium ${getRoleBadgeColor(user.role)}`} data-testid={`badge-role-${user.id}`}>
