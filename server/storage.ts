@@ -121,6 +121,7 @@ export interface IStorage {
   getUserPointHistory(userId: string): Promise<PointTransaction[]>;
   updateUserPoints(userId: string, newPoints: number): Promise<User | undefined>;
   assignPointsForTask(taskId: string, points: number, comment?: string | null): Promise<void>;
+  hasOverduePenalty(taskId: string): Promise<boolean>;
 }
 
 export class DbStorage implements IStorage {
@@ -552,6 +553,20 @@ export class DbStorage implements IStorage {
       .where(eq(users.id, userId))
       .returning();
     return updated;
+  }
+
+  async hasOverduePenalty(taskId: string): Promise<boolean> {
+    const [existing] = await db
+      .select()
+      .from(pointTransactions)
+      .where(
+        and(
+          eq(pointTransactions.taskId, taskId),
+          eq(pointTransactions.type, "overdue_penalty")
+        )
+      )
+      .limit(1);
+    return !!existing;
   }
 
   async assignPointsForTask(taskId: string, points: number, comment?: string | null): Promise<void> {

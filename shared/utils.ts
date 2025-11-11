@@ -29,16 +29,23 @@ export function isWeekend(date: Date): boolean {
   return day === 0 || day === 6; // Sunday or Saturday
 }
 
-export function calculateOverdueHours(deadline: Date, completedAt: Date = new Date()): number {
-  let hours = 0;
+export function calculateOverdueDays(deadline: Date, completedAt: Date = new Date()): number {
+  if (completedAt <= deadline) {
+    return 0;
+  }
+
+  let days = 0;
   const current = new Date(deadline);
+  current.setHours(0, 0, 0, 0);
+  const end = new Date(completedAt);
+  end.setHours(0, 0, 0, 0);
   
-  while (current < completedAt) {
+  while (current < end) {
     if (!isWeekend(current)) {
-      hours++;
+      days++;
     }
-    current.setHours(current.getHours() + 1);
+    current.setDate(current.getDate() + 1);
   }
   
-  return hours;
+  return days;
 }

@@ -757,6 +757,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Задача не найдена" });
       }
 
+      // Apply overdue penalty if task is completed/underReview past deadline
+      // Only apply once - check if penalty already exists for this task
+      if ((status === "completed" || status === "underReview") && task.assigneeId && task.deadline) {
+        const hasPenalty = await storage.hasOverduePenalty(task.id);
+        
+        if (!hasPenalty) {
+          const { calculateOverdueDays } = await import("@shared/utils");
+          const overdueDays = calculateOverdueDays(new Date(task.deadline), new Date());
+          
+          if (overdueDays > 0) {
+            const assignee = await storage.getUserById(task.assigneeId);
+            if (assignee) {
+              const penaltyPoints = overdueDays * -2;
+              await storage.createPointTransaction({
+                userId: task.assigneeId,
+                userName: assignee.name,
+                amount: penaltyPoints,
+                type: "overdue_penalty",
+                taskId: task.id,
+                comment: `Штраф за просрочку задачи "${task.title}" на ${overdueDays} ${overdueDays === 1 ? 'день' : overdueDays < 5 ? 'дня' : 'дней'}`,
+              });
+            }
+          }
+        }
+      }
+
       res.json(updated);
     } catch (error) {
       console.error("Ошибка при обновлении статуса задачи:", error);
