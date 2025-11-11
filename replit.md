@@ -60,6 +60,19 @@ Preferred communication style: Simple, everyday language.
   - Query invalidation для автообновления после создания
   - E2E тест пройден: создание департамента с 2 управлениями и 2 отделами работает
 
+**November 11, 2025:**
+- **Implemented automatic starting points for position assignment:**
+  - POST /api/employees now automatically assigns starting points based on position
+  - Position mapping: director(95), deputy/management_head(80), division_head(65), senior(50), employee(35)
+  - Creates pointTransaction with type="position_assigned" and descriptive comment
+  - Transaction safety: rollback user creation if point assignment fails
+  - Fixed critical bugs:
+    * Wrong position mapping (all positions were getting default 35 points)
+    * Response returning user before transaction (showing points=0)
+    * Schema default value (users.points default changed from 35 to 0)
+  - E2E tested: all positions receive correct starting points (director=95, employee=35, senior=50)
+  - Architect-reviewed: production-ready implementation with proper error handling
+
 ## System Architecture
 
 ### Frontend Architecture

@@ -67,7 +67,7 @@ export const users = pgTable("users", {
   managementId: varchar("management_id").references(() => managements.id, { onDelete: "set null" }),
   departmentId: varchar("department_id").references(() => departments.id, { onDelete: "set null" }),
   rating: decimal("rating", { precision: 3, scale: 2 }).default("0"),
-  points: integer("points").notNull().default(35),
+  points: integer("points").notNull().default(0),
   completedTasks: integer("completed_tasks").default(0),
   totalHours: decimal("total_hours", { precision: 10, scale: 2 }).default("0"),
   mustChangePassword: boolean("must_change_password").notNull().default(false),

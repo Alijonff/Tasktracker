@@ -445,7 +445,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         throw error;
       }
 
-      const { passwordHash: _, ...userWithoutPassword } = user;
+      // Fetch updated user with correct points after transaction
+      const updatedUser = await storage.getUserById(user.id);
+      if (!updatedUser) {
+        throw new Error("Failed to fetch updated user");
+      }
+      
+      const { passwordHash: _, ...userWithoutPassword } = updatedUser;
       res.status(201).json(userWithoutPassword);
     } catch (error: any) {
       if (error instanceof PositionAssignmentError) {
