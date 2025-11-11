@@ -17,6 +17,7 @@ export default function CreateTask() {
     assignee: "",
     estimatedHours: "",
     deadline: "",
+    requiredGrade: "",
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -153,6 +154,26 @@ export default function CreateTask() {
                   />
                 </div>
               </div>
+
+              {taskType === "auction" && (
+                <div className="space-y-2">
+                  <Label htmlFor="requiredGrade">Минимальный грейд</Label>
+                  <Select value={formData.requiredGrade} onValueChange={(v) => setFormData({ ...formData, requiredGrade: v })}>
+                    <SelectTrigger id="requiredGrade" data-testid="select-required-grade">
+                      <SelectValue placeholder="Выберите минимальный грейд (необязательно)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="D">Грейд D (≥0 баллов) - Все сотрудники</SelectItem>
+                      <SelectItem value="C">Грейд C (≥45 баллов)</SelectItem>
+                      <SelectItem value="B">Грейд B (≥65 баллов)</SelectItem>
+                      <SelectItem value="A">Грейд A (≥85 баллов)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Только сотрудники с указанным или более высоким грейдом смогут делать ставки
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="flex gap-3">
