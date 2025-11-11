@@ -11,6 +11,7 @@ import {
   insertManagementSchema,
   insertDivisionSchema
 } from "@shared/schema";
+import { getInitialPointsByPosition } from "@shared/utils";
 
 // Authentication middleware
 function requireAuth(req: Request, res: Response, next: NextFunction) {
@@ -404,6 +405,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
         assignment.divisionId,
         true
       );
+
+      // Assign starting points for the position
+      // Map PositionType to getInitialPointsByPosition keys
+      const positionKeyMap: Record<PositionType, string> = {
+        director: "department_director",
+        deputy: "department_deputy",
+        management_head: "management_head",
+        division_head: "division_head",
+        senior: "division_senior",
+        employee: "division_employee",
+      };
+      const positionKey = positionKeyMap[parsed.positionType];
+      const startingPoints = getInitialPointsByPosition(positionKey);
+      
+      const positionLabels: Record<PositionType, string> = {
+        director: "Директор",
+        deputy: "Заместитель",
+        management_head: "Руководитель управления",
+        division_head: "Руководитель отдела",
+        senior: "Старший сотрудник",
+        employee: "Сотрудник",
+      };
+      const positionLabel = positionLabels[parsed.positionType];
+      
+      try {
+        await storage.createPointTransaction({
+          userId: user.id,
+          userName: user.name,
+          amount: startingPoints,
+          type: "position_assigned",
+          taskId: null,
+          taskTitle: null,
+          comment: `Назначена должность: ${positionLabel} (${startingPoints} баллов)`,
+        });
+      } catch (error) {
+        // Rollback user creation if point transaction fails
+        await storage.deleteUser(user.id);
+        throw error;
+      }
 
       const { passwordHash: _, ...userWithoutPassword } = user;
       res.status(201).json(userWithoutPassword);
