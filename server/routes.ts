@@ -3,13 +3,16 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { authenticateUser, hashPassword, verifyPassword } from "./auth";
 import { z } from "zod";
-import { 
-  loginSchema, 
-  insertUserSchema, 
+import {
+  loginSchema,
+  insertUserSchema,
   changePasswordSchema,
   insertDepartmentSchema,
   insertManagementSchema,
-  insertDivisionSchema
+  insertDivisionSchema,
+  type Task,
+  type AuctionBid,
+  type Grade,
 } from "@shared/schema";
 
 // Authentication middleware
@@ -55,6 +58,166 @@ const positionRoleMap: Record<PositionType, "director" | "manager" | "senior" | 
   employee: "employee",
 };
 
+const roleGradeMap: Record<"admin" | "director" | "manager" | "senior" | "employee", Grade> = {
+  admin: "A",
+  director: "A",
+  manager: "B",
+  senior: "C",
+  employee: "D",
+};
+
+const gradePriority: Record<Grade, number> = { A: 4, B: 3, C: 2, D: 1 };
+
+const positionGradeMap: Record<PositionType, Grade> = {
+  director: "A",
+  deputy: "A",
+  management_head: "A",
+  division_head: "B",
+  senior: "C",
+  employee: "D",
+};
+
+function hasGradeAccess(userGrade: Grade, minimum: Grade): boolean {
+  return gradePriority[userGrade] >= gradePriority[minimum];
+}
+
+function getRoleGrade(role: "admin" | "director" | "manager" | "senior" | "employee"): Grade {
+  return roleGradeMap[role];
+}
+
+const gradeSchema = z.enum(["A", "B", "C", "D"]);
+
+const decimalNumberSchema = z
+  .union([z.number(), z.string()])
+  .transform((value) => {
+    if (typeof value === "number") {
+      return value;
+    }
+    const normalized = value.trim().replace(",", ".");
+    return Number.parseFloat(normalized);
+  })
+  .pipe(z.number().positive("Значение должно быть больше нуля"));
+
+function decimalToString(value: number): string {
+  return value.toFixed(2);
+}
+
+function isWeekend(date: Date): boolean {
+  const day = date.getDay();
+  return day === 0 || day === 6;
+}
+
+function moveToNextWeekdayStart(date: Date): Date {
+  const result = new Date(date);
+  while (isWeekend(result)) {
+    result.setDate(result.getDate() + 1);
+    result.setHours(0, 0, 0, 0);
+  }
+  return result;
+}
+
+function calculateAuctionEnd(start: Date): Date {
+  let current = new Date(start);
+  let remaining = 24 * 60 * 60 * 1000; // 24 hours in ms
+
+  if (Number.isNaN(current.getTime())) {
+    return start;
+  }
+
+  while (remaining > 0) {
+    if (isWeekend(current)) {
+      current = moveToNextWeekdayStart(current);
+      continue;
+    }
+
+    const dayEnd = new Date(current);
+    dayEnd.setHours(24, 0, 0, 0);
+    const available = dayEnd.getTime() - current.getTime();
+    const consumed = Math.min(available, remaining);
+    current = new Date(current.getTime() + consumed);
+    remaining -= consumed;
+  }
+
+  return current;
+}
+
+function parseDecimal(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const numeric = typeof value === "number" ? value : Number.parseFloat(String(value));
+  if (!Number.isFinite(numeric)) {
+    return null;
+  }
+  return numeric;
+}
+
+function calculateAuctionPrice(task: Task, now: Date = new Date()): number | null {
+  if (!task.auctionInitialPrice || !task.auctionMaxPrice || !task.auctionStartAt || !task.auctionEndAt) {
+    return null;
+  }
+
+  const start = new Date(task.auctionStartAt);
+  const end = new Date(task.auctionEndAt);
+  const initial = parseDecimal(task.auctionInitialPrice);
+  const max = parseDecimal(task.auctionMaxPrice);
+
+  if (!initial || !max || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start.getTime() === end.getTime()) {
+    return null;
+  }
+
+  if (now <= start) {
+    return initial;
+  }
+
+  if (now >= end) {
+    return max;
+  }
+
+  const total = end.getTime() - start.getTime();
+  const elapsed = now.getTime() - start.getTime();
+  const progress = Math.min(Math.max(elapsed / total, 0), 1);
+  return initial + (max - initial) * progress;
+}
+
+const dateInputSchema = z
+  .union([z.string(), z.date()])
+  .transform((value) => (value instanceof Date ? value : new Date(value)))
+  .refine((value) => !Number.isNaN(value.getTime()), { message: "Некорректная дата" });
+
+const createTaskSchema = z
+  .object({
+    title: z.string().min(1, "Введите название задачи"),
+    description: z.string().min(1, "Введите описание задачи"),
+    type: z.enum(["individual", "auction"]),
+    deadline: dateInputSchema,
+    estimatedHours: decimalNumberSchema,
+    minimumGrade: gradeSchema.default("D"),
+    assigneeId: z.string().min(1).optional(),
+    departmentId: z.string().min(1, "Укажите департамент").optional(),
+    auctionInitialPrice: decimalNumberSchema.optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.type === "individual" && (!value.assigneeId || value.assigneeId.trim() === "")) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["assigneeId"],
+        message: "Выберите исполнителя",
+      });
+    }
+    if (value.type === "auction" && value.auctionInitialPrice === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["auctionInitialPrice"],
+        message: "Укажите стартовую ставку",
+      });
+    }
+  });
+
+const placeBidSchema = z.object({
+  hours: decimalNumberSchema,
+});
+
 class PositionAssignmentError extends Error {}
 
 async function resolveEmployeeAssignment(
@@ -77,6 +240,7 @@ async function resolveEmployeeAssignment(
         managementId: null,
         divisionId: null,
         role: positionRoleMap[positionType],
+        grade: positionGradeMap[positionType],
       } as const;
     }
     case "management_head": {
@@ -96,6 +260,7 @@ async function resolveEmployeeAssignment(
         managementId: management.id,
         divisionId: null,
         role: positionRoleMap[positionType],
+        grade: positionGradeMap[positionType],
       } as const;
     }
     case "division_head":
@@ -120,6 +285,7 @@ async function resolveEmployeeAssignment(
         managementId: division.managementId,
         divisionId: division.id,
         role: positionRoleMap[positionType],
+        grade: positionGradeMap[positionType],
       } as const;
     }
     default: {
@@ -162,6 +328,60 @@ const updateEmployeeSchema = z.object({
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  async function finalizeExpiredAuctions(departmentId?: string) {
+    const filters: Parameters<typeof storage.getAllTasks>[0] = {
+      type: "auction",
+      status: "backlog",
+    };
+
+    if (departmentId) {
+      filters.departmentId = departmentId;
+    }
+
+    const backlogAuctions = await storage.getAllTasks(filters);
+    const now = new Date();
+
+    for (const task of backlogAuctions) {
+      if (!task.auctionEndAt) continue;
+      const auctionEnd = new Date(task.auctionEndAt);
+      if (Number.isNaN(auctionEnd.getTime()) || auctionEnd.getTime() > now.getTime()) {
+        continue;
+      }
+
+      const bids = await storage.getTaskBids(task.id);
+
+      if (bids.length === 0) {
+        const departmentUsers = await storage.getAllUsers({ departmentId: task.departmentId });
+        const director = departmentUsers.find((user) => user.role === "director");
+        const assigneeId = director?.id ?? task.creatorId;
+        const assigneeName = director?.name ?? task.creatorName;
+        await storage.updateTask(task.id, {
+          status: "inProgress" as any,
+          assigneeId,
+          assigneeName,
+          auctionWinnerId: assigneeId,
+          auctionWinnerName: assigneeName,
+          auctionAssignedPrice: task.auctionMaxPrice ?? task.auctionInitialPrice ?? null,
+        });
+      } else {
+        const winningBid = bids.reduce((best, bid) => {
+          const bestValue = parseDecimal(best.hours) ?? Number.POSITIVE_INFINITY;
+          const currentValue = parseDecimal(bid.hours) ?? Number.POSITIVE_INFINITY;
+          return currentValue < bestValue ? bid : best;
+        }, bids[0] as AuctionBid);
+
+        await storage.updateTask(task.id, {
+          status: "inProgress" as any,
+          assigneeId: winningBid.bidderId,
+          assigneeName: winningBid.bidderName,
+          auctionWinnerId: winningBid.bidderId,
+          auctionWinnerName: winningBid.bidderName,
+          auctionAssignedPrice: winningBid.hours,
+        });
+      }
+    }
+  }
+
   // Get all departments
   app.get("/api/departments", requireAuth, async (req, res) => {
     try {
@@ -399,6 +619,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         parsed.name,
         parsed.email ?? null,
         assignment.role,
+        assignment.grade,
         assignment.departmentId,
         assignment.managementId,
         assignment.divisionId,
@@ -440,6 +661,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         name?: string;
         email?: string | null;
         role?: "admin" | "director" | "manager" | "senior" | "employee";
+        grade?: Grade;
         departmentId?: string | null;
         managementId?: string | null;
         divisionId?: string | null;
@@ -485,6 +707,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         updates.role = assignment.role;
+        updates.grade = assignment.grade;
         updates.departmentId = assignment.departmentId;
         updates.managementId = assignment.managementId;
         updates.divisionId = assignment.divisionId;
@@ -587,6 +810,88 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get all tasks (with filtering)
+  app.post("/api/tasks", requireAuth, async (req, res) => {
+    try {
+      const currentUser = req.session.user!;
+      const parsed = createTaskSchema.parse(req.body);
+
+      let departmentId = parsed.departmentId ?? currentUser.departmentId ?? undefined;
+
+      if (!departmentId) {
+        return res.status(400).json({ error: "Укажите департамент для задачи" });
+      }
+
+      const department = await storage.getDepartment(departmentId);
+      if (!department) {
+        return res.status(404).json({ error: "Департамент не найден" });
+      }
+
+      if (currentUser.role !== "admin") {
+        if (currentUser.role !== "director" || currentUser.departmentId !== departmentId) {
+          return res.status(403).json({ error: "Создавать задачи может только директор департамента" });
+        }
+      }
+
+      const taskData: any = {
+        title: parsed.title,
+        description: parsed.description,
+        type: parsed.type,
+        status: "backlog",
+        departmentId,
+        managementId: null,
+        divisionId: null,
+        creatorId: currentUser.id,
+        creatorName: currentUser.name,
+        assigneeId: null,
+        assigneeName: null,
+        minimumGrade: parsed.minimumGrade,
+        deadline: parsed.deadline,
+        estimatedHours: decimalToString(parsed.estimatedHours),
+        actualHours: null,
+        rating: null,
+        auctionStartAt: null,
+        auctionEndAt: null,
+        auctionInitialPrice: null,
+        auctionMaxPrice: null,
+        auctionAssignedPrice: null,
+        auctionWinnerId: null,
+        auctionWinnerName: null,
+      } satisfies Partial<Task>;
+
+      if (parsed.type === "individual") {
+        const assignee = parsed.assigneeId ? await storage.getUserById(parsed.assigneeId) : null;
+        if (!assignee || assignee.departmentId !== departmentId) {
+          return res.status(400).json({ error: "Исполнитель не найден или относится к другому департаменту" });
+        }
+
+        const assigneeGrade = assignee.grade ?? getRoleGrade(assignee.role);
+        if (!hasGradeAccess(assigneeGrade, parsed.minimumGrade)) {
+          return res.status(400).json({ error: "Грейд исполнителя ниже минимального для задачи" });
+        }
+
+        taskData.assigneeId = assignee.id;
+        taskData.assigneeName = assignee.name;
+      } else {
+        const startAt = new Date();
+        const initialPrice = parsed.auctionInitialPrice!;
+        const endAt = calculateAuctionEnd(startAt);
+        taskData.auctionStartAt = startAt;
+        taskData.auctionEndAt = endAt;
+        taskData.auctionInitialPrice = decimalToString(initialPrice);
+        taskData.auctionMaxPrice = decimalToString(initialPrice * 1.5);
+      }
+
+      const created = await storage.createTask(taskData);
+      res.status(201).json(created);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors.map((e) => e.message).join(", ") });
+      }
+      console.error("Ошибка при создании задачи:", error);
+      res.status(500).json({ error: "Не удалось создать задачу" });
+    }
+  });
+
   app.get("/api/tasks", requireAuth, async (req, res) => {
     try {
       const currentUser = req.session.user!;
@@ -616,6 +921,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         departmentId = currentUser.departmentId;
       }
 
+      await finalizeExpiredAuctions(departmentId);
+
       const filters: Parameters<typeof storage.getAllTasks>[0] = {};
       if (departmentId) filters.departmentId = departmentId;
 
@@ -642,7 +949,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const allTasks = await storage.getAllTasks(filters);
-      res.json(allTasks);
+      const now = new Date();
+      const tasksWithAuctionPrice = allTasks.map((task) => {
+        const auctionPrice = calculateAuctionPrice(task, now);
+        return auctionPrice !== null ? { ...task, auctionCurrentPrice: decimalToString(auctionPrice) } : task;
+      });
+      res.json(tasksWithAuctionPrice);
     } catch (error) {
       console.error("Ошибка при получении задач:", error);
       res.status(500).json({ error: "Не удалось получить задачи" });
@@ -664,16 +976,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get task by ID
-  app.get("/api/tasks/:id", async (req, res) => {
+  app.get("/api/tasks/:id", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
       const task = await storage.getTask(id);
-      
+
       if (!task) {
         return res.status(404).json({ error: "Задача не найдена" });
       }
 
-      res.json(task);
+      const currentUser = req.session.user!;
+      if (
+        currentUser.role !== "admin" &&
+        (!currentUser.departmentId || currentUser.departmentId !== task.departmentId)
+      ) {
+        return res.status(403).json({ error: "Недостаточно прав для просмотра задачи" });
+      }
+
+      const price = calculateAuctionPrice(task);
+      const response = price !== null ? { ...task, auctionCurrentPrice: decimalToString(price) } : task;
+
+      res.json(response);
     } catch (error) {
       res.status(500).json({ error: "Не удалось получить задачу" });
     }
@@ -682,7 +1005,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/tasks/:id/status", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const { status } = req.body as { status?: string };
+      const { status, comment } = req.body as { status?: string; comment?: string };
       const allowedStatuses = ["backlog", "inProgress", "underReview", "completed"] as const;
 
       if (!status || !allowedStatuses.includes(status as (typeof allowedStatuses)[number])) {
@@ -695,18 +1018,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const currentUser = req.session.user!;
-      const sameDepartment = currentUser.departmentId && task.departmentId === currentUser.departmentId;
-      const canModify =
-        currentUser.role === "admin" ||
-        task.assigneeId === currentUser.id ||
-        task.creatorId === currentUser.id ||
-        sameDepartment;
+      const targetStatus = status as Task["status"];
+      const currentStatus = task.status as Task["status"];
+      const commentText = typeof comment === "string" ? comment.trim() : "";
 
-      if (!canModify) {
-        return res.status(403).json({ error: "Недостаточно прав для изменения статуса" });
+      if (currentStatus === targetStatus) {
+        return res.json(task);
       }
 
-      const updated = await storage.updateTask(id, { status: status as any });
+      const transitions: Record<string, Task["status"][]> = {
+        backlog: ["inProgress"],
+        inProgress: ["underReview"],
+        underReview: ["completed", "inProgress"],
+        completed: [],
+        overdue: ["inProgress"],
+      };
+
+      const available = transitions[currentStatus] ?? [];
+      if (!available.includes(targetStatus)) {
+        return res.status(400).json({ error: "Недопустимое изменение статуса" });
+      }
+
+      const isAdmin = currentUser.role === "admin";
+      const isDirector = currentUser.role === "director" && currentUser.departmentId === task.departmentId;
+      const isAssignee = task.assigneeId === currentUser.id;
+
+      if (targetStatus === "inProgress") {
+        if (currentStatus === "backlog" || currentStatus === "overdue") {
+          if (!task.assigneeId) {
+            return res.status(400).json({ error: "Задача должна иметь исполнителя" });
+          }
+          if (!(isAssignee || isDirector || isAdmin)) {
+            return res.status(403).json({ error: "Только исполнитель или директор могут начать задачу" });
+          }
+        } else if (currentStatus === "underReview") {
+          if (!(isDirector || isAdmin)) {
+            return res.status(403).json({ error: "Только директор может вернуть задачу на доработку" });
+          }
+          if (!commentText) {
+            return res.status(400).json({ error: "Добавьте комментарий при возврате задачи" });
+          }
+        }
+      }
+
+      if (targetStatus === "underReview" && !isAssignee && !isAdmin) {
+        return res.status(403).json({ error: "Только исполнитель может отправить задачу на проверку" });
+      }
+
+      if (targetStatus === "completed" && !(isDirector || isAdmin)) {
+        return res.status(403).json({ error: "Только директор департамента может завершить задачу" });
+      }
+
+      if (
+        currentStatus === "underReview" &&
+        targetStatus === "inProgress" &&
+        commentText
+      ) {
+        await storage.addTaskComment({
+          taskId: task.id,
+          authorId: currentUser.id,
+          authorName: currentUser.name,
+          content: commentText,
+        });
+      }
+
+      const updated = await storage.updateTask(id, { status: targetStatus as any });
       if (!updated) {
         return res.status(404).json({ error: "Задача не найдена" });
       }
@@ -719,13 +1095,95 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get auction bids for a task
-  app.get("/api/tasks/:id/bids", async (req, res) => {
+  app.get("/api/tasks/:id/bids", requireAuth, async (req, res) => {
     try {
-      const { id} = req.params;
+      const { id } = req.params;
+      const task = await storage.getTask(id);
+      if (!task) {
+        return res.status(404).json({ error: "Задача не найдена" });
+      }
+
+      const currentUser = req.session.user!;
+      if (
+        currentUser.role !== "admin" &&
+        (!currentUser.departmentId || currentUser.departmentId !== task.departmentId)
+      ) {
+        return res.status(403).json({ error: "Недостаточно прав для просмотра ставок" });
+      }
+
       const bids = await storage.getTaskBids(id);
       res.json(bids);
     } catch (error) {
       res.status(500).json({ error: "Не удалось получить ставки" });
+    }
+  });
+
+  app.post("/api/tasks/:id/bids", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      let task = await storage.getTask(id);
+
+      if (!task) {
+        return res.status(404).json({ error: "Задача не найдена" });
+      }
+
+      const currentUser = req.session.user!;
+      if (
+        currentUser.role !== "admin" &&
+        (!currentUser.departmentId || currentUser.departmentId !== task.departmentId)
+      ) {
+        return res.status(403).json({ error: "Недостаточно прав для участия в аукционе" });
+      }
+
+      await finalizeExpiredAuctions(task.departmentId);
+      const refreshedTask = await storage.getTask(id);
+      if (!refreshedTask || refreshedTask.status !== "backlog" || refreshedTask.type !== "auction") {
+        return res.status(400).json({ error: "Аукцион уже завершён" });
+      }
+
+      task = refreshedTask;
+
+      const userGrade: Grade = (currentUser.grade as Grade) ?? getRoleGrade(currentUser.role);
+      const minimumGrade = task.minimumGrade as Grade;
+      if (!hasGradeAccess(userGrade, minimumGrade)) {
+        return res.status(403).json({ error: "Ваш грейд не допускает участие в этом аукционе" });
+      }
+
+      const parsed = placeBidSchema.parse(req.body);
+      const auctionPrice = calculateAuctionPrice(task);
+      if (auctionPrice === null) {
+        return res.status(400).json({ error: "Ставки недоступны для этой задачи" });
+      }
+
+      if (parsed.hours > auctionPrice) {
+        return res.status(400).json({ error: "Ставка должна быть не выше текущей цены" });
+      }
+
+      const existingBids = await storage.getTaskBids(id);
+      const currentBest = existingBids.reduce((best, bid) => {
+        const value = parseDecimal(bid.hours) ?? Number.POSITIVE_INFINITY;
+        return value < best ? value : best;
+      }, Number.POSITIVE_INFINITY);
+
+      if (currentBest !== Number.POSITIVE_INFINITY && parsed.hours > currentBest) {
+        return res.status(400).json({ error: "Есть более выгодная ставка" });
+      }
+
+      const bidRecord = await storage.createBid({
+        taskId: task.id,
+        bidderId: currentUser.id,
+        bidderName: currentUser.name,
+        bidderRating: (currentUser.rating as string | null) ?? "0",
+        hours: decimalToString(parsed.hours),
+      });
+
+      res.status(201).json(bidRecord);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors.map((e) => e.message).join(", ") });
+      }
+      console.error("Ошибка при создании ставки:", error);
+      res.status(500).json({ error: "Не удалось разместить ставку" });
     }
   });
 
@@ -827,12 +1285,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userData = insertUserSchema.parse(req.body);
       const passwordHash = await hashPassword(userData.password);
       
+      const role = userData.role || "employee";
+      const grade = getRoleGrade(role);
+
       const user = await storage.createUser(
         userData.username,
         passwordHash,
         userData.name,
         userData.email ?? null,
-        userData.role || "employee",
+        role,
+        grade,
         userData.departmentId || null,
         userData.managementId || null,
         userData.divisionId || null,
@@ -861,7 +1323,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           updates.email = null;
         }
       }
-      
+
+      if (typeof updates.role === "string") {
+        updates.grade = getRoleGrade(updates.role as any);
+      }
+
       const user = await storage.updateUser(id, updates);
       
       if (!user) {

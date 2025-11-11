@@ -1,6 +1,13 @@
 import { db } from "./db";
 import { departments, managements, divisions, users, tasks, auctionBids } from "@shared/schema";
 
+const roleGradeMap = {
+  director: "A",
+  manager: "B",
+  senior: "C",
+  employee: "D",
+} as const;
+
 async function seed() {
   console.log("🌱 Seeding database...");
 
@@ -129,6 +136,7 @@ async function seed() {
     ...employee,
     username: employee.email.split("@")[0],
     passwordHash: "seed-placeholder-hash",
+    grade: roleGradeMap[employee.role],
   }));
 
   await db.insert(users).values(usersData);
@@ -149,6 +157,7 @@ async function seed() {
       creatorName: "Елена Соколова",
       assigneeId: "emp-8",
       assigneeName: "Анна Козлова",
+      minimumGrade: "C" as const,
       deadline: new Date("2024-12-20"),
       estimatedHours: "24",
       actualHours: "12",
@@ -167,6 +176,7 @@ async function seed() {
       creatorName: "Мария Иванова",
       assigneeId: "emp-9",
       assigneeName: "Павел Орлов",
+      minimumGrade: "D" as const,
       deadline: new Date("2024-12-18"),
       estimatedHours: "16",
       actualHours: "15",
@@ -183,9 +193,14 @@ async function seed() {
       divisionId: div1[0].id,
       creatorId: "emp-1",
       creatorName: "Александр Петров",
+      minimumGrade: "C" as const,
       deadline: new Date("2024-12-25"),
       estimatedHours: "32",
       rating: "4.9",
+      auctionStartAt: new Date("2024-12-16T09:00:00Z"),
+      auctionEndAt: new Date("2024-12-17T09:00:00Z"),
+      auctionInitialPrice: "32.00",
+      auctionMaxPrice: "48.00",
     },
     {
       id: "task-4",
@@ -200,6 +215,7 @@ async function seed() {
       creatorName: "Игорь Васильев",
       assigneeId: "emp-11",
       assigneeName: "Михаил Лебедев",
+      minimumGrade: "C" as const,
       deadline: new Date("2024-12-22"),
       estimatedHours: "28",
       actualHours: "16",
@@ -216,8 +232,13 @@ async function seed() {
       divisionId: div2[0].id,
       creatorId: "emp-2",
       creatorName: "Мария Иванова",
+      minimumGrade: "C" as const,
       deadline: new Date("2024-12-30"),
       estimatedHours: "24",
+      auctionStartAt: new Date("2024-12-17T09:00:00Z"),
+      auctionEndAt: new Date("2024-12-18T09:00:00Z"),
+      auctionInitialPrice: "24.00",
+      auctionMaxPrice: "36.00",
     },
     {
       id: "task-6",
@@ -232,6 +253,7 @@ async function seed() {
       creatorName: "Игорь Васильев",
       assigneeId: "emp-12",
       assigneeName: "Наталья Егорова",
+      minimumGrade: "D" as const,
       deadline: new Date("2024-12-15"),
       estimatedHours: "20",
       actualHours: "18",
@@ -250,6 +272,7 @@ async function seed() {
       creatorName: "Ольга Новикова",
       assigneeId: "emp-14",
       assigneeName: "Екатерина Павлова",
+      minimumGrade: "C" as const,
       deadline: new Date("2024-12-21"),
       estimatedHours: "30",
       actualHours: "20",
@@ -268,6 +291,7 @@ async function seed() {
       creatorName: "Дмитрий Смирнов",
       assigneeId: "emp-15",
       assigneeName: "Андрей Федоров",
+      minimumGrade: "D" as const,
       deadline: new Date("2024-12-28"),
       estimatedHours: "16",
     },
@@ -284,6 +308,7 @@ async function seed() {
       creatorName: "Сергей Морозов",
       assigneeId: "emp-17",
       assigneeName: "Денис Семёнов",
+      minimumGrade: "C" as const,
       deadline: new Date("2024-12-19"),
       estimatedHours: "22",
       actualHours: "21",
@@ -300,8 +325,13 @@ async function seed() {
       divisionId: div4[0].id,
       creatorId: "emp-1",
       creatorName: "Александр Петров",
+      minimumGrade: "C" as const,
       deadline: new Date("2024-12-27"),
       estimatedHours: "26",
+      auctionStartAt: new Date("2024-12-18T09:00:00Z"),
+      auctionEndAt: new Date("2024-12-19T09:00:00Z"),
+      auctionInitialPrice: "26.00",
+      auctionMaxPrice: "39.00",
     },
   ];
 

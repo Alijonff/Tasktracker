@@ -1,11 +1,12 @@
 import { db } from "./db";
-import { 
-  departments, 
-  managements, 
-  divisions, 
-  tasks, 
+import {
+  departments,
+  managements,
+  divisions,
+  tasks,
   auctionBids,
   users,
+  taskComments,
   type Department,
   type Management,
   type Division,
@@ -16,7 +17,8 @@ import {
   type InsertBid,
   type InsertDepartment,
   type InsertManagement,
-  type InsertDivision
+  type InsertDivision,
+  type Grade,
 } from "@shared/schema";
 import { eq, and, or, like, desc, inArray, gte, isNull, sql } from "drizzle-orm";
 
@@ -28,6 +30,7 @@ export interface IStorage {
     name: string,
     email: string | null,
     role: "admin" | "director" | "manager" | "senior" | "employee",
+    grade: Grade,
     departmentId?: string | null,
     managementId?: string | null,
     divisionId?: string | null,
@@ -42,6 +45,7 @@ export interface IStorage {
       name?: string;
       email?: string | null;
       role?: "admin" | "director" | "manager" | "senior" | "employee";
+      grade?: Grade;
       departmentId?: string | null;
       managementId?: string | null;
       divisionId?: string | null;
@@ -93,6 +97,13 @@ export interface IStorage {
   getTaskBids(taskId: string): Promise<AuctionBid[]>;
   createBid(bid: InsertBid): Promise<AuctionBid>;
 
+  addTaskComment(comment: {
+    taskId: string;
+    authorId: string;
+    authorName: string;
+    content: string;
+  }): Promise<void>;
+
   getDashboardMetrics(filters: { departmentId?: string | null }): Promise<{
     completedTasks: { value: number; hasData: boolean };
     totalHours: { value: number; hasData: boolean };
@@ -115,6 +126,7 @@ export class DbStorage implements IStorage {
     name: string,
     email: string | null,
     role: "admin" | "director" | "manager" | "senior" | "employee",
+    grade: Grade,
     departmentId?: string | null,
     managementId?: string | null,
     divisionId?: string | null,
@@ -126,6 +138,7 @@ export class DbStorage implements IStorage {
       name,
       email: email ?? null,
       role,
+      grade,
       departmentId: departmentId || null,
       managementId: managementId || null,
       divisionId: divisionId || null,
@@ -163,6 +176,7 @@ export class DbStorage implements IStorage {
       name?: string;
       email?: string | null;
       role?: "admin" | "director" | "manager" | "senior" | "employee";
+      grade?: Grade;
       departmentId?: string | null;
       managementId?: string | null;
       divisionId?: string | null;
@@ -374,6 +388,20 @@ export class DbStorage implements IStorage {
   async createBid(bidData: InsertBid): Promise<AuctionBid> {
     const [bid] = await db.insert(auctionBids).values(bidData as any).returning();
     return bid;
+  }
+
+  async addTaskComment(comment: {
+    taskId: string;
+    authorId: string;
+    authorName: string;
+    content: string;
+  }): Promise<void> {
+    await db.insert(taskComments).values({
+      taskId: comment.taskId,
+      authorId: comment.authorId,
+      authorName: comment.authorName,
+      content: comment.content,
+    });
   }
 
   async getDashboardMetrics(filters: { departmentId?: string | null }) {
