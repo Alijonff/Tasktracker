@@ -21,7 +21,7 @@ interface PositionCellProps {
   canEdit?: boolean;
 }
 
-const positionLabels: Record<PositionType, string> = {
+export const positionLabels: Record<PositionType, string> = {
   director: "Директор",
   deputy: "Заместитель",
   management_head: "Руководитель",

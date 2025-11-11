@@ -2,6 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { authenticateUser, hashPassword, verifyPassword } from "./auth";
+import { z } from "zod";
 import { 
   loginSchema, 
   insertUserSchema, 
@@ -33,6 +34,119 @@ function canModifyDepartment(user: any, departmentId: string): boolean {
   if (user.role === "director" && user.departmentId === departmentId) return true;
   return false;
 }
+
+const positionTypeSchema = z.enum([
+  "director",
+  "deputy",
+  "management_head",
+  "division_head",
+  "senior",
+  "employee",
+]);
+
+type PositionType = z.infer<typeof positionTypeSchema>;
+
+const positionRoleMap: Record<PositionType, "director" | "manager" | "senior" | "employee"> = {
+  director: "director",
+  deputy: "manager",
+  management_head: "manager",
+  division_head: "manager",
+  senior: "senior",
+  employee: "employee",
+};
+
+class PositionAssignmentError extends Error {}
+
+async function resolveEmployeeAssignment(
+  positionType: PositionType,
+  data: { departmentId?: string | null; managementId?: string | null; divisionId?: string | null }
+) {
+  switch (positionType) {
+    case "director":
+    case "deputy": {
+      const departmentId = data.departmentId;
+      if (!departmentId) {
+        throw new PositionAssignmentError("Укажите департамент для этой должности");
+      }
+      const department = await storage.getDepartment(departmentId);
+      if (!department) {
+        throw new PositionAssignmentError("Департамент не найден");
+      }
+      return {
+        departmentId: department.id,
+        managementId: null,
+        divisionId: null,
+        role: positionRoleMap[positionType],
+      } as const;
+    }
+    case "management_head": {
+      const managementId = data.managementId;
+      if (!managementId) {
+        throw new PositionAssignmentError("Укажите управление для этой должности");
+      }
+      const management = await storage.getManagement(managementId);
+      if (!management) {
+        throw new PositionAssignmentError("Управление не найдено");
+      }
+      if (data.departmentId && data.departmentId !== management.departmentId) {
+        throw new PositionAssignmentError("Управление относится к другому департаменту");
+      }
+      return {
+        departmentId: management.departmentId,
+        managementId: management.id,
+        divisionId: null,
+        role: positionRoleMap[positionType],
+      } as const;
+    }
+    case "division_head":
+    case "senior":
+    case "employee": {
+      const divisionId = data.divisionId;
+      if (!divisionId) {
+        throw new PositionAssignmentError("Укажите отдел для этой должности");
+      }
+      const division = await storage.getDivision(divisionId);
+      if (!division) {
+        throw new PositionAssignmentError("Отдел не найден");
+      }
+      if (data.departmentId && data.departmentId !== division.departmentId) {
+        throw new PositionAssignmentError("Отдел относится к другому департаменту");
+      }
+      if (data.managementId && data.managementId !== division.managementId) {
+        throw new PositionAssignmentError("Отдел относится к другому управлению");
+      }
+      return {
+        departmentId: division.departmentId,
+        managementId: division.managementId,
+        divisionId: division.id,
+        role: positionRoleMap[positionType],
+      } as const;
+    }
+    default: {
+      throw new PositionAssignmentError("Неизвестный тип должности");
+    }
+  }
+}
+
+const createEmployeeSchema = z.object({
+  username: z.string().min(1, "Введите имя пользователя"),
+  password: z.string().min(6, "Пароль должен содержать минимум 6 символов"),
+  name: z.string().min(1, "Введите имя"),
+  email: z.string().email("Введите корректный email"),
+  departmentId: z.string().min(1, "Выберите департамент"),
+  managementId: z.string().nullable().optional(),
+  divisionId: z.string().nullable().optional(),
+  positionType: positionTypeSchema,
+});
+
+const updateEmployeeSchema = z.object({
+  name: z.string().min(1, "Введите имя").optional(),
+  email: z.string().email("Введите корректный email").optional(),
+  positionType: positionTypeSchema.optional(),
+  departmentId: z.string().optional(),
+  managementId: z.string().nullable().optional(),
+  divisionId: z.string().nullable().optional(),
+});
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Get all departments
@@ -204,15 +318,203 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { divisionId, managementId, departmentId } = req.query;
       const filters: { divisionId?: string; managementId?: string; departmentId?: string } = {};
-      
+
       if (divisionId) filters.divisionId = divisionId as string;
       if (managementId) filters.managementId = managementId as string;
       if (departmentId) filters.departmentId = departmentId as string;
-      
+
       const allUsers = await storage.getAllUsers(Object.keys(filters).length > 0 ? filters : undefined);
-      res.json(allUsers);
+      const safeUsers = allUsers.map(({ passwordHash, ...user }) => user);
+      res.json(safeUsers);
     } catch (error) {
       res.status(500).json({ error: "Не удалось получить список сотрудников" });
+    }
+  });
+
+  app.post("/api/employees", requireAuth, async (req, res) => {
+    try {
+      const parsed = createEmployeeSchema.parse(req.body);
+      const assignment = await resolveEmployeeAssignment(parsed.positionType, {
+        departmentId: parsed.departmentId,
+        managementId: parsed.managementId ?? null,
+        divisionId: parsed.divisionId ?? null,
+      });
+
+      if (!canModifyDepartment(req.session.user, assignment.departmentId)) {
+        return res.status(403).json({ error: "Недостаточно прав для добавления сотрудника" });
+      }
+
+      const uniquePositions: PositionType[] = ["director", "deputy", "management_head", "division_head"];
+      if (uniquePositions.includes(parsed.positionType)) {
+        const employees = await storage.getAllUsers({ departmentId: assignment.departmentId });
+        const isTaken = employees.some((emp) => {
+          if (parsed.positionType === "director") {
+            return emp.role === "director" && !emp.managementId && !emp.divisionId;
+          }
+          if (parsed.positionType === "deputy") {
+            return emp.role === "manager" && !emp.managementId && !emp.divisionId;
+          }
+          if (parsed.positionType === "management_head") {
+            return emp.role === "manager" && emp.managementId === assignment.managementId && !emp.divisionId;
+          }
+          if (parsed.positionType === "division_head") {
+            return emp.role === "manager" && emp.divisionId === assignment.divisionId;
+          }
+          return false;
+        });
+
+        if (isTaken) {
+          return res.status(400).json({ error: "Эта должность уже занята" });
+        }
+      }
+
+      const passwordHash = await hashPassword(parsed.password);
+      const user = await storage.createUser(
+        parsed.username,
+        passwordHash,
+        parsed.name,
+        parsed.email,
+        assignment.role,
+        assignment.departmentId,
+        assignment.managementId,
+        assignment.divisionId,
+        true
+      );
+
+      const { passwordHash: _, ...userWithoutPassword } = user;
+      res.status(201).json(userWithoutPassword);
+    } catch (error: any) {
+      if (error instanceof PositionAssignmentError) {
+        return res.status(400).json({ error: error.message });
+      }
+      if (error?.code === "23505") {
+        return res.status(400).json({ error: "Имя пользователя или email уже используется" });
+      }
+      res.status(400).json({ error: "Не удалось создать сотрудника" });
+    }
+  });
+
+  app.patch("/api/employees/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const parsed = updateEmployeeSchema.parse(req.body);
+      const employee = await storage.getUserById(id);
+
+      if (!employee) {
+        return res.status(404).json({ error: "Сотрудник не найден" });
+      }
+
+      if (employee.role === "admin") {
+        return res.status(400).json({ error: "Нельзя изменять данные администратора" });
+      }
+
+      if (employee.departmentId && !canModifyDepartment(req.session.user, employee.departmentId)) {
+        return res.status(403).json({ error: "Недостаточно прав для изменения сотрудника" });
+      }
+
+      const updates: {
+        name?: string;
+        email?: string;
+        role?: "admin" | "director" | "manager" | "senior" | "employee";
+        departmentId?: string | null;
+        managementId?: string | null;
+        divisionId?: string | null;
+      } = {};
+
+      if (parsed.name !== undefined) updates.name = parsed.name;
+      if (parsed.email !== undefined) updates.email = parsed.email;
+
+      if (parsed.positionType) {
+        const assignment = await resolveEmployeeAssignment(parsed.positionType, {
+          departmentId: parsed.departmentId ?? employee.departmentId,
+          managementId: parsed.managementId ?? employee.managementId,
+          divisionId: parsed.divisionId ?? employee.divisionId,
+        });
+
+        if (!canModifyDepartment(req.session.user, assignment.departmentId)) {
+          return res.status(403).json({ error: "Недостаточно прав для изменения сотрудника" });
+        }
+
+        const uniquePositions: PositionType[] = ["director", "deputy", "management_head", "division_head"];
+        if (uniquePositions.includes(parsed.positionType)) {
+          const employees = await storage.getAllUsers({ departmentId: assignment.departmentId });
+          const isTaken = employees.some((emp) => {
+            if (emp.id === id) return false;
+            if (parsed.positionType === "director") {
+              return emp.role === "director" && !emp.managementId && !emp.divisionId;
+            }
+            if (parsed.positionType === "deputy") {
+              return emp.role === "manager" && !emp.managementId && !emp.divisionId;
+            }
+            if (parsed.positionType === "management_head") {
+              return emp.role === "manager" && emp.managementId === assignment.managementId && !emp.divisionId;
+            }
+            if (parsed.positionType === "division_head") {
+              return emp.role === "manager" && emp.divisionId === assignment.divisionId;
+            }
+            return false;
+          });
+
+          if (isTaken) {
+            return res.status(400).json({ error: "Эта должность уже занята" });
+          }
+        }
+
+        updates.role = assignment.role;
+        updates.departmentId = assignment.departmentId;
+        updates.managementId = assignment.managementId;
+        updates.divisionId = assignment.divisionId;
+      } else {
+        if (parsed.departmentId !== undefined) {
+          if (!canModifyDepartment(req.session.user, parsed.departmentId)) {
+            return res.status(403).json({ error: "Недостаточно прав для изменения сотрудника" });
+          }
+          updates.departmentId = parsed.departmentId;
+        }
+        if (parsed.managementId !== undefined) updates.managementId = parsed.managementId;
+        if (parsed.divisionId !== undefined) updates.divisionId = parsed.divisionId;
+      }
+
+      if (Object.keys(updates).length === 0) {
+        return res.status(400).json({ error: "Нет данных для обновления" });
+      }
+
+      const updated = await storage.updateUser(id, updates);
+      if (!updated) {
+        return res.status(404).json({ error: "Сотрудник не найден" });
+      }
+
+      const { passwordHash: _, ...userWithoutPassword } = updated;
+      res.json(userWithoutPassword);
+    } catch (error) {
+      if (error instanceof PositionAssignmentError) {
+        return res.status(400).json({ error: error.message });
+      }
+      res.status(400).json({ error: "Не удалось обновить сотрудника" });
+    }
+  });
+
+  app.delete("/api/employees/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const employee = await storage.getUserById(id);
+
+      if (!employee) {
+        return res.status(404).json({ error: "Сотрудник не найден" });
+      }
+
+      if (employee.role === "admin") {
+        return res.status(400).json({ error: "Нельзя удалить администратора" });
+      }
+
+      if (employee.departmentId && !canModifyDepartment(req.session.user, employee.departmentId)) {
+        return res.status(403).json({ error: "Недостаточно прав для удаления сотрудника" });
+      }
+
+      await storage.deleteUser(id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Не удалось удалить сотрудника" });
     }
   });
 

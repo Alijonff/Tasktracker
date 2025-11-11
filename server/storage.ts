@@ -49,6 +49,7 @@ export interface IStorage {
       mustChangePassword?: boolean;
     }
   ): Promise<User | undefined>;
+  deleteUser(id: string): Promise<void>;
 
   // Departments
   getAllDepartments(): Promise<Department[]>;
@@ -155,6 +156,10 @@ export class DbStorage implements IStorage {
       .where(eq(users.id, id))
       .returning();
     return user;
+  }
+
+  async deleteUser(id: string): Promise<void> {
+    await db.delete(users).where(eq(users.id, id));
   }
 
   // Departments
