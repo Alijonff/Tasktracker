@@ -875,6 +875,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Point Transactions endpoints
+  app.post("/api/tasks/:id/assign-points", requireAuth, async (req, res) => {
+    try {
+      const { id: taskId } = req.params;
+      const { points, comment } = req.body;
+      const user = req.session.user!;
+
+      // Validation
+      if (!points || typeof points !== "number" || points <= 0 || !Number.isFinite(points)) {
+        return res.status(400).json({ error: "Баллы должны быть положительным числом" });
+      }
+
+      if (user.role !== "director" && user.role !== "admin") {
+        return res.status(403).json({ error: "Только директор может назначать баллы" });
+      }
+
+      const task = await storage.getTask(taskId);
+      if (!task) {
+        return res.status(404).json({ error: "Задача не найдена" });
+      }
+
+      if (!task.assigneeId) {
+        return res.status(400).json({ error: "Задача не назначена исполнителю" });
+      }
+
+      if (task.status !== "completed") {
+        return res.status(400).json({ error: "Баллы можно назначить только за выполненную задачу" });
+      }
+
+      if (task.assignedPoints !== null && task.assignedPoints !== undefined) {
+        return res.status(400).json({ error: "Баллы уже назначены за эту задачу" });
+      }
+
+      if (user.role === "director" && task.departmentId !== user.departmentId) {
+        return res.status(403).json({ error: "Нет доступа к этой задаче" });
+      }
+
+      const assignee = await storage.getUserById(task.assigneeId);
+      if (!assignee) {
+        return res.status(404).json({ error: "Исполнитель не найден" });
+      }
+
+      // Assign points atomically (DB transaction)
+      await storage.assignPointsForTask(taskId, points, comment || null);
+
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Не удалось назначить баллы" });
+    }
+  });
+
+  app.get("/api/users/:id/point-history", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const user = req.session.user!;
+
+      // Authorization: only self, admin, or director of same department
+      if (user.id !== id && user.role !== "admin") {
+        if (user.role === "director") {
+          const targetUser = await storage.getUserById(id);
+          if (!targetUser || targetUser.departmentId !== user.departmentId) {
+            return res.status(403).json({ error: "Нет доступа к истории баллов этого пользователя" });
+          }
+        } else {
+          return res.status(403).json({ error: "Нет доступа к истории баллов этого пользователя" });
+        }
+      }
+
+      const history = await storage.getUserPointHistory(id);
+      res.json(history);
+    } catch (error) {
+      res.status(500).json({ error: "Не удалось получить историю баллов" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;

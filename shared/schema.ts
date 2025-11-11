@@ -15,6 +15,12 @@ export const positionTypeEnum = pgEnum("position_type", [
   "division_senior",
   "division_employee"
 ]);
+export const gradeEnum = pgEnum("grade", ["D", "C", "B", "A"]);
+export const pointTransactionTypeEnum = pgEnum("point_transaction_type", [
+  "task_completion",
+  "overdue_penalty",
+  "position_assigned"
+]);
 
 // Organization structure tables
 export const departments = pgTable("departments", {
@@ -61,6 +67,7 @@ export const users = pgTable("users", {
   managementId: varchar("management_id").references(() => managements.id, { onDelete: "set null" }),
   departmentId: varchar("department_id").references(() => departments.id, { onDelete: "set null" }),
   rating: decimal("rating", { precision: 3, scale: 2 }).default("0"),
+  points: integer("points").notNull().default(35),
   completedTasks: integer("completed_tasks").default(0),
   totalHours: decimal("total_hours", { precision: 10, scale: 2 }).default("0"),
   mustChangePassword: boolean("must_change_password").notNull().default(false),
@@ -84,6 +91,8 @@ export const tasks = pgTable("tasks", {
   estimatedHours: decimal("estimated_hours", { precision: 6, scale: 2 }).notNull(),
   actualHours: decimal("actual_hours", { precision: 6, scale: 2 }),
   rating: decimal("rating", { precision: 3, scale: 2 }),
+  requiredGrade: gradeEnum("required_grade"),
+  assignedPoints: integer("assigned_points"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -118,6 +127,18 @@ export const timeLogs = pgTable("time_logs", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const pointTransactions = pgTable("point_transactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  userName: text("user_name").notNull(),
+  amount: integer("amount").notNull(),
+  type: pointTransactionTypeEnum("type").notNull(),
+  taskId: varchar("task_id").references(() => tasks.id, { onDelete: "set null" }),
+  taskTitle: text("task_title"),
+  comment: text("comment"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // TypeScript types from tables
 export type Department = typeof departments.$inferSelect;
 export type Management = typeof managements.$inferSelect;
@@ -127,6 +148,7 @@ export type Task = typeof tasks.$inferSelect;
 export type AuctionBid = typeof auctionBids.$inferSelect;
 export type TaskComment = typeof taskComments.$inferSelect;
 export type TimeLog = typeof timeLogs.$inferSelect;
+export type PointTransaction = typeof pointTransactions.$inferSelect;
 
 // Aliases for consistency
 export type SelectUser = User;
@@ -172,12 +194,18 @@ export const insertTimeLogSchema = createInsertSchema(timeLogs).omit({
   date: z.string().transform((val) => new Date(val)),
 });
 
+export const insertPointTransactionSchema = createInsertSchema(pointTransactions).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
   passwordHash: true,
   createdAt: true,
   mustChangePassword: true,
   rating: true,
+  points: true,
   completedTasks: true,
   totalHours: true,
 }).extend({

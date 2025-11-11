@@ -6,12 +6,14 @@ import {
   tasks, 
   auctionBids,
   users,
+  pointTransactions,
   type Department,
   type Management,
   type Division,
   type Task,
   type AuctionBid,
   type User,
+  type PointTransaction,
   type InsertTask,
   type InsertBid,
   type InsertDepartment,
@@ -105,6 +107,20 @@ export interface IStorage {
     limit: number;
     recentDays: number;
   }): Promise<Task[]>;
+
+  // Point Transactions
+  createPointTransaction(data: {
+    userId: string;
+    userName: string;
+    amount: number;
+    type: "task_completion" | "overdue_penalty" | "position_assigned";
+    taskId?: string | null;
+    taskTitle?: string | null;
+    comment?: string | null;
+  }): Promise<PointTransaction>;
+  getUserPointHistory(userId: string): Promise<PointTransaction[]>;
+  updateUserPoints(userId: string, newPoints: number): Promise<User | undefined>;
+  assignPointsForTask(taskId: string, points: number, comment?: string | null): Promise<void>;
 }
 
 export class DbStorage implements IStorage {
@@ -477,6 +493,115 @@ export class DbStorage implements IStorage {
       .where(and(...conditions))
       .orderBy(desc(tasks.updatedAt))
       .limit(filters.limit);
+  }
+
+  // Point Transactions
+  async createPointTransaction(data: {
+    userId: string;
+    userName: string;
+    amount: number;
+    type: "task_completion" | "overdue_penalty" | "position_assigned";
+    taskId?: string | null;
+    taskTitle?: string | null;
+    comment?: string | null;
+  }): Promise<PointTransaction> {
+    return await db.transaction(async (tx) => {
+      const [transaction] = await tx
+        .insert(pointTransactions)
+        .values({
+          userId: data.userId,
+          userName: data.userName,
+          amount: data.amount,
+          type: data.type,
+          taskId: data.taskId ?? null,
+          taskTitle: data.taskTitle ?? null,
+          comment: data.comment ?? null,
+        })
+        .returning();
+      
+      // Update user's points within the same transaction
+      const [user] = await tx
+        .select()
+        .from(users)
+        .where(eq(users.id, data.userId));
+      
+      if (user) {
+        const newPoints = Number(user.points) + data.amount;
+        await tx
+          .update(users)
+          .set({ points: newPoints })
+          .where(eq(users.id, data.userId));
+      }
+      
+      return transaction;
+    });
+  }
+
+  async getUserPointHistory(userId: string): Promise<PointTransaction[]> {
+    return await db
+      .select()
+      .from(pointTransactions)
+      .where(eq(pointTransactions.userId, userId))
+      .orderBy(desc(pointTransactions.createdAt));
+  }
+
+  async updateUserPoints(userId: string, newPoints: number): Promise<User | undefined> {
+    const [updated] = await db
+      .update(users)
+      .set({ points: newPoints })
+      .where(eq(users.id, userId))
+      .returning();
+    return updated;
+  }
+
+  async assignPointsForTask(taskId: string, points: number, comment?: string | null): Promise<void> {
+    await db.transaction(async (tx) => {
+      // Update task
+      await tx
+        .update(tasks)
+        .set({ assignedPoints: points })
+        .where(eq(tasks.id, taskId));
+      
+      // Get task details
+      const [task] = await tx
+        .select()
+        .from(tasks)
+        .where(eq(tasks.id, taskId));
+      
+      if (!task || !task.assigneeId) {
+        throw new Error("Task not found or has no assignee");
+      }
+      
+      // Get assignee
+      const [assignee] = await tx
+        .select()
+        .from(users)
+        .where(eq(users.id, task.assigneeId));
+      
+      if (!assignee) {
+        throw new Error("Assignee not found");
+      }
+      
+      // Create point transaction
+      await tx
+        .insert(pointTransactions)
+        .values({
+          userId: assignee.id,
+          userName: assignee.name,
+          amount: points,
+          type: "task_completion" as const,
+          taskId: task.id,
+          taskTitle: task.title,
+          comment: comment ?? null,
+        });
+      
+      // Update user points
+      const newPoints = Number(assignee.points) + points;
+      await tx
+        .update(users)
+        .set({ points: newPoints })
+        .where(eq(users.id, assignee.id));
+    });
   }
 }
 
