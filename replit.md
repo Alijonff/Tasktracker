@@ -81,6 +81,16 @@ Preferred communication style: Simple, everyday language.
   - No API changes required - backward compatible design
   - Future enhancement: API can return assigneePoints for task lists (Dashboard, Auctions)
   - showPoints prop added to TaskCard's GradeBadge for consistent display
+  - Fixed missing /admin route in App.tsx (was causing 404 errors)
+- **Grade & Points System Complete:**
+  - All 12 tasks completed and architect-reviewed
+  - Starting points: director(95→A), deputy/management_head(80→B), division_head(65→B), senior(50→C), employee(35→D)
+  - Grade calculation: D(<45), C(45-64), B(65-84), A(≥85)
+  - Overdue penalties: -2 points per business day (skips weekends), fires once per task
+  - Point history page with pagination
+  - GradeBadge displays throughout: AdminPanel, OrganizationTree, PositionCell, TaskCard
+  - Individual components E2E tested (position assignment, point history, overdue penalties)
+  - Production-ready implementation with proper error handling and security
 
 ## System Architecture
 
