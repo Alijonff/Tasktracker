@@ -1,55 +1,80 @@
-import { useState } from "react";
-import TaskCard from "@/components/TaskCard";
-import TaskFilters from "@/components/TaskFilters";
+import { useMemo, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import TaskDetailDialog from "@/components/TaskDetailDialog";
 import TimeLogDialog from "@/components/TimeLogDialog";
 import { Button } from "@/components/ui/button";
 import { Clock } from "lucide-react";
+import KanbanBoard, { type KanbanTask, type KanbanStatus } from "@/components/KanbanBoard";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import type { Task } from "@shared/schema";
+import { useToast } from "@/hooks/use-toast";
 
 export default function MyTasks() {
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [timeLogOpen, setTimeLogOpen] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const { toast } = useToast();
 
-  const mockTasks = [
-    {
-      id: "1",
-      title: "Implement user authentication",
-      description: "Set up JWT-based authentication with role-based access control for all user types",
-      status: "inProgress" as const,
-      type: "individual" as const,
-      creator: "Sarah Johnson",
-      assignee: "Mike Chen",
-      deadline: "Dec 15, 2024",
-      estimatedHours: 24,
-      actualHours: 12,
-      rating: 4.7,
+  const { data: tasks = [], isLoading } = useQuery<Task[]>({
+    queryKey: ["/api/my-tasks"],
+  });
+
+  const statusMap: Record<Task["status"], KanbanStatus> = {
+    backlog: "backlog",
+    inProgress: "inProgress",
+    underReview: "underReview",
+    completed: "completed",
+    overdue: "inProgress",
+  };
+
+  const formatDate = (value: string | Date) => {
+    const date = typeof value === "string" ? new Date(value) : value;
+    return date.toLocaleDateString("ru-RU", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  };
+
+  const boardTasks = useMemo<KanbanTask[]>(() =>
+    tasks.map((task) => ({
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      status: statusMap[task.status],
+      type: task.type,
+      creatorName: task.creatorName,
+      assigneeName: task.assigneeName ?? undefined,
+      deadline: formatDate(task.deadline),
+      estimatedHours: Number(task.estimatedHours),
+      actualHours: task.actualHours ? Number(task.actualHours) : undefined,
+      rating: task.rating ? Number(task.rating) : undefined,
+    })),
+  [tasks]);
+
+  const statusMutation = useMutation({
+    mutationFn: async ({ taskId, status }: { taskId: string; status: KanbanStatus }) => {
+      await apiRequest("PATCH", `/api/tasks/${taskId}/status`, { status });
     },
-    {
-      id: "2",
-      title: "Database schema design",
-      description: "Design database schema for task management system with proper relationships",
-      status: "underReview" as const,
-      type: "individual" as const,
-      creator: "David Park",
-      assignee: "Mike Chen",
-      deadline: "Dec 18, 2024",
-      estimatedHours: 16,
-      actualHours: 16,
-      rating: 4.8,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/my-tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/overview"] });
     },
-    {
-      id: "3",
-      title: "API endpoint implementation",
-      description: "Create REST API endpoints for task CRUD operations",
-      status: "backlog" as const,
-      type: "individual" as const,
-      creator: "Emma Wilson",
-      assignee: "Mike Chen",
-      deadline: "Dec 22, 2024",
-      estimatedHours: 20,
-      rating: 4.6,
+    onError: (error: any) => {
+      toast({
+        title: "Не удалось обновить статус",
+        description: error?.message ? String(error.message) : "Попробуйте снова позже",
+        variant: "destructive",
+      });
     },
-  ];
+  });
+
+  const handleTaskClick = (taskId: string) => {
+    setSelectedTaskId(taskId);
+    setDetailDialogOpen(true);
+  };
+
+  const selectedTask = selectedTaskId ? tasks.find((task) => task.id === selectedTaskId) : undefined;
 
   return (
     <div className="space-y-6">
@@ -64,32 +89,35 @@ export default function MyTasks() {
         </Button>
       </div>
 
-      <TaskFilters onFilterChange={(filters) => console.log("Filters:", filters)} />
+      <KanbanBoard
+        tasks={boardTasks}
+        isLoading={isLoading}
+        onTaskClick={handleTaskClick}
+        onStatusChange={(taskId, status) => statusMutation.mutate({ taskId, status })}
+      />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {mockTasks.map((task) => (
-          <TaskCard
-            key={task.id}
-            {...task}
-            onCardClick={() => setDetailDialogOpen(true)}
-          />
-        ))}
-      </div>
-
-      <TaskDetailDialog 
-        open={detailDialogOpen} 
-        onOpenChange={setDetailDialogOpen}
-        task={mockTasks[0] && {
-          ...mockTasks[0],
-          comments: [
-            {
-              id: "1",
-              author: "Sarah Johnson",
-              content: "Please make sure to implement proper password hashing.",
-              timestamp: "2 hours ago",
-            },
-          ],
+      <TaskDetailDialog
+        open={detailDialogOpen}
+        onOpenChange={(open) => {
+          setDetailDialogOpen(open);
+          if (!open) {
+            setSelectedTaskId(null);
+          }
         }}
+        task={selectedTask ? {
+          id: selectedTask.id,
+          title: selectedTask.title,
+          description: selectedTask.description,
+          status: selectedTask.status,
+          type: selectedTask.type,
+          creator: selectedTask.creatorName,
+          assignee: selectedTask.assigneeName ?? undefined,
+          deadline: formatDate(selectedTask.deadline),
+          estimatedHours: Number(selectedTask.estimatedHours),
+          actualHours: selectedTask.actualHours ? Number(selectedTask.actualHours) : undefined,
+          rating: selectedTask.rating ? Number(selectedTask.rating) : undefined,
+          comments: [],
+        } : undefined}
       />
 
       <TimeLogDialog open={timeLogOpen} onOpenChange={setTimeLogOpen} />

@@ -1,57 +1,82 @@
-import { CheckCircle2, Clock, Users, TrendingUp, Plus } from "lucide-react";
-import { useState } from "react";
+import { CheckCircle2, Clock, TrendingUp, Plus, ListTodo } from "lucide-react";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import StatsCard from "@/components/StatsCard";
 import TaskCard from "@/components/TaskCard";
 import { Button } from "@/components/ui/button";
 import CreateTaskDialog from "@/components/CreateTaskDialog";
 import TaskDetailDialog from "@/components/TaskDetailDialog";
+import type { Task } from "@shared/schema";
+
+interface DashboardMetricsBlock {
+  value: number;
+  hasData: boolean;
+}
+
+interface DashboardOverviewResponse {
+  metrics: {
+    completedTasks: DashboardMetricsBlock;
+    totalHours: DashboardMetricsBlock;
+    activeAuctions: DashboardMetricsBlock;
+    backlogTasks: DashboardMetricsBlock;
+  };
+  highlightTasks: Task[];
+}
+
+function formatDate(input: Date | string) {
+  const date = typeof input === "string" ? new Date(input) : input;
+  return date.toLocaleDateString("ru-RU", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
 
 export default function Dashboard() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
-  const mockRecentTasks = [
-    {
-      id: "1",
-      title: "Implement user authentication",
-      description: "Set up JWT-based authentication with role-based access control",
-      status: "inProgress" as const,
-      type: "individual" as const,
-      creator: "Sarah Johnson",
-      assignee: "Mike Chen",
-      deadline: "Dec 15, 2024",
-      estimatedHours: 24,
-      actualHours: 12,
-      rating: 4.7,
-    },
-    {
-      id: "2",
-      title: "Design analytics dashboard",
-      description: "Create comprehensive analytics dashboard with charts and metrics",
-      status: "backlog" as const,
-      type: "auction" as const,
-      creator: "Alex Rivera",
-      deadline: "Dec 20, 2024",
-      estimatedHours: 40,
-      rating: 4.5,
-      bidCount: 5,
-      minBid: 32,
-      timeRemaining: "2h 15m",
-    },
-    {
-      id: "3",
-      title: "Database optimization",
-      description: "Optimize database queries and add proper indexing",
-      status: "underReview" as const,
-      type: "individual" as const,
-      creator: "David Park",
-      assignee: "Emma Wilson",
-      deadline: "Dec 18, 2024",
-      estimatedHours: 16,
-      actualHours: 14,
-      rating: 4.9,
-    },
-  ];
+  const { data, isLoading } = useQuery<DashboardOverviewResponse>({
+    queryKey: ["/api/dashboard/overview"],
+  });
+
+  const highlightTasks = data?.highlightTasks ?? [];
+
+  const hasTasksToShow = highlightTasks.length > 0;
+
+  const dashboardCards = useMemo(() => {
+    const metrics = data?.metrics;
+    return [
+      {
+        title: "Выполненные задачи",
+        icon: CheckCircle2,
+        metric: metrics?.completedTasks,
+        subtitle: "В этом месяце",
+      },
+      {
+        title: "Всего часов",
+        icon: Clock,
+        metric: metrics?.totalHours,
+        subtitle: "В этом месяце",
+      },
+      {
+        title: "Активные аукционы",
+        icon: TrendingUp,
+        metric: metrics?.activeAuctions,
+      },
+      {
+        title: "Задачи в бэклоге",
+        icon: ListTodo,
+        metric: metrics?.backlogTasks,
+      },
+    ];
+  }, [data]);
+
+  const handleTaskClick = (task: Task) => {
+    setSelectedTask(task);
+    setDetailDialogOpen(true);
+  };
 
   return (
     <div className="space-y-6">
@@ -67,61 +92,71 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatsCard
-          title="Выполненные задачи"
-          value={127}
-          icon={CheckCircle2}
-          trend={{ value: 12, isPositive: true }}
-        />
-        <StatsCard
-          title="Всего часов"
-          value="1,248"
-          icon={Clock}
-          subtitle="В этом месяце"
-          trend={{ value: 8, isPositive: true }}
-        />
-        <StatsCard
-          title="Активные аукционы"
-          value={15}
-          icon={TrendingUp}
-        />
-        <StatsCard
-          title="Сотрудники"
-          value={42}
-          icon={Users}
-          trend={{ value: 5, isPositive: true }}
-        />
+        {dashboardCards.map(({ title, icon, metric, subtitle }) => (
+          <StatsCard
+            key={title}
+            title={title}
+            icon={icon}
+            value={metric ? metric.value : 0}
+            subtitle={subtitle}
+            isEmpty={!metric?.hasData}
+          />
+        ))}
       </div>
 
-      <div>
-        <h2 className="text-2xl font-bold mb-4">Последние задачи</h2>
+      {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {mockRecentTasks.map((task) => (
-            <TaskCard
-              key={task.id}
-              {...task}
-              onCardClick={() => setDetailDialogOpen(true)}
-              onBidClick={() => console.log("Place bid")}
-            />
+          {Array.from({ length: 3 }).map((_, index) => (
+            <div key={index} className="h-48 rounded-lg bg-muted animate-pulse" />
           ))}
         </div>
-      </div>
+      ) : hasTasksToShow ? (
+        <div>
+          <h2 className="text-2xl font-bold mb-4">Активные и обновлённые задачи</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {highlightTasks.map((task) => (
+              <TaskCard
+                key={task.id}
+                id={task.id}
+                title={task.title}
+                description={task.description}
+                status={task.status}
+                type={task.type}
+                creator={task.creatorName}
+                assignee={task.assigneeName ?? undefined}
+                deadline={formatDate(task.deadline)}
+                estimatedHours={Number(task.estimatedHours)}
+                actualHours={task.actualHours ? Number(task.actualHours) : undefined}
+                rating={task.rating ? Number(task.rating) : undefined}
+                onCardClick={() => handleTaskClick(task)}
+              />
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
+          Нет активных задач для отображения
+        </div>
+      )}
 
       <CreateTaskDialog open={createDialogOpen} onOpenChange={setCreateDialogOpen} />
-      <TaskDetailDialog 
-        open={detailDialogOpen} 
+      <TaskDetailDialog
+        open={detailDialogOpen}
         onOpenChange={setDetailDialogOpen}
-        task={mockRecentTasks[0] && {
-          ...mockRecentTasks[0],
-          comments: [
-            {
-              id: "1",
-              author: "Sarah Johnson",
-              content: "Please implement proper password hashing.",
-              timestamp: "2 hours ago",
-            },
-          ],
-        }}
+        task={selectedTask ? {
+          id: selectedTask.id,
+          title: selectedTask.title,
+          description: selectedTask.description,
+          status: selectedTask.status,
+          type: selectedTask.type,
+          creator: selectedTask.creatorName,
+          assignee: selectedTask.assigneeName ?? undefined,
+          deadline: formatDate(selectedTask.deadline),
+          estimatedHours: Number(selectedTask.estimatedHours),
+          actualHours: selectedTask.actualHours ? Number(selectedTask.actualHours) : undefined,
+          rating: selectedTask.rating ? Number(selectedTask.rating) : undefined,
+          comments: [],
+        } : undefined}
       />
     </div>
   );

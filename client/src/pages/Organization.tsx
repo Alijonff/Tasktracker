@@ -67,18 +67,25 @@ function parseRating(value: SelectUser["rating"]) {
   return Number.isNaN(numeric) ? undefined : numeric;
 }
 
+const optionalEmailField = z
+  .string()
+  .trim()
+  .email("Введите корректный email")
+  .or(z.literal(""))
+  .optional();
+
 const createEmployeeFormSchema = z.object({
-  username: z.string().min(1, "Введите имя пользователя"),
+  username: z.string().min(1, "Введите логин"),
   password: z.string().min(6, "Пароль должен содержать минимум 6 символов"),
   name: z.string().min(1, "Введите имя"),
-  email: z.string().email("Введите корректный email"),
+  email: optionalEmailField,
 });
 
 type CreateEmployeeFormValues = z.infer<typeof createEmployeeFormSchema>;
 
 const editEmployeeFormSchema = z.object({
   name: z.string().min(1, "Введите имя"),
-  email: z.string().email("Введите корректный email"),
+  email: optionalEmailField,
 });
 
 type EditEmployeeFormValues = z.infer<typeof editEmployeeFormSchema>;
@@ -628,11 +635,12 @@ function EmployeeDialog({
   const createEmployee = useMutation({
     mutationFn: async (values: CreateEmployeeFormValues) => {
       if (!slot) throw new Error("slot is required");
+      const trimmedEmail = values.email ? values.email.trim() : "";
       const payload = {
         ...values,
         username: values.username.trim(),
         name: values.name.trim(),
-        email: values.email.trim(),
+        email: trimmedEmail ? trimmedEmail : null,
         positionType: slot.positionType,
         departmentId: slot.departmentId,
         managementId: slot.managementId ?? null,
@@ -660,7 +668,7 @@ function EmployeeDialog({
       if (!slot?.employee) throw new Error("employee is required");
       const payload = {
         name: values.name.trim(),
-        email: values.email.trim(),
+        email: values.email ? values.email.trim() || null : null,
       };
       const response = await apiRequest("PATCH", `/api/employees/${slot.employee.id}`, payload);
       return response.json();
@@ -734,7 +742,7 @@ function EmployeeDialog({
           <Form {...editForm}>
             <form onSubmit={editForm.handleSubmit((values) => updateEmployee.mutate(values))} className="space-y-4">
               <div className="space-y-2">
-                <Label>Имя пользователя</Label>
+                <Label>Логин</Label>
                 <Input value={slot.employee.username} disabled />
               </div>
               <FormField
@@ -816,7 +824,7 @@ function EmployeeDialog({
                 name="username"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Имя пользователя</FormLabel>
+                  <FormLabel>Логин</FormLabel>
                     <FormControl>
                       <Input {...field} autoFocus />
                     </FormControl>

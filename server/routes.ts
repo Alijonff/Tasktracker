@@ -128,11 +128,24 @@ async function resolveEmployeeAssignment(
   }
 }
 
+const optionalEmailSchema = z
+  .string()
+  .trim()
+  .email("Введите корректный email")
+  .optional()
+  .or(z.literal(""))
+  .or(z.null())
+  .transform((value) => {
+    if (value === null) return null;
+    if (value === undefined) return undefined;
+    return value === "" ? undefined : value;
+  });
+
 const createEmployeeSchema = z.object({
-  username: z.string().min(1, "Введите имя пользователя"),
+  username: z.string().min(1, "Введите логин"),
   password: z.string().min(6, "Пароль должен содержать минимум 6 символов"),
   name: z.string().min(1, "Введите имя"),
-  email: z.string().email("Введите корректный email"),
+  email: optionalEmailSchema,
   departmentId: z.string().min(1, "Выберите департамент"),
   managementId: z.string().nullable().optional(),
   divisionId: z.string().nullable().optional(),
@@ -141,7 +154,7 @@ const createEmployeeSchema = z.object({
 
 const updateEmployeeSchema = z.object({
   name: z.string().min(1, "Введите имя").optional(),
-  email: z.string().email("Введите корректный email").optional(),
+  email: optionalEmailSchema,
   positionType: positionTypeSchema.optional(),
   departmentId: z.string().optional(),
   managementId: z.string().nullable().optional(),
@@ -319,9 +332,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { divisionId, managementId, departmentId } = req.query;
       const filters: { divisionId?: string; managementId?: string; departmentId?: string } = {};
 
-      if (divisionId) filters.divisionId = divisionId as string;
-      if (managementId) filters.managementId = managementId as string;
-      if (departmentId) filters.departmentId = departmentId as string;
+      if (typeof divisionId === "string" && divisionId) filters.divisionId = divisionId;
+      if (typeof managementId === "string" && managementId) filters.managementId = managementId;
+      if (typeof departmentId === "string" && departmentId) filters.departmentId = departmentId;
+
+      const currentUser = req.session.user;
+      if (currentUser && currentUser.role !== "admin") {
+        if (!currentUser.departmentId) {
+          return res.json([]);
+        }
+        if (filters.departmentId && filters.departmentId !== currentUser.departmentId) {
+          return res.status(403).json({ error: "Недостаточно прав для выбранного департамента" });
+        }
+        filters.departmentId = currentUser.departmentId;
+      }
 
       const allUsers = await storage.getAllUsers(Object.keys(filters).length > 0 ? filters : undefined);
       const safeUsers = allUsers.map(({ passwordHash, ...user }) => user);
@@ -373,7 +397,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         parsed.username,
         passwordHash,
         parsed.name,
-        parsed.email,
+        parsed.email ?? null,
         assignment.role,
         assignment.departmentId,
         assignment.managementId,
@@ -414,7 +438,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const updates: {
         name?: string;
-        email?: string;
+        email?: string | null;
         role?: "admin" | "director" | "manager" | "senior" | "employee";
         departmentId?: string | null;
         managementId?: string | null;
@@ -422,7 +446,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } = {};
 
       if (parsed.name !== undefined) updates.name = parsed.name;
-      if (parsed.email !== undefined) updates.email = parsed.email;
+      if (parsed.email !== undefined) updates.email = parsed.email ?? null;
 
       if (parsed.positionType) {
         const assignment = await resolveEmployeeAssignment(parsed.positionType, {
@@ -518,47 +542,123 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get all tasks (with filtering)
-  app.get("/api/tasks", async (req, res) => {
+  app.get("/api/dashboard/overview", requireAuth, async (req, res) => {
     try {
-      const { 
-        departmentId, 
-        managementId, 
-        divisionId, 
-        status, 
-        type, 
-        search,
-        assigneeId 
-      } = req.query;
-      
-      // Department ID is required for security and data scoping
-      if (!departmentId) {
-        return res.status(400).json({ error: "Не указан идентификатор департамента" });
+      const currentUser = req.session.user;
+      if (!currentUser) {
+        return res.status(401).json({ error: "Требуется авторизация" });
       }
-      
-      const filters: {
-        departmentId: string;
-        managementId?: string;
-        divisionId?: string;
-        status?: string;
-        type?: string;
-        search?: string;
-        assigneeId?: string;
-      } = {
-        departmentId: departmentId as string,
-      };
-      
-      if (managementId) filters.managementId = managementId as string;
-      if (divisionId) filters.divisionId = divisionId as string;
-      if (status) filters.status = status as string;
-      if (type) filters.type = type as string;
-      if (search) filters.search = search as string;
-      if (assigneeId) filters.assigneeId = assigneeId as string;
-      
+
+      const emptyMetrics = {
+        completedTasks: { value: 0, hasData: false },
+        totalHours: { value: 0, hasData: false },
+        activeAuctions: { value: 0, hasData: false },
+        backlogTasks: { value: 0, hasData: false },
+      } as const;
+
+      const { departmentId: queryDepartmentId } = req.query;
+      let departmentId =
+        typeof queryDepartmentId === "string" && queryDepartmentId.trim() !== ""
+          ? queryDepartmentId
+          : undefined;
+
+      if (currentUser.role !== "admin") {
+        if (!currentUser.departmentId) {
+          return res.json({ metrics: emptyMetrics, highlightTasks: [] });
+        }
+        if (departmentId && departmentId !== currentUser.departmentId) {
+          return res.status(403).json({ error: "Недостаточно прав для выбранного департамента" });
+        }
+        departmentId = currentUser.departmentId;
+      }
+
+      const metrics = await storage.getDashboardMetrics({ departmentId: departmentId ?? null });
+      const highlightTasks = await storage.getHighlightedTasks({
+        departmentId: departmentId ?? null,
+        limit: 6,
+        recentDays: 14,
+      });
+
+      res.json({ metrics, highlightTasks });
+    } catch (error) {
+      console.error("Ошибка при получении данных панели:", error);
+      res.status(500).json({ error: "Не удалось получить данные панели" });
+    }
+  });
+
+  // Get all tasks (with filtering)
+  app.get("/api/tasks", requireAuth, async (req, res) => {
+    try {
+      const currentUser = req.session.user!;
+      const {
+        departmentId: departmentIdQuery,
+        managementId,
+        divisionId,
+        status,
+        type,
+        search,
+        assigneeId,
+        participantId,
+      } = req.query;
+
+      let departmentId =
+        typeof departmentIdQuery === "string" && departmentIdQuery.trim() !== ""
+          ? departmentIdQuery
+          : undefined;
+
+      if (currentUser.role !== "admin") {
+        if (!currentUser.departmentId) {
+          return res.status(403).json({ error: "Недостаточно прав для просмотра задач" });
+        }
+        if (departmentId && departmentId !== currentUser.departmentId) {
+          return res.status(403).json({ error: "Недостаточно прав для выбранного департамента" });
+        }
+        departmentId = currentUser.departmentId;
+      }
+
+      const filters: Parameters<typeof storage.getAllTasks>[0] = {};
+      if (departmentId) filters.departmentId = departmentId;
+
+      if (typeof managementId === "string" && managementId !== "" && managementId !== "all") {
+        filters.managementId = managementId;
+      }
+      if (typeof divisionId === "string" && divisionId !== "" && divisionId !== "all") {
+        filters.divisionId = divisionId;
+      }
+      if (typeof status === "string" && status !== "" && status !== "all") {
+        filters.status = status;
+      }
+      if (typeof type === "string" && type !== "" && type !== "all") {
+        filters.type = type;
+      }
+      if (typeof search === "string" && search.trim() !== "") {
+        filters.search = search.trim();
+      }
+      if (typeof assigneeId === "string" && assigneeId !== "" && assigneeId !== "all") {
+        filters.assigneeId = assigneeId;
+      }
+      if (typeof participantId === "string" && participantId !== "" && participantId !== "all") {
+        filters.participantId = participantId;
+      }
+
       const allTasks = await storage.getAllTasks(filters);
       res.json(allTasks);
     } catch (error) {
       console.error("Ошибка при получении задач:", error);
+      res.status(500).json({ error: "Не удалось получить задачи" });
+    }
+  });
+
+  app.get("/api/my-tasks", requireAuth, async (req, res) => {
+    try {
+      const currentUser = req.session.user!;
+      const tasks = await storage.getAllTasks({
+        assigneeId: currentUser.id,
+        orderBy: "updatedAt",
+      });
+      res.json(tasks);
+    } catch (error) {
+      console.error("Ошибка при получении личных задач:", error);
       res.status(500).json({ error: "Не удалось получить задачи" });
     }
   });
@@ -576,6 +676,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(task);
     } catch (error) {
       res.status(500).json({ error: "Не удалось получить задачу" });
+    }
+  });
+
+  app.patch("/api/tasks/:id/status", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status } = req.body as { status?: string };
+      const allowedStatuses = ["backlog", "inProgress", "underReview", "completed"] as const;
+
+      if (!status || !allowedStatuses.includes(status as (typeof allowedStatuses)[number])) {
+        return res.status(400).json({ error: "Некорректный статус задачи" });
+      }
+
+      const task = await storage.getTask(id);
+      if (!task) {
+        return res.status(404).json({ error: "Задача не найдена" });
+      }
+
+      const currentUser = req.session.user!;
+      const sameDepartment = currentUser.departmentId && task.departmentId === currentUser.departmentId;
+      const canModify =
+        currentUser.role === "admin" ||
+        task.assigneeId === currentUser.id ||
+        task.creatorId === currentUser.id ||
+        sameDepartment;
+
+      if (!canModify) {
+        return res.status(403).json({ error: "Недостаточно прав для изменения статуса" });
+      }
+
+      const updated = await storage.updateTask(id, { status: status as any });
+      if (!updated) {
+        return res.status(404).json({ error: "Задача не найдена" });
+      }
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Ошибка при обновлении статуса задачи:", error);
+      res.status(500).json({ error: "Не удалось обновить статус задачи" });
     }
   });
 
@@ -692,7 +831,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userData.username,
         passwordHash,
         userData.name,
-        userData.email,
+        userData.email ?? null,
         userData.role || "employee",
         userData.departmentId || null,
         userData.managementId || null,
@@ -713,7 +852,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/users/:id", requireAuth, requireAdmin, async (req, res) => {
     try {
       const { id } = req.params;
-      const updates = req.body;
+      const updates = { ...req.body };
+
+      if (Object.prototype.hasOwnProperty.call(updates, "email")) {
+        if (typeof updates.email === "string") {
+          updates.email = updates.email.trim() || null;
+        } else if (updates.email === "" || updates.email === undefined) {
+          updates.email = null;
+        }
+      }
       
       const user = await storage.updateUser(id, updates);
       

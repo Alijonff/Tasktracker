@@ -18,7 +18,7 @@ import {
   type InsertManagement,
   type InsertDivision
 } from "@shared/schema";
-import { eq, and, or, like, desc } from "drizzle-orm";
+import { eq, and, or, like, desc, inArray, gte, isNull, sql } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -26,7 +26,7 @@ export interface IStorage {
     username: string,
     passwordHash: string,
     name: string,
-    email: string,
+    email: string | null,
     role: "admin" | "director" | "manager" | "senior" | "employee",
     departmentId?: string | null,
     managementId?: string | null,
@@ -40,7 +40,7 @@ export interface IStorage {
     id: string,
     updates: {
       name?: string;
-      email?: string;
+      email?: string | null;
       role?: "admin" | "director" | "manager" | "senior" | "employee";
       departmentId?: string | null;
       managementId?: string | null;
@@ -71,13 +71,19 @@ export interface IStorage {
 
   // Tasks
   getAllTasks(filters: {
-    departmentId: string;
+    departmentId?: string;
     managementId?: string;
     divisionId?: string;
     status?: string;
     type?: string;
     search?: string;
     assigneeId?: string;
+    creatorId?: string;
+    participantId?: string;
+    statuses?: Task["status"][];
+    updatedSince?: Date;
+    limit?: number;
+    orderBy?: "createdAt" | "updatedAt";
   }): Promise<Task[]>;
   getTask(id: string): Promise<Task | undefined>;
   createTask(task: InsertTask): Promise<Task>;
@@ -86,6 +92,19 @@ export interface IStorage {
   // Auction Bids
   getTaskBids(taskId: string): Promise<AuctionBid[]>;
   createBid(bid: InsertBid): Promise<AuctionBid>;
+
+  getDashboardMetrics(filters: { departmentId?: string | null }): Promise<{
+    completedTasks: { value: number; hasData: boolean };
+    totalHours: { value: number; hasData: boolean };
+    activeAuctions: { value: number; hasData: boolean };
+    backlogTasks: { value: number; hasData: boolean };
+  }>;
+
+  getHighlightedTasks(filters: {
+    departmentId?: string | null;
+    limit: number;
+    recentDays: number;
+  }): Promise<Task[]>;
 }
 
 export class DbStorage implements IStorage {
@@ -94,7 +113,7 @@ export class DbStorage implements IStorage {
     username: string,
     passwordHash: string,
     name: string,
-    email: string,
+    email: string | null,
     role: "admin" | "director" | "manager" | "senior" | "employee",
     departmentId?: string | null,
     managementId?: string | null,
@@ -105,7 +124,7 @@ export class DbStorage implements IStorage {
       username,
       passwordHash,
       name,
-      email,
+      email: email ?? null,
       role,
       departmentId: departmentId || null,
       managementId: managementId || null,
@@ -142,7 +161,7 @@ export class DbStorage implements IStorage {
     id: string,
     updates: {
       name?: string;
-      email?: string;
+      email?: string | null;
       role?: "admin" | "director" | "manager" | "senior" | "employee";
       departmentId?: string | null;
       managementId?: string | null;
@@ -245,20 +264,26 @@ export class DbStorage implements IStorage {
 
   // Tasks
   async getAllTasks(filters: {
-    departmentId: string;
+    departmentId?: string;
     managementId?: string;
     divisionId?: string;
     status?: string;
     type?: string;
     search?: string;
     assigneeId?: string;
+    creatorId?: string;
+    participantId?: string;
+    statuses?: Task["status"][];
+    updatedSince?: Date;
+    limit?: number;
+    orderBy?: "createdAt" | "updatedAt";
   }): Promise<Task[]> {
     let query = db.select().from(tasks);
-    const conditions = [
-      // Always filter by department for security
-      eq(tasks.departmentId, filters.departmentId)
-    ];
-    
+    const conditions: any[] = [];
+
+    if (filters.departmentId) {
+      conditions.push(eq(tasks.departmentId, filters.departmentId));
+    }
     if (filters.managementId) {
       conditions.push(eq(tasks.managementId, filters.managementId));
     }
@@ -268,23 +293,53 @@ export class DbStorage implements IStorage {
     if (filters.status && filters.status !== "all") {
       conditions.push(eq(tasks.status, filters.status as any));
     }
+    if (filters.statuses && filters.statuses.length > 0) {
+      conditions.push(inArray(tasks.status, filters.statuses as any));
+    }
     if (filters.type && filters.type !== "all") {
       conditions.push(eq(tasks.type, filters.type as any));
     }
     if (filters.assigneeId) {
       conditions.push(eq(tasks.assigneeId, filters.assigneeId));
     }
+    if (filters.creatorId) {
+      conditions.push(eq(tasks.creatorId, filters.creatorId));
+    }
+    if (filters.participantId) {
+      conditions.push(
+        or(
+          eq(tasks.assigneeId, filters.participantId),
+          eq(tasks.creatorId, filters.participantId)
+        )
+      );
+    }
     if (filters.search) {
       conditions.push(
         or(
           like(tasks.title, `%${filters.search}%`),
           like(tasks.description, `%${filters.search}%`)
-        )!
+        )
       );
     }
-    
-    query = query.where(and(...conditions)) as any;
-    return await query.orderBy(desc(tasks.createdAt));
+    if (filters.updatedSince) {
+      conditions.push(gte(tasks.updatedAt, filters.updatedSince));
+    }
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+
+    if (filters.orderBy === "updatedAt") {
+      query = query.orderBy(desc(tasks.updatedAt)) as any;
+    } else {
+      query = query.orderBy(desc(tasks.createdAt)) as any;
+    }
+
+    if (filters.limit) {
+      query = query.limit(filters.limit) as any;
+    }
+
+    return await query;
   }
 
   async getTask(id: string): Promise<Task | undefined> {
@@ -319,6 +374,109 @@ export class DbStorage implements IStorage {
   async createBid(bidData: InsertBid): Promise<AuctionBid> {
     const [bid] = await db.insert(auctionBids).values(bidData as any).returning();
     return bid;
+  }
+
+  async getDashboardMetrics(filters: { departmentId?: string | null }) {
+    const now = new Date();
+    const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
+
+    const baseConditions: any[] = [];
+
+    if (filters.departmentId) {
+      baseConditions.push(eq(tasks.departmentId, filters.departmentId));
+    }
+
+    const withPeriodConditions = (extra: any) =>
+      baseConditions.length > 0
+        ? and(...baseConditions, extra, gte(tasks.updatedAt, startOfMonth))
+        : and(extra, gte(tasks.updatedAt, startOfMonth));
+
+    const [completedRow] = await db
+      .select({ value: sql<number>`count(*)` })
+      .from(tasks)
+      .where(withPeriodConditions(eq(tasks.status, "completed" as const)));
+
+    const [hoursRow] = await db
+      .select({ value: sql<string>`coalesce(sum(${tasks.actualHours}), '0')` })
+      .from(tasks)
+      .where(
+        withPeriodConditions(
+          inArray(tasks.status, ["inProgress", "underReview", "completed"] as any)
+        )
+      );
+
+    const activeAuctionConditions: any[] = [];
+    if (filters.departmentId) {
+      activeAuctionConditions.push(eq(tasks.departmentId, filters.departmentId));
+    }
+    activeAuctionConditions.push(eq(tasks.type, "auction" as const));
+    activeAuctionConditions.push(
+      inArray(tasks.status, ["backlog", "inProgress", "underReview"] as any)
+    );
+
+    const [activeAuctionsRow] = await db
+      .select({ value: sql<number>`count(*)` })
+      .from(tasks)
+      .where(and(...activeAuctionConditions));
+
+    const backlogConditions: any[] = [];
+    if (filters.departmentId) {
+      backlogConditions.push(eq(tasks.departmentId, filters.departmentId));
+    }
+    backlogConditions.push(
+      or(
+        eq(tasks.status, "backlog" as const),
+        and(
+          eq(tasks.status, "inProgress" as const),
+          or(isNull(tasks.actualHours), eq(tasks.actualHours, "0"))
+        )
+      )
+    );
+
+    const [backlogRow] = await db
+      .select({ value: sql<number>`count(*)` })
+      .from(tasks)
+      .where(and(...backlogConditions));
+
+    const completedValue = Number(completedRow?.value ?? 0);
+    const hoursValue = Number(hoursRow?.value ?? 0);
+    const auctionsValue = Number(activeAuctionsRow?.value ?? 0);
+    const backlogValue = Number(backlogRow?.value ?? 0);
+
+    return {
+      completedTasks: { value: completedValue, hasData: completedValue > 0 },
+      totalHours: { value: hoursValue, hasData: hoursValue > 0 },
+      activeAuctions: { value: auctionsValue, hasData: auctionsValue > 0 },
+      backlogTasks: { value: backlogValue, hasData: backlogValue > 0 },
+    };
+  }
+
+  async getHighlightedTasks(filters: {
+    departmentId?: string | null;
+    limit: number;
+    recentDays: number;
+  }): Promise<Task[]> {
+    const conditions: any[] = [];
+    if (filters.departmentId) {
+      conditions.push(eq(tasks.departmentId, filters.departmentId));
+    }
+
+    const recentThreshold = new Date();
+    recentThreshold.setDate(recentThreshold.getDate() - filters.recentDays);
+
+    conditions.push(
+      or(
+        inArray(tasks.status, ["inProgress", "underReview"] as any),
+        and(eq(tasks.status, "backlog" as const), gte(tasks.updatedAt, recentThreshold))
+      )
+    );
+
+    return await db
+      .select()
+      .from(tasks)
+      .where(and(...conditions))
+      .orderBy(desc(tasks.updatedAt))
+      .limit(filters.limit);
   }
 }
 

@@ -105,7 +105,7 @@ export default function Login() {
                 name="username"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Имя пользователя</FormLabel>
+                    <FormLabel>Логин</FormLabel>
                     <FormControl>
                       <Input {...field} placeholder="ivan.petrov" data-testid="input-login-username" />
                     </FormControl>

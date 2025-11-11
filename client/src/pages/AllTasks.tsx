@@ -1,52 +1,202 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { ListTodo } from "lucide-react";
-import TaskCard from "@/components/TaskCard";
+import KanbanBoard, { type KanbanTask, type KanbanStatus } from "@/components/KanbanBoard";
 import TaskDetailDialog from "@/components/TaskDetailDialog";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search } from "lucide-react";
-import type { Task, Management, Division } from "@shared/schema";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import type { Task, Management, Division, Department, SelectUser } from "@shared/schema";
+import { useToast } from "@/hooks/use-toast";
+
+interface ScopeFilter {
+  departmentId?: string;
+  managementId?: string;
+  divisionId?: string;
+}
+
+function formatDate(value: string | Date) {
+  const date = typeof value === "string" ? new Date(value) : value;
+  return date.toLocaleDateString("ru-RU", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
 
 export default function AllTasks() {
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [structureFilter, setStructureFilter] = useState<string>("all");
+  const [employeeFilter, setEmployeeFilter] = useState<string>("all");
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
-  
-  const [filters, setFilters] = useState({
-    search: "",
-    status: "all",
-    type: "all",
-    departmentId: "dept-1", // Default to first department
-    managementId: "all",
-    divisionId: "all",
-  });
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const { toast } = useToast();
 
-  // Fetch managements
+  const { data: authData } = useQuery<{ user: SelectUser | null }>({
+    queryKey: ["/api/auth/me"],
+  });
+  const currentUser = authData?.user ?? null;
+
+  const { data: departments = [] } = useQuery<Department[]>({
+    queryKey: ["/api/departments"],
+  });
   const { data: managements = [] } = useQuery<Management[]>({
     queryKey: ["/api/managements"],
   });
-
-  // Fetch divisions
   const { data: divisions = [] } = useQuery<Division[]>({
     queryKey: ["/api/divisions"],
   });
-
-  // Fetch tasks with segmented query key for proper cache invalidation
-  const { data: tasks = [], isLoading } = useQuery<Task[]>({
-    queryKey: ["/api/tasks", filters],
+  const { data: employees = [] } = useQuery<SelectUser[]>({
+    queryKey: ["/api/employees"],
   });
 
-  const filteredTasks = tasks;
+  useEffect(() => {
+    if (!currentUser) return;
+    if (currentUser.role !== "admin" && currentUser.departmentId && structureFilter === "all") {
+      setStructureFilter(`department:${currentUser.departmentId}`);
+    }
+  }, [currentUser, structureFilter]);
 
-  const handleTaskClick = (task: Task) => {
-    setSelectedTask(task);
+  const scope = useMemo<ScopeFilter>(() => {
+    if (!currentUser) return {};
+
+    if (structureFilter === "all") {
+      if (currentUser.role !== "admin" && currentUser.departmentId) {
+        return { departmentId: currentUser.departmentId };
+      }
+      return {};
+    }
+
+    const [type, id] = structureFilter.split(":");
+    if (!type || !id) return {};
+
+    if (type === "department") {
+      return { departmentId: id };
+    }
+
+    if (type === "management") {
+      const management = managements.find((item) => item.id === id);
+      if (!management) return {};
+      return { departmentId: management.departmentId, managementId: management.id };
+    }
+
+    if (type === "division") {
+      const division = divisions.find((item) => item.id === id);
+      if (!division) return {};
+      return {
+        departmentId: division.departmentId,
+        managementId: division.managementId ?? undefined,
+        divisionId: division.id,
+      };
+    }
+
+    return {};
+  }, [structureFilter, currentUser, managements, divisions]);
+
+  const queryParams = useMemo(() => {
+    const params: Record<string, string> = {};
+    if (scope.departmentId) params.departmentId = scope.departmentId;
+    if (scope.managementId) params.managementId = scope.managementId;
+    if (scope.divisionId) params.divisionId = scope.divisionId;
+    if (employeeFilter !== "all") params.participantId = employeeFilter;
+    return params;
+  }, [scope, employeeFilter]);
+
+  const { data: tasks = [], isLoading } = useQuery<Task[]>({
+    queryKey: ["/api/tasks", queryParams],
+    enabled: !!currentUser,
+  });
+
+  const statusMap: Record<Task["status"], KanbanStatus> = {
+    backlog: "backlog",
+    inProgress: "inProgress",
+    underReview: "underReview",
+    completed: "completed",
+    overdue: "inProgress",
+  };
+
+  const boardTasks = useMemo<KanbanTask[]>(() =>
+    tasks.map((task) => ({
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      status: statusMap[task.status],
+      type: task.type,
+      creatorName: task.creatorName,
+      assigneeName: task.assigneeName ?? undefined,
+      deadline: formatDate(task.deadline),
+      estimatedHours: Number(task.estimatedHours),
+      actualHours: task.actualHours ? Number(task.actualHours) : undefined,
+      rating: task.rating ? Number(task.rating) : undefined,
+    })),
+  [tasks]);
+
+  const employeesForFilter = useMemo(() => {
+    if (employees.length === 0) return employees;
+
+    return employees.filter((employee) => {
+      if (scope.divisionId) {
+        return employee.divisionId === scope.divisionId;
+      }
+      if (scope.managementId) {
+        return employee.managementId === scope.managementId;
+      }
+      if (scope.departmentId) {
+        return employee.departmentId === scope.departmentId;
+      }
+      if (currentUser?.role !== "admin" && currentUser?.departmentId) {
+        return employee.departmentId === currentUser.departmentId;
+      }
+      return true;
+    });
+  }, [employees, scope, currentUser]);
+
+  useEffect(() => {
+    if (employeeFilter === "all") return;
+    if (!employeesForFilter.some((employee) => employee.id === employeeFilter)) {
+      setEmployeeFilter("all");
+    }
+  }, [employeesForFilter, employeeFilter]);
+
+  const statusMutation = useMutation({
+    mutationFn: async ({ taskId, status }: { taskId: string; status: KanbanStatus }) => {
+      await apiRequest("PATCH", `/api/tasks/${taskId}/status`, { status });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/my-tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/overview"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Не удалось обновить статус",
+        description: error?.message ? String(error.message) : "Попробуйте снова",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleTaskClick = (taskId: string) => {
+    setSelectedTaskId(taskId);
     setDetailDialogOpen(true);
   };
 
-  // Get filtered divisions based on selected management
-  const filteredDivisions = filters.managementId !== "all"
-    ? divisions.filter(d => d.managementId === filters.managementId)
-    : divisions;
+  const selectedTask = selectedTaskId ? tasks.find((task) => task.id === selectedTaskId) : undefined;
+
+  const structureOptions = useMemo(() => {
+    const options: { value: string; label: string }[] = [];
+    if (currentUser?.role === "admin") {
+      options.push({ value: "all", label: "Все департаменты" });
+    }
+    departments.forEach((department) => {
+      options.push({ value: `department:${department.id}`, label: `Департамент · ${department.name}` });
+    });
+    managements.forEach((management) => {
+      options.push({ value: `management:${management.id}`, label: `Управление · ${management.name}` });
+    });
+    divisions.forEach((division) => {
+      options.push({ value: `division:${division.id}`, label: `Отдел · ${division.name}` });
+    });
+    return options;
+  }, [departments, managements, divisions, currentUser]);
 
   return (
     <div className="space-y-6">
@@ -56,129 +206,58 @@ export default function AllTasks() {
         </div>
         <div>
           <h1 className="text-3xl font-bold">Все задачи</h1>
-          <p className="text-muted-foreground">
-            Просмотр и управление задачами департамента
-          </p>
+          <p className="text-muted-foreground">Общая доска задач организации</p>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-col md:flex-row gap-3" data-testid="container-task-filters">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
-          <Input
-            placeholder="Поиск задач..."
-            value={filters.search}
-            onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-            className="pl-10"
-            data-testid="input-search-tasks"
-          />
-        </div>
-        
-        <Select value={filters.status} onValueChange={(v) => setFilters({ ...filters, status: v })}>
-          <SelectTrigger className="w-full md:w-40" data-testid="select-filter-status">
-            <SelectValue placeholder="Статус" />
+      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3" data-testid="container-task-filters">
+        <Select value={structureFilter} onValueChange={setStructureFilter}>
+          <SelectTrigger className="w-full" data-testid="select-structure-filter">
+            <SelectValue placeholder="Структурная единица" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Все статусы</SelectItem>
-            <SelectItem value="backlog">Бэклог</SelectItem>
-            <SelectItem value="inProgress">В работе</SelectItem>
-            <SelectItem value="underReview">На проверке</SelectItem>
-            <SelectItem value="completed">Выполнена</SelectItem>
-            <SelectItem value="overdue">Просрочена</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <Select value={filters.type} onValueChange={(v) => setFilters({ ...filters, type: v })}>
-          <SelectTrigger className="w-full md:w-40" data-testid="select-filter-type">
-            <SelectValue placeholder="Тип" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Все типы</SelectItem>
-            <SelectItem value="individual">Индивидуальная</SelectItem>
-            <SelectItem value="auction">Аукцион</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <Select 
-          value={filters.managementId} 
-          onValueChange={(v) => setFilters({ ...filters, managementId: v, divisionId: "all" })}
-        >
-          <SelectTrigger className="w-full md:w-48" data-testid="select-filter-management">
-            <SelectValue placeholder="Управление" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Все управления</SelectItem>
-            {managements.map(mgmt => (
-              <SelectItem key={mgmt.id} value={mgmt.id}>
-                {mgmt.name}
+            {structureOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
 
-        <Select 
-          value={filters.divisionId} 
-          onValueChange={(v) => setFilters({ ...filters, divisionId: v })}
-        >
-          <SelectTrigger className="w-full md:w-48" data-testid="select-filter-division">
-            <SelectValue placeholder="Отдел" />
+        <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
+          <SelectTrigger className="w-full" data-testid="select-employee-filter">
+            <SelectValue placeholder="Сотрудник" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Все отделы</SelectItem>
-            {filteredDivisions.map(div => (
-              <SelectItem key={div.id} value={div.id}>
-                {div.name}
+            <SelectItem value="all">Все сотрудники</SelectItem>
+            {employeesForFilter.map((employee) => (
+              <SelectItem key={employee.id} value={employee.id}>
+                {employee.name} ({employee.username})
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
 
-      {/* Task count */}
       <div className="text-sm text-muted-foreground">
-        Найдено задач: {filteredTasks.length}
+        Найдено задач: {tasks.length}
       </div>
 
-      {/* Tasks grid */}
-      {isLoading ? (
-        <div className="text-center py-12 text-muted-foreground">
-          Загрузка задач...
-        </div>
-      ) : filteredTasks.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
-          Задачи не найдены
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredTasks.map((task: Task) => (
-            <TaskCard
-              key={task.id}
-              id={task.id}
-              title={task.title}
-              description={task.description}
-              status={task.status}
-              type={task.type}
-              creator={task.creatorName}
-              assignee={task.assigneeName || undefined}
-              deadline={new Date(task.deadline).toLocaleDateString('ru-RU', {
-                year: 'numeric',
-                month: 'short',
-                day: 'numeric'
-              })}
-              estimatedHours={Number(task.estimatedHours)}
-              actualHours={task.actualHours ? Number(task.actualHours) : undefined}
-              rating={task.rating ? Number(task.rating) : undefined}
-              onCardClick={() => handleTaskClick(task)}
-              onBidClick={() => handleTaskClick(task)}
-            />
-          ))}
-        </div>
-      )}
+      <KanbanBoard
+        tasks={boardTasks}
+        isLoading={isLoading}
+        onTaskClick={handleTaskClick}
+        onStatusChange={(taskId, status) => statusMutation.mutate({ taskId, status })}
+      />
 
-      <TaskDetailDialog 
-        open={detailDialogOpen} 
-        onOpenChange={setDetailDialogOpen}
+      <TaskDetailDialog
+        open={detailDialogOpen}
+        onOpenChange={(open) => {
+          setDetailDialogOpen(open);
+          if (!open) {
+            setSelectedTaskId(null);
+          }
+        }}
         task={selectedTask ? {
           id: selectedTask.id,
           title: selectedTask.title,
@@ -186,12 +265,8 @@ export default function AllTasks() {
           status: selectedTask.status,
           type: selectedTask.type,
           creator: selectedTask.creatorName,
-          assignee: selectedTask.assigneeName || undefined,
-          deadline: new Date(selectedTask.deadline).toLocaleDateString('ru-RU', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric'
-          }),
+          assignee: selectedTask.assigneeName ?? undefined,
+          deadline: formatDate(selectedTask.deadline),
           estimatedHours: Number(selectedTask.estimatedHours),
           actualHours: selectedTask.actualHours ? Number(selectedTask.actualHours) : undefined,
           rating: selectedTask.rating ? Number(selectedTask.rating) : undefined,
