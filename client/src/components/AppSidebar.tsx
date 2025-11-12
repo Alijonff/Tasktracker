@@ -1,13 +1,4 @@
-import { 
-  LayoutDashboard, 
-  CheckSquare, 
-  ListTodo,
-  Gavel, 
-  BarChart3, 
-  Settings,
-  Building2,
-  Award
-} from "lucide-react";
+import { LayoutDashboard, CheckSquare, ListTodo, Gavel, BarChart3, Building2, Award } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -30,10 +21,7 @@ const menuItems = [
   { title: "Отчёты", url: "/reports", icon: BarChart3 },
 ];
 
-const adminItems = [
-  { title: "Организация", url: "/organization", icon: Building2 },
-  { title: "Настройки", url: "/settings", icon: Settings },
-];
+const adminItems = [{ title: "Организация", url: "/organization", icon: Building2 }];
 
 export default function AppSidebar() {
   const [location] = useLocation();

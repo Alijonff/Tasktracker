@@ -5,6 +5,7 @@ import { canCreateAuctionsForRole } from "@/pages/Dashboard";
 
 const cases: Array<[string | null, boolean]> = [
   ["director", true],
+  ["admin", true],
   ["employee", false],
   [null, false],
 ];
