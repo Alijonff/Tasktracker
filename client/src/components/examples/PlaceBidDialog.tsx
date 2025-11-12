@@ -6,12 +6,14 @@ export default function PlaceBidDialogExample() {
   const [open, setOpen] = useState(false);
 
   const mockTask = {
-    title: "Design new dashboard layout",
-    currentMinBid: 32,
+    id: 'example-auction',
+    title: 'Design new dashboard layout',
+    currentPrice: 1_200_000,
+    minimumGrade: 'C' as const,
     bids: [
-      { id: "1", bidder: "Alex Rivera", hours: 32, rating: 4.8, timestamp: "5 min ago" },
-      { id: "2", bidder: "Emma Wilson", hours: 35, rating: 4.6, timestamp: "1 hour ago" },
-      { id: "3", bidder: "Mike Chen", hours: 38, rating: 4.7, timestamp: "2 hours ago" },
+      { id: '1', bidder: 'Alex Rivera', amount: 1_200_000, rating: 4.8, timestamp: '5 min ago' },
+      { id: '2', bidder: 'Emma Wilson', amount: 1_150_000, rating: 4.6, timestamp: '1 hour ago' },
+      { id: '3', bidder: 'Mike Chen', amount: 1_100_000, rating: 4.7, timestamp: '2 hours ago' },
     ],
   };
 

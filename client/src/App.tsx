@@ -22,6 +22,7 @@ import Dashboard from "@/pages/Dashboard";
 import MyTasks from "@/pages/MyTasks";
 import AllTasks from "@/pages/AllTasks";
 import Auctions from "@/pages/Auctions";
+import CreateTask from "@/pages/CreateTask";
 import Reports from "@/pages/Reports";
 import Organization from "@/pages/Organization";
 import Settings from "@/pages/Settings";
@@ -224,6 +225,9 @@ function Router() {
       </Route>
       <Route path="/auctions">
         {() => <ProtectedLayout><Auctions /></ProtectedLayout>}
+      </Route>
+      <Route path="/create-task">
+        {() => <ProtectedLayout><CreateTask /></ProtectedLayout>}
       </Route>
       <Route path="/reports">
         {() => <ProtectedLayout><Reports /></ProtectedLayout>}

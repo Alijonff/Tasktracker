@@ -8,13 +8,14 @@ export default function TaskCardExample() {
         title="Implement user authentication"
         description="Set up JWT-based authentication with role-based access control for all user types"
         status="inProgress"
-        type="individual"
         creator="Sarah Johnson"
-        assignee="Mike Chen"
-        deadline="Dec 15, 2024"
-        estimatedHours={24}
-        actualHours={12}
-        rating={4.7}
+        deadline={new Date().toISOString()}
+        minimumGrade="C"
+        startingPrice={1_200_000}
+        currentPrice={1_350_000}
+        bidsCount={4}
+        leadingBidderName="Mike Chen"
+        canBid={false}
         onCardClick={() => console.log('Task clicked')}
       />
       <TaskCard
@@ -22,14 +23,12 @@ export default function TaskCardExample() {
         title="Design new dashboard layout"
         description="Create responsive dashboard with analytics widgets and real-time data visualization"
         status="backlog"
-        type="auction"
         creator="Alex Rivera"
-        deadline="Dec 20, 2024"
-        estimatedHours={40}
-        rating={4.5}
-        bidCount={5}
-        minBid={32}
-        timeRemaining="2h 15m"
+        deadline={new Date(Date.now() + 1000 * 60 * 60 * 24 * 3).toISOString()}
+        minimumGrade="B"
+        startingPrice={1_800_000}
+        bidsCount={5}
+        canBid
         onCardClick={() => console.log('Auction task clicked')}
         onBidClick={() => console.log('Place bid clicked')}
       />
@@ -38,13 +37,14 @@ export default function TaskCardExample() {
         title="Database optimization"
         description="Optimize database queries and add proper indexing for better performance"
         status="completed"
-        type="individual"
         creator="David Park"
-        assignee="Emma Wilson"
-        deadline="Dec 10, 2024"
-        estimatedHours={16}
-        actualHours={14}
-        rating={4.9}
+        deadline={new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString()}
+        minimumGrade="D"
+        startingPrice={950_000}
+        currentPrice={1_050_000}
+        bidsCount={3}
+        leadingBidderName="Emma Wilson"
+        canBid={false}
         onCardClick={() => console.log('Task clicked')}
       />
     </div>

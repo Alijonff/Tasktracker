@@ -7,6 +7,7 @@ export type PositionType =
   | "director"          // Директор департамента
   | "deputy"            // Заместитель директора
   | "management_head"   // Руководитель управления
+  | "management_deputy" // Заместитель руководителя управления
   | "division_head"     // Руководитель отдела
   | "senior"            // Старший сотрудник
   | "employee";         // Обычный сотрудник
@@ -27,6 +28,7 @@ export const positionLabels: Record<PositionType, string> = {
   director: "Директор",
   deputy: "Заместитель",
   management_head: "Руководитель",
+  management_deputy: "Заместитель",
   division_head: "Руководитель",
   senior: "Старший сотрудник",
   employee: "Сотрудник",

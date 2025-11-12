@@ -1,41 +1,88 @@
+import React, { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useState } from "react";
 import { PlusCircle } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { createAuctionTask, type Grade } from "@/api/adapter";
+import { formatMoney } from "@/lib/formatters";
+
+interface FormState {
+  title: string;
+  description: string;
+  minimumGrade: Grade;
+  startingPrice: string;
+  deadline: string;
+}
+
+const DEFAULT_FORM: FormState = {
+  title: "",
+  description: "",
+  minimumGrade: "D",
+  startingPrice: "1500000",
+  deadline: "",
+};
 
 export default function CreateTask() {
-  const [formData, setFormData] = useState({
-    title: "",
-    description: "",
-    department: "",
-    deadline: "",
-    minimumGrade: "D",
+  const [formData, setFormData] = useState<FormState>(DEFAULT_FORM);
+  const { toast } = useToast();
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      createAuctionTask({
+        title: formData.title.trim(),
+        description: formData.description.trim(),
+        minimumGrade: formData.minimumGrade,
+        startingPrice: Number(formData.startingPrice),
+        deadline: new Date(formData.deadline).toISOString(),
+      }),
+    onSuccess: (task) => {
+      toast({ title: "Аукцион создан", description: `Добавлена задача «${task.title}»` });
+      setFormData(DEFAULT_FORM);
+    },
+    onError: () => {
+      toast({
+        title: "Не удалось создать аукцион",
+        description: "Попробуйте ещё раз позже",
+        variant: "destructive",
+      });
+    },
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    console.log("Создание аукционной задачи:", formData);
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!formData.deadline) {
+      toast({
+        title: "Укажите дедлайн",
+        description: "Нужны дата и время окончания торгов",
+        variant: "destructive",
+      });
+      return;
+    }
+    mutation.mutate();
   };
 
+  const previewPrice = Number(formData.startingPrice) || 0;
+
   return (
-    <div className="max-w-4xl space-y-6">
+    <div className="max-w-3xl space-y-6">
       <div className="flex items-center gap-3">
         <div className="p-3 rounded-md bg-primary/10">
           <PlusCircle className="text-primary" size={32} />
         </div>
         <div>
-          <h1 className="text-3xl font-bold">Создать задачу</h1>
-          <p className="text-muted-foreground">Создайте новую аукционную задачу для сотрудников</p>
+          <h1 className="text-3xl font-bold">Создать аукцион</h1>
+          <p className="text-muted-foreground">Задача автоматически будет доступна всему департаменту</p>
         </div>
       </div>
 
       <Card data-testid="card-create-task-form">
         <CardHeader>
-          <CardTitle>Детали задачи</CardTitle>
+          <CardTitle>Детали аукциона</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -46,7 +93,7 @@ export default function CreateTask() {
                   id="title"
                   placeholder="Введите название задачи..."
                   value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, title: e.target.value }))}
                   required
                   data-testid="input-task-title"
                 />
@@ -58,68 +105,83 @@ export default function CreateTask() {
                   id="description"
                   placeholder="Опишите задачу подробно..."
                   value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
                   required
                   rows={6}
                   data-testid="textarea-task-description"
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="department">Подразделение *</Label>
-                  <Select value={formData.department} onValueChange={(v) => setFormData({ ...formData, department: v })}>
-                    <SelectTrigger id="department" data-testid="select-department">
-                      <SelectValue placeholder="Выберите подразделение" />
+                  <Label htmlFor="minimumGrade">Минимальный грейд</Label>
+                  <Select
+                    value={formData.minimumGrade}
+                    onValueChange={(value: Grade) => setFormData((prev) => ({ ...prev, minimumGrade: value }))}
+                  >
+                    <SelectTrigger id="minimumGrade" data-testid="select-minimum-grade">
+                      <SelectValue placeholder="Выберите минимальный грейд" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="engineering">Инженерный отдел</SelectItem>
-                      <SelectItem value="design">Отдел дизайна</SelectItem>
-                      <SelectItem value="marketing">Отдел маркетинга</SelectItem>
-                      <SelectItem value="sales">Отдел продаж</SelectItem>
+                      <SelectItem value="D">Грейд D (до 44 баллов)</SelectItem>
+                      <SelectItem value="C">Грейд C (45–64 балла)</SelectItem>
+                      <SelectItem value="B">Грейд B (65–84 балла)</SelectItem>
+                      <SelectItem value="A">Грейд A (85+ баллов)</SelectItem>
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Ставку смогут сделать сотрудники с указанным или более высоким грейдом
+                  </p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="deadline">Дедлайн *</Label>
+                  <Label htmlFor="startingPrice">Начальная ставка (сум)</Label>
                   <Input
-                    id="deadline"
-                    type="date"
-                    value={formData.deadline}
-                    onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
+                    id="startingPrice"
+                    type="number"
+                    min="1"
+                    step="1000"
+                    value={formData.startingPrice}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, startingPrice: e.target.value }))}
                     required
-                    data-testid="input-deadline"
+                    data-testid="input-starting-price"
                   />
+                  <p className="text-xs text-muted-foreground">Будет отображаться в карточке аукциона</p>
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="minimumGrade">Минимальный грейд</Label>
-                <Select value={formData.minimumGrade} onValueChange={(v) => setFormData({ ...formData, minimumGrade: v })}>
-                  <SelectTrigger id="minimumGrade" data-testid="select-minimum-grade">
-                    <SelectValue placeholder="Выберите минимальный грейд" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="D">Грейд D - Все сотрудники</SelectItem>
-                    <SelectItem value="C">Грейд C (≥45 баллов)</SelectItem>
-                    <SelectItem value="B">Грейд B (≥65 баллов)</SelectItem>
-                    <SelectItem value="A">Грейд A (≥85 баллов)</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Только сотрудники с указанным или более высоким грейдом смогут делать ставки
-                </p>
+                <Label htmlFor="deadline">Дедлайн *</Label>
+                <Input
+                  id="deadline"
+                  type="datetime-local"
+                  value={formData.deadline}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, deadline: e.target.value }))}
+                  required
+                  data-testid="input-deadline"
+                />
+              </div>
+            </div>
+
+            <div className="rounded-md border bg-muted/30 p-4 text-sm text-muted-foreground">
+              <div className="flex items-center justify-between">
+                <span>Предпросмотр ставки</span>
+                <span className="font-semibold text-foreground">{formatMoney(previewPrice)}</span>
               </div>
             </div>
 
             <div className="flex gap-3">
-              <Button type="submit" data-testid="button-create-task">
+              <Button type="submit" disabled={mutation.isPending} data-testid="button-create-task">
                 <PlusCircle size={18} />
-                Создать задачу
+                {mutation.isPending ? "Создание..." : "Создать аукцион"}
               </Button>
-              <Button type="button" variant="outline" data-testid="button-cancel">
-                Отмена
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setFormData(DEFAULT_FORM)}
+                data-testid="button-cancel"
+              >
+                Очистить
               </Button>
             </div>
           </form>

@@ -1,98 +1,80 @@
 import { useMemo, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import KanbanBoard, { type KanbanTask } from "@/components/KanbanBoard";
 import TaskDetailDialog from "@/components/TaskDetailDialog";
-import TimeLogDialog from "@/components/TimeLogDialog";
-import { Button } from "@/components/ui/button";
-import { Clock } from "lucide-react";
-import KanbanBoard, { type KanbanTask, type KanbanStatus } from "@/components/KanbanBoard";
-import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Task } from "@shared/schema";
+import { listTasks, updateTaskStatus, type AuctionTaskSummary } from "@/api/adapter";
 import { useToast } from "@/hooks/use-toast";
+import type { SelectUser } from "@shared/schema";
 
 export default function MyTasks() {
-  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
-  const [timeLogOpen, setTimeLogOpen] = useState(false);
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   const { toast } = useToast();
+  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
-  const { data: tasks = [], isLoading } = useQuery<Task[]>({
-    queryKey: ["/api/my-tasks"],
+  const { data: userResponse } = useQuery<{ user: SelectUser | null }>({ queryKey: ["/api/auth/me"] });
+  const currentUser = userResponse?.user;
+
+  const { data: tasks = [], isLoading } = useQuery<AuctionTaskSummary[]>({
+    queryKey: ["tasks", "mine", currentUser?.id],
+    enabled: !!currentUser,
+    queryFn: () =>
+      listTasks({
+        scope: "mine",
+        currentUser: currentUser ? { id: currentUser.id, departmentId: currentUser.departmentId } : null,
+      }),
   });
 
-  const statusMap: Record<Task["status"], KanbanStatus> = {
-    backlog: "backlog",
-    inProgress: "inProgress",
-    underReview: "underReview",
-    completed: "completed",
-    overdue: "inProgress",
-  };
-
-  const formatDate = (value: string | Date) => {
-    const date = typeof value === "string" ? new Date(value) : value;
-    return date.toLocaleDateString("ru-RU", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  };
-
-  const boardTasks = useMemo<KanbanTask[]>(() =>
-    tasks.map((task) => ({
-      id: task.id,
-      title: task.title,
-      description: task.description,
-      status: statusMap[task.status],
-      type: task.type,
-      creatorName: task.creatorName,
-      assigneeName: task.assigneeName ?? undefined,
-      deadline: formatDate(task.deadline),
-      estimatedHours: Number(task.estimatedHours),
-      actualHours: task.actualHours ? Number(task.actualHours) : undefined,
-      rating: task.rating ? Number(task.rating) : undefined,
-    })),
-  [tasks]);
+  const boardTasks = useMemo<KanbanTask[]>(
+    () =>
+      tasks.map((task) => ({
+        id: task.id,
+        title: task.title,
+        description: task.description,
+        status: task.status,
+        creatorName: task.creatorName,
+        minimumGrade: task.minimumGrade,
+        deadline: task.deadline,
+        startingPrice: task.startingPrice,
+        currentPrice: task.currentPrice,
+        bidsCount: task.bidsCount,
+        leadingBidderName: task.leadingBidderName,
+        canBid: task.canBid,
+      })),
+    [tasks],
+  );
 
   const statusMutation = useMutation({
-    mutationFn: async ({ taskId, status }: { taskId: string; status: KanbanStatus }) => {
-      await apiRequest("PATCH", `/api/tasks/${taskId}/status`, { status });
-    },
+    mutationFn: ({ taskId, status }: { taskId: string; status: KanbanTask["status"] }) =>
+      updateTaskStatus(taskId, status),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/my-tasks"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/overview"] });
+      queryClient.invalidateQueries({ queryKey: ["tasks", "mine"], exact: false });
     },
-    onError: (error: any) => {
+    onError: () => {
       toast({
         title: "Не удалось обновить статус",
-        description: error?.message ? String(error.message) : "Попробуйте снова позже",
+        description: "Попробуйте снова позже",
         variant: "destructive",
       });
     },
   });
 
-  const handleTaskClick = (taskId: string) => {
-    setSelectedTaskId(taskId);
-    setDetailDialogOpen(true);
-  };
-
   const selectedTask = selectedTaskId ? tasks.find((task) => task.id === selectedTaskId) : undefined;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Мои задачи</h1>
-          <p className="text-muted-foreground">Задачи, назначенные вам</p>
-        </div>
-        <Button onClick={() => setTimeLogOpen(true)} variant="outline" data-testid="button-log-time-header">
-          <Clock size={18} />
-          Записать время
-        </Button>
+      <div>
+        <h1 className="text-3xl font-bold">Мои аукционы</h1>
+        <p className="text-muted-foreground">Задачи, в которых вы участвуете</p>
       </div>
 
       <KanbanBoard
         tasks={boardTasks}
         isLoading={isLoading}
-        onTaskClick={handleTaskClick}
+        onTaskClick={(taskId) => {
+          setSelectedTaskId(taskId);
+          setDetailDialogOpen(true);
+        }}
         onStatusChange={(taskId, status) => statusMutation.mutate({ taskId, status })}
       />
 
@@ -100,27 +82,22 @@ export default function MyTasks() {
         open={detailDialogOpen}
         onOpenChange={(open) => {
           setDetailDialogOpen(open);
-          if (!open) {
-            setSelectedTaskId(null);
-          }
+          if (!open) setSelectedTaskId(null);
         }}
         task={selectedTask ? {
           id: selectedTask.id,
           title: selectedTask.title,
           description: selectedTask.description,
           status: selectedTask.status,
-          type: selectedTask.type,
           creator: selectedTask.creatorName,
-          assignee: selectedTask.assigneeName ?? undefined,
-          deadline: formatDate(selectedTask.deadline),
-          estimatedHours: Number(selectedTask.estimatedHours),
-          actualHours: selectedTask.actualHours ? Number(selectedTask.actualHours) : undefined,
-          rating: selectedTask.rating ? Number(selectedTask.rating) : undefined,
-          comments: [],
+          deadline: selectedTask.deadline,
+          minimumGrade: selectedTask.minimumGrade,
+          startingPrice: selectedTask.startingPrice,
+          currentPrice: selectedTask.currentPrice,
+          bidsCount: selectedTask.bidsCount,
+          leadingBidderName: selectedTask.leadingBidderName,
         } : undefined}
       />
-
-      <TimeLogDialog open={timeLogOpen} onOpenChange={setTimeLogOpen} />
     </div>
   );
 }

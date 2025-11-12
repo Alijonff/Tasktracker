@@ -1,3 +1,4 @@
+import React from "react";
 import { Star, TrendingUp, TrendingDown } from "lucide-react";
 
 interface RatingDisplayProps {
