@@ -1,25 +1,29 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import UserAvatar from "@/components/UserAvatar";
-import RatingDisplay from "@/components/RatingDisplay";
-import { Calendar, Clock, Briefcase } from "lucide-react";
+import GradeBadge from "@/components/GradeBadge";
+import StatusBadge from "@/components/StatusBadge";
+import { Gavel, UsersRound } from "lucide-react";
+import type { AuctionStatus, Grade } from "@/api/adapter";
+import { formatDateTime, formatMoney } from "@/lib/formatters";
 
-export type KanbanStatus = "backlog" | "inProgress" | "underReview" | "completed";
+export type KanbanStatus = AuctionStatus;
 
 export interface KanbanTask {
   id: string;
   title: string;
   description: string;
   status: KanbanStatus;
-  type: "individual" | "auction";
   creatorName: string;
-  assigneeName?: string | null;
+  minimumGrade: Grade;
   deadline: string;
-  estimatedHours: number;
-  actualHours?: number | null;
-  rating?: number | null;
+  startingPrice: number;
+  currentPrice?: number;
+  bidsCount: number;
+  leadingBidderName?: string;
+  canBid: boolean;
 }
 
 interface KanbanBoardProps {
@@ -33,20 +37,32 @@ interface KanbanBoardProps {
 const columnConfig: Record<KanbanStatus, { title: string; description: string }> = {
   backlog: {
     title: "Бэклог",
-    description: "Задачи, ожидающие старта",
+    description: "Аукционы ожидают старта",
   },
   inProgress: {
     title: "В работе",
-    description: "Текущие задачи исполнителей",
+    description: "Ведутся работы по аукциону",
   },
   underReview: {
     title: "На проверке",
-    description: "Задачи, ожидающие приёмки",
+    description: "Результат ожидает подтверждения",
   },
   completed: {
-    title: "Выполнено",
-    description: "Завершённые задачи",
+    title: "Завершена",
+    description: "Аукцион закрыт",
   },
+};
+
+export const allowedTransitions: Record<KanbanStatus, KanbanStatus[]> = {
+  backlog: ["inProgress"],
+  inProgress: ["underReview"],
+  underReview: ["inProgress", "completed"],
+  completed: [],
+};
+
+export const isAllowedTransition = (from: KanbanStatus, to: KanbanStatus): boolean => {
+  if (from === to) return true;
+  return allowedTransitions[from]?.includes(to) ?? false;
 };
 
 interface ColumnData {
@@ -72,9 +88,7 @@ function KanbanCard({
   onDragEnd: () => void;
   isDragging: boolean;
 }) {
-  const hoursLabel = task.actualHours !== undefined && task.actualHours !== null
-    ? `${task.actualHours}/${task.estimatedHours}ч`
-    : `${task.estimatedHours}ч`;
+  const priceLabel = task.currentPrice ?? task.startingPrice;
 
   return (
     <Card
@@ -91,44 +105,49 @@ function KanbanCard({
             <h3 className="font-semibold leading-tight line-clamp-2">{task.title}</h3>
             <p className="text-sm text-muted-foreground line-clamp-2">{task.description}</p>
           </div>
-          <Badge variant={task.type === "auction" ? "secondary" : "outline"} className="whitespace-nowrap">
-            {task.type === "auction" ? "Аукцион" : "Задача"}
-          </Badge>
+          <StatusBadge status={task.status} />
         </div>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-4">
         <div className="flex items-center justify-between text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
             <UserAvatar name={task.creatorName} size="sm" />
-            <span>Создатель</span>
+            <span>{task.creatorName}</span>
           </div>
-          {task.assigneeName && (
-            <div className="flex items-center gap-2">
-              <span>Исполнитель</span>
-              <UserAvatar name={task.assigneeName} size="sm" />
-            </div>
-          )}
+          <GradeBadge grade={task.minimumGrade} />
         </div>
         <Separator />
-        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
-          <div className="flex items-center gap-1">
-            <Calendar size={14} />
-            <span>{task.deadline}</span>
+        <div className="grid gap-3 text-sm text-muted-foreground">
+          <div className="flex items-center justify-between">
+            <span>Дедлайн</span>
+            <span className="font-mono">{formatDateTime(task.deadline)}</span>
           </div>
-          <div className="flex items-center gap-1">
-            <Clock size={14} />
-            <span className="font-mono">{hoursLabel}</span>
+          <div className="flex items-center justify-between">
+            <span>Текущая ставка</span>
+            <span className="font-semibold text-foreground">{formatMoney(priceLabel)}</span>
           </div>
-          {task.type === "auction" && (
-            <div className="flex items-center gap-1">
-              <Briefcase size={14} />
-              <span>Ставки открыты</span>
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <UsersRound size={16} />
+              Ставок
+            </span>
+            <Badge variant="secondary">{task.bidsCount}</Badge>
+          </div>
+          {task.leadingBidderName && (
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <Gavel size={16} />
+                Лидер аукциона
+              </span>
+              <span className="font-medium text-foreground">{task.leadingBidderName}</span>
             </div>
           )}
-          {task.rating !== undefined && task.rating !== null && (
-            <RatingDisplay rating={task.rating} size="sm" />
-          )}
         </div>
+        {!task.canBid && (
+          <div className="text-xs text-muted-foreground">
+            Ставки закрыты для этого аукциона
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -155,7 +174,7 @@ function KanbanColumn({
       onDragEnter={(event) => onDragOver(event, column.status)}
       onDragLeave={onDragLeave}
       onDrop={(event) => onDrop(event, column.status)}
-      className={`flex h-full min-h-[280px] flex-col rounded-lg border bg-muted/30 p-3 transition-colors ${
+      className={`flex h-full min-h-[320px] flex-col rounded-lg border bg-muted/30 p-3 transition-colors ${
         isActive ? "border-primary/60 bg-primary/5" : "border-transparent"
       }`}
     >
@@ -170,7 +189,7 @@ function KanbanColumn({
         {children}
         {column.tasks.length === 0 && (
           <div className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">
-            Нет задач
+            Нет аукционов
           </div>
         )}
       </div>
@@ -183,22 +202,28 @@ export default function KanbanBoard({
   onStatusChange,
   onTaskClick,
   isLoading = false,
-  emptyMessage = "Нет задач по выбранным условиям",
+  emptyMessage = "Нет аукционов по выбранным условиям",
 }: KanbanBoardProps) {
-  const createEmptyColumns = useCallback((): Record<KanbanStatus, KanbanTask[]> => ({
-    backlog: [],
-    inProgress: [],
-    underReview: [],
-    completed: [],
-  }), []);
+  const createEmptyColumns = useCallback(
+    (): Record<KanbanStatus, KanbanTask[]> => ({
+      backlog: [],
+      inProgress: [],
+      underReview: [],
+      completed: [],
+    }),
+    [],
+  );
 
-  const groupTasks = useCallback((list: KanbanTask[]) => {
-    const grouping = createEmptyColumns();
-    list.forEach((task) => {
-      grouping[task.status].push(task);
-    });
-    return grouping;
-  }, [createEmptyColumns]);
+  const groupTasks = useCallback(
+    (list: KanbanTask[]) => {
+      const grouping = createEmptyColumns();
+      list.forEach((task) => {
+        grouping[task.status].push(task);
+      });
+      return grouping;
+    },
+    [createEmptyColumns],
+  );
 
   const [columns, setColumns] = useState<Record<KanbanStatus, KanbanTask[]>>(() => groupTasks(tasks));
   const [activeColumn, setActiveColumn] = useState<KanbanStatus | null>(null);
@@ -208,12 +233,14 @@ export default function KanbanBoard({
     setColumns(groupTasks(tasks));
   }, [tasks, groupTasks]);
 
-  const columnEntries: ColumnData[] = useMemo(() => (
-    (Object.keys(columns) as KanbanStatus[]).map((status) => ({
-      status,
-      tasks: columns[status],
-    }))
-  ), [columns]);
+  const columnEntries: ColumnData[] = useMemo(
+    () =>
+      (Object.keys(columns) as KanbanStatus[]).map((status) => ({
+        status,
+        tasks: columns[status],
+      })),
+    [columns],
+  );
 
   const resetDragState = () => {
     setActiveColumn(null);
@@ -233,7 +260,7 @@ export default function KanbanBoard({
     setActiveColumn(status);
   };
 
-  const handleColumnDrop = (event: React.DragEvent<HTMLDivElement>, status: KanbanStatus) => {
+    const handleColumnDrop = (event: React.DragEvent<HTMLDivElement>, status: KanbanStatus) => {
     event.preventDefault();
     const raw = event.dataTransfer.getData("application/json");
     resetDragState();
@@ -243,6 +270,10 @@ export default function KanbanBoard({
     try {
       parsed = JSON.parse(raw) as DragPayload;
     } catch {
+      return;
+    }
+
+    if (!isAllowedTransition(parsed.fromStatus, status)) {
       return;
     }
 
@@ -260,7 +291,7 @@ export default function KanbanBoard({
       const updatedTask: KanbanTask = { ...movedTask, status };
 
       if (parsed.fromStatus === status) {
-        sourceTasks.push(updatedTask);
+        sourceTasks.splice(taskIndex, 0, updatedTask);
         current[status] = sourceTasks;
       } else {
         current[parsed.fromStatus] = sourceTasks;

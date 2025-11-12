@@ -42,7 +42,7 @@ export default function OrganizationTreeExample() {
 
   return (
     <div className="p-4">
-      <OrganizationTree data={orgData} />
+      <OrganizationTree data={orgData} storageKey="example-org-tree" />
     </div>
   );
 }

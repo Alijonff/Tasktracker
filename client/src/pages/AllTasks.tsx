@@ -1,252 +1,150 @@
 import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { ListTodo } from "lucide-react";
-import KanbanBoard, { type KanbanTask, type KanbanStatus } from "@/components/KanbanBoard";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { listTasks, updateTaskStatus, type AuctionTaskSummary } from "@/api/adapter";
+import KanbanBoard, { type KanbanTask } from "@/components/KanbanBoard";
 import TaskDetailDialog from "@/components/TaskDetailDialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Task, Management, Division, Department, SelectUser } from "@shared/schema";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-
-interface ScopeFilter {
-  departmentId?: string;
-  managementId?: string;
-  divisionId?: string;
-}
-
-function formatDate(value: string | Date) {
-  const date = typeof value === "string" ? new Date(value) : value;
-  return date.toLocaleDateString("ru-RU", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
+import type { SelectUser } from "@shared/schema";
+import { Search } from "lucide-react";
 
 export default function AllTasks() {
-  const [structureFilter, setStructureFilter] = useState<string>("all");
-  const [employeeFilter, setEmployeeFilter] = useState<string>("all");
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  const { toast } = useToast();
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [participant, setParticipant] = useState("all");
+  const [onlyMyDepartment, setOnlyMyDepartment] = useState(true);
 
-  const { data: authData } = useQuery<{ user: SelectUser | null }>({
-    queryKey: ["/api/auth/me"],
-  });
-  const currentUser = authData?.user ?? null;
-
-  const { data: departments = [] } = useQuery<Department[]>({
-    queryKey: ["/api/departments"],
-  });
-  const { data: managements = [] } = useQuery<Management[]>({
-    queryKey: ["/api/managements"],
-  });
-  const { data: divisions = [] } = useQuery<Division[]>({
-    queryKey: ["/api/divisions"],
-  });
-  const { data: employees = [] } = useQuery<SelectUser[]>({
-    queryKey: ["/api/employees"],
-  });
+  const { data: userResponse } = useQuery<{ user: SelectUser | null }>({ queryKey: ["/api/auth/me"] });
+  const currentUser = userResponse?.user;
 
   useEffect(() => {
-    if (!currentUser) return;
-    if (currentUser.role !== "admin" && currentUser.departmentId && structureFilter === "all") {
-      setStructureFilter(`department:${currentUser.departmentId}`);
-    }
-  }, [currentUser, structureFilter]);
+    const handler = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(handler);
+  }, [search]);
 
-  const scope = useMemo<ScopeFilter>(() => {
-    if (!currentUser) return {};
-
-    if (structureFilter === "all") {
-      if (currentUser.role !== "admin" && currentUser.departmentId) {
-        return { departmentId: currentUser.departmentId };
-      }
-      return {};
-    }
-
-    const [type, id] = structureFilter.split(":");
-    if (!type || !id) return {};
-
-    if (type === "department") {
-      return { departmentId: id };
-    }
-
-    if (type === "management") {
-      const management = managements.find((item) => item.id === id);
-      if (!management) return {};
-      return { departmentId: management.departmentId, managementId: management.id };
-    }
-
-    if (type === "division") {
-      const division = divisions.find((item) => item.id === id);
-      if (!division) return {};
-      return {
-        departmentId: division.departmentId,
-        managementId: division.managementId ?? undefined,
-        divisionId: division.id,
-      };
-    }
-
-    return {};
-  }, [structureFilter, currentUser, managements, divisions]);
-
-  const queryParams = useMemo(() => {
-    const params: Record<string, string> = {};
-    if (scope.departmentId) params.departmentId = scope.departmentId;
-    if (scope.managementId) params.managementId = scope.managementId;
-    if (scope.divisionId) params.divisionId = scope.divisionId;
-    if (employeeFilter !== "all") params.participantId = employeeFilter;
-    return params;
-  }, [scope, employeeFilter]);
-
-  const { data: tasks = [], isLoading } = useQuery<Task[]>({
-    queryKey: ["/api/tasks", queryParams],
+  const { data: tasks = [], isLoading } = useQuery<AuctionTaskSummary[]>({
+    queryKey: ["tasks", "all", { search: debouncedSearch, participant, onlyMyDepartment }],
     enabled: !!currentUser,
+    queryFn: () =>
+      listTasks({
+        scope: "all",
+        search: debouncedSearch,
+        participantId: participant !== "all" ? participant : undefined,
+        onlyMyDepartment,
+        currentUser: currentUser ? { id: currentUser.id, departmentId: currentUser.departmentId } : null,
+      }),
   });
 
-  const statusMap: Record<Task["status"], KanbanStatus> = {
-    backlog: "backlog",
-    inProgress: "inProgress",
-    underReview: "underReview",
-    completed: "completed",
-    overdue: "inProgress",
-  };
-
-  const boardTasks = useMemo<KanbanTask[]>(() =>
-    tasks.map((task) => ({
-      id: task.id,
-      title: task.title,
-      description: task.description,
-      status: statusMap[task.status],
-      type: task.type,
-      creatorName: task.creatorName,
-      assigneeName: task.assigneeName ?? undefined,
-      deadline: formatDate(task.deadline),
-      estimatedHours: Number(task.estimatedHours),
-      actualHours: task.actualHours ? Number(task.actualHours) : undefined,
-      rating: task.rating ? Number(task.rating) : undefined,
-    })),
-  [tasks]);
-
-  const employeesForFilter = useMemo(() => {
-    if (employees.length === 0) return employees;
-
-    return employees.filter((employee) => {
-      if (scope.divisionId) {
-        return employee.divisionId === scope.divisionId;
-      }
-      if (scope.managementId) {
-        return employee.managementId === scope.managementId;
-      }
-      if (scope.departmentId) {
-        return employee.departmentId === scope.departmentId;
-      }
-      if (currentUser?.role !== "admin" && currentUser?.departmentId) {
-        return employee.departmentId === currentUser.departmentId;
-      }
-      return true;
-    });
-  }, [employees, scope, currentUser]);
-
-  useEffect(() => {
-    if (employeeFilter === "all") return;
-    if (!employeesForFilter.some((employee) => employee.id === employeeFilter)) {
-      setEmployeeFilter("all");
-    }
-  }, [employeesForFilter, employeeFilter]);
+  const boardTasks = useMemo<KanbanTask[]>(
+    () =>
+      tasks.map((task) => ({
+        id: task.id,
+        title: task.title,
+        description: task.description,
+        status: task.status,
+        creatorName: task.creatorName,
+        minimumGrade: task.minimumGrade,
+        deadline: task.deadline,
+        startingPrice: task.startingPrice,
+        currentPrice: task.currentPrice,
+        bidsCount: task.bidsCount,
+        leadingBidderName: task.leadingBidderName,
+        canBid: task.canBid,
+      })),
+    [tasks],
+  );
 
   const statusMutation = useMutation({
-    mutationFn: async ({ taskId, status }: { taskId: string; status: KanbanStatus }) => {
-      await apiRequest("PATCH", `/api/tasks/${taskId}/status`, { status });
-    },
+    mutationFn: ({ taskId, status }: { taskId: string; status: KanbanTask["status"] }) =>
+      updateTaskStatus(taskId, status),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/my-tasks"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/overview"] });
+      queryClient.invalidateQueries({ queryKey: ["tasks", "all"], exact: false });
     },
-    onError: (error: any) => {
+    onError: () => {
       toast({
         title: "Не удалось обновить статус",
-        description: error?.message ? String(error.message) : "Попробуйте снова",
+        description: "Попробуйте снова позже",
         variant: "destructive",
       });
     },
   });
 
-  const handleTaskClick = (taskId: string) => {
-    setSelectedTaskId(taskId);
-    setDetailDialogOpen(true);
-  };
+  const participants = useMemo(() => {
+    const unique = new Map<string, { id: string; name: string }>();
+    tasks.forEach((task) => {
+      unique.set(task.creatorId, { id: task.creatorId, name: task.creatorName });
+      if (task.leadingBidderId && task.leadingBidderName) {
+        unique.set(task.leadingBidderId, { id: task.leadingBidderId, name: task.leadingBidderName });
+      }
+    });
+    return Array.from(unique.values());
+  }, [tasks]);
 
   const selectedTask = selectedTaskId ? tasks.find((task) => task.id === selectedTaskId) : undefined;
 
-  const structureOptions = useMemo(() => {
-    const options: { value: string; label: string }[] = [];
-    if (currentUser?.role === "admin") {
-      options.push({ value: "all", label: "Все департаменты" });
-    }
-    departments.forEach((department) => {
-      options.push({ value: `department:${department.id}`, label: `Департамент · ${department.name}` });
-    });
-    managements.forEach((management) => {
-      options.push({ value: `management:${management.id}`, label: `Управление · ${management.name}` });
-    });
-    divisions.forEach((division) => {
-      options.push({ value: `division:${division.id}`, label: `Отдел · ${division.name}` });
-    });
-    return options;
-  }, [departments, managements, divisions, currentUser]);
-
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <div className="p-3 rounded-md bg-primary/10">
-          <ListTodo className="text-primary" size={32} />
+      <div>
+        <h1 className="text-3xl font-bold">Все аукционы</h1>
+        <p className="text-muted-foreground">Общая доска департамента</p>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="md:col-span-2">
+          <Label htmlFor="search" className="text-sm text-muted-foreground">Поиск по названию</Label>
+          <div className="relative mt-2">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
+            <Input
+              id="search"
+              placeholder="Введите название задачи"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              className="pl-10"
+            />
+          </div>
         </div>
+
         <div>
-          <h1 className="text-3xl font-bold">Все задачи</h1>
-          <p className="text-muted-foreground">Общая доска задач организации</p>
+          <Label className="text-sm text-muted-foreground">Участники</Label>
+          <Select value={participant} onValueChange={setParticipant}>
+            <SelectTrigger className="mt-2">
+              <SelectValue placeholder="Все" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Все участники</SelectItem>
+              {participants.map((item) => (
+                <SelectItem key={item.id} value={item.id}>
+                  {item.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex items-end gap-3">
+          <div className="flex flex-col gap-1">
+            <Label className="text-sm text-muted-foreground">Только мой департамент</Label>
+            <Switch checked={onlyMyDepartment} onCheckedChange={setOnlyMyDepartment} />
+          </div>
         </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3" data-testid="container-task-filters">
-        <Select value={structureFilter} onValueChange={setStructureFilter}>
-          <SelectTrigger className="w-full" data-testid="select-structure-filter">
-            <SelectValue placeholder="Структурная единица" />
-          </SelectTrigger>
-          <SelectContent>
-            {structureOptions.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
-          <SelectTrigger className="w-full" data-testid="select-employee-filter">
-            <SelectValue placeholder="Сотрудник" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Все сотрудники</SelectItem>
-            {employeesForFilter.map((employee) => (
-              <SelectItem key={employee.id} value={employee.id}>
-                {employee.name} ({employee.username})
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="text-sm text-muted-foreground">
-        Найдено задач: {tasks.length}
-      </div>
+      <div className="text-sm text-muted-foreground">Найдено аукционов: {tasks.length}</div>
 
       <KanbanBoard
         tasks={boardTasks}
         isLoading={isLoading}
-        onTaskClick={handleTaskClick}
+        onTaskClick={(taskId) => {
+          setSelectedTaskId(taskId);
+          setDetailDialogOpen(true);
+        }}
         onStatusChange={(taskId, status) => statusMutation.mutate({ taskId, status })}
       />
 
@@ -254,23 +152,20 @@ export default function AllTasks() {
         open={detailDialogOpen}
         onOpenChange={(open) => {
           setDetailDialogOpen(open);
-          if (!open) {
-            setSelectedTaskId(null);
-          }
+          if (!open) setSelectedTaskId(null);
         }}
         task={selectedTask ? {
           id: selectedTask.id,
           title: selectedTask.title,
           description: selectedTask.description,
           status: selectedTask.status,
-          type: selectedTask.type,
           creator: selectedTask.creatorName,
-          assignee: selectedTask.assigneeName ?? undefined,
-          deadline: formatDate(selectedTask.deadline),
-          estimatedHours: Number(selectedTask.estimatedHours),
-          actualHours: selectedTask.actualHours ? Number(selectedTask.actualHours) : undefined,
-          rating: selectedTask.rating ? Number(selectedTask.rating) : undefined,
-          comments: [],
+          deadline: selectedTask.deadline,
+          minimumGrade: selectedTask.minimumGrade,
+          startingPrice: selectedTask.startingPrice,
+          currentPrice: selectedTask.currentPrice,
+          bidsCount: selectedTask.bidsCount,
+          leadingBidderName: selectedTask.leadingBidderName,
         } : undefined}
       />
     </div>

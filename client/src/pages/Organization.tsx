@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import {
@@ -13,7 +13,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import PositionCell, { PositionType, positionLabels } from "@/components/PositionCell";
+import OrganizationTree, { type OrgNode } from "@/components/OrganizationTree";
 import { Plus, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { Department, Management, Division, SelectUser } from "@shared/schema";
@@ -915,6 +917,85 @@ export default function Organization() {
   });
 
   const currentUser = authData?.user;
+  const managementDeputyStorageKey = currentUser ? `org-management-deputy-${currentUser.id}` : 'org-management-deputy';
+  const [managementDeputies, setManagementDeputies] = useState<Record<string, string | null>>(() => {
+    try {
+      const stored = localStorage.getItem(managementDeputyStorageKey);
+      if (!stored) return {};
+      const parsed = JSON.parse(stored);
+      return typeof parsed === 'object' && parsed ? parsed : {};
+    } catch {
+      return {};
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem(managementDeputyStorageKey, JSON.stringify(managementDeputies));
+  }, [managementDeputies, managementDeputyStorageKey]);
+
+  const treeStorageKey = currentUser ? `org-tree-${currentUser.id}` : 'org-tree';
+
+  const orgTreeData = useMemo<OrgNode[]>(() => {
+    return departments.map((department) => {
+      const deptEmployees = employees.filter((emp) => emp.departmentId === department.id);
+      const director = deptEmployees.find((emp) => emp.role === 'director');
+
+      const managementNodes = managements
+        .filter((management) => management.departmentId === department.id)
+        .map((management) => {
+          const managementEmployees = deptEmployees.filter((emp) => emp.managementId === management.id);
+          const managementHead = managementEmployees.find((emp) => emp.role === 'manager' && !emp.divisionId);
+          const divisionNodes = divisions
+            .filter((division) => division.managementId === management.id)
+            .map((division) => {
+              const divisionEmployees = managementEmployees.filter((emp) => emp.divisionId === division.id);
+              const divisionHead = divisionEmployees.find((emp) => emp.role === 'manager');
+              return {
+                id: division.id,
+                name: division.name,
+                type: 'division' as const,
+                leader: division.leaderName ?? divisionHead?.name ?? undefined,
+                employeeCount: divisionEmployees.length,
+                children: divisionEmployees.map((emp) => ({
+                  id: emp.id,
+                  name: emp.name ?? emp.username,
+                  type: 'employee' as const,
+                  points: typeof emp.points === 'number' ? emp.points : undefined,
+                  rating: parseRating(emp.rating),
+                })),
+              };
+            });
+
+          const managementLevelEmployees = managementEmployees
+            .filter((emp) => !emp.divisionId)
+            .map((emp) => ({
+              id: emp.id,
+              name: emp.name ?? emp.username,
+              type: 'employee' as const,
+              points: typeof emp.points === 'number' ? emp.points : undefined,
+              rating: parseRating(emp.rating),
+            }));
+
+          return {
+            id: management.id,
+            name: management.name,
+            type: 'management' as const,
+            leader: management.leaderName ?? managementHead?.name ?? undefined,
+            employeeCount: managementEmployees.length,
+            children: [...divisionNodes, ...managementLevelEmployees],
+          };
+        });
+
+    return {
+      id: department.id,
+      name: department.name,
+      type: 'department' as const,
+      leader: department.leaderName ?? director?.name ?? undefined,
+      employeeCount: deptEmployees.length,
+      children: managementNodes,
+    };
+  });
+  }, [departments, managements, divisions, employees]);
 
   const canEditDepartment = (departmentId: string) => {
     if (!currentUser) return false;
@@ -963,6 +1044,10 @@ export default function Organization() {
           Создать структуру
         </Button>
       </div>
+
+      {orgTreeData.length > 0 && (
+        <OrganizationTree data={orgTreeData} storageKey={treeStorageKey} />
+      )}
 
       {departments.length === 0 ? (
         <div className="border rounded-lg p-12 text-center">
@@ -1020,6 +1105,8 @@ export default function Organization() {
                       departmentManagements.map((management) => {
                         const managementEmployees = departmentEmployees.filter((emp) => emp.managementId === management.id);
                         const managementHead = managementEmployees.find((emp) => emp.role === "manager" && !emp.divisionId);
+                        const deputyId = managementDeputies[management.id] ?? null;
+                        const managementDeputy = deputyId ? managementEmployees.find((emp) => emp.id === deputyId) ?? null : null;
                         const managementDivisions = divisions.filter((division) => division.managementId === management.id);
 
                         return (
@@ -1043,6 +1130,38 @@ export default function Organization() {
                                 canEdit={canEdit}
                                 onClick={canEdit ? () => openSlot({ positionType: "management_head", departmentId: department.id, departmentName: department.name, managementId: management.id, managementName: management.name, employee: managementHead }) : undefined}
                               />
+
+                              <div className="space-y-3">
+                                <p className="text-sm font-medium">Заместитель руководителя управления</p>
+                                <PositionCell
+                                  positionType="management_deputy"
+                                  employee={managementDeputy ? { id: managementDeputy.id, name: managementDeputy.name, rating: parseRating(managementDeputy.rating) } : undefined}
+                                  canEdit={false}
+                                />
+                                {canEdit && (
+                                  <Select
+                                    value={deputyId ?? 'none'}
+                                    onValueChange={(value) =>
+                                      setManagementDeputies((prev) => ({
+                                        ...prev,
+                                        [management.id]: value === 'none' ? null : value,
+                                      }))
+                                    }
+                                  >
+                                    <SelectTrigger className="w-full sm:w-64">
+                                      <SelectValue placeholder="Выберите сотрудника" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="none">Нет заместителя</SelectItem>
+                                      {managementEmployees.map((emp) => (
+                                        <SelectItem key={emp.id} value={emp.id}>
+                                          {emp.name} ({emp.username})
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                )}
+                              </div>
 
                               <div className="space-y-4">
                                 {managementDivisions.length === 0 ? (

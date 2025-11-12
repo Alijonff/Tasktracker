@@ -1,3 +1,4 @@
+import React from "react";
 import { Badge } from "@/components/ui/badge";
 
 export type TaskStatus = "backlog" | "inProgress" | "underReview" | "completed" | "overdue";
