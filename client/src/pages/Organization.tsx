@@ -16,7 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import PositionCell, { PositionType, positionLabels } from "@/components/PositionCell";
 import OrganizationTree, { type OrgNode } from "@/components/OrganizationTree";
-import { Plus, X } from "lucide-react";
+import { Plus, X, ChevronDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { Department, Management, Division, SelectUser } from "@shared/schema";
 import {
@@ -34,6 +34,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 interface ManagementFormData {
   id: string;
@@ -917,23 +918,50 @@ export default function Organization() {
   });
 
   const currentUser = authData?.user;
-  const managementDeputyStorageKey = currentUser ? `org-management-deputy-${currentUser.id}` : 'org-management-deputy';
-  const [managementDeputies, setManagementDeputies] = useState<Record<string, string | null>>(() => {
-    try {
-      const stored = localStorage.getItem(managementDeputyStorageKey);
-      if (!stored) return {};
-      const parsed = JSON.parse(stored);
-      return typeof parsed === 'object' && parsed ? parsed : {};
-    } catch {
-      return {};
-    }
-  });
+  const managementDeputyStorageKey = currentUser ? `org-management-deputy-${currentUser.id}` : "org-management-deputy";
+  const collapsibleStorageKey = currentUser ? `org-sections-${currentUser.id}` : "org-sections";
+  const treeStorageKey = currentUser ? `org-tree-${currentUser.id}` : "org-tree";
+
+  const [managementDeputies, setManagementDeputies] = useState<Record<string, string | null>>({});
+  const [sectionState, setSectionState] = useState<Record<string, boolean>>({});
+
+  const getSectionOpen = (id: string, fallback = true) => (id in sectionState ? sectionState[id] : fallback);
+  const handleSectionToggle = (id: string, open: boolean) => {
+    setSectionState((prev) => {
+      if (prev[id] === open) return prev;
+      return { ...prev, [id]: open };
+    });
+  };
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const storedDeputies = localStorage.getItem(managementDeputyStorageKey);
+      setManagementDeputies(storedDeputies ? JSON.parse(storedDeputies) : {});
+    } catch {
+      setManagementDeputies({});
+    }
+  }, [managementDeputyStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const storedSections = localStorage.getItem(collapsibleStorageKey);
+      setSectionState(storedSections ? JSON.parse(storedSections) : {});
+    } catch {
+      setSectionState({});
+    }
+  }, [collapsibleStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
     localStorage.setItem(managementDeputyStorageKey, JSON.stringify(managementDeputies));
   }, [managementDeputies, managementDeputyStorageKey]);
 
-  const treeStorageKey = currentUser ? `org-tree-${currentUser.id}` : 'org-tree';
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(collapsibleStorageKey, JSON.stringify(sectionState));
+  }, [sectionState, collapsibleStorageKey]);
 
   const orgTreeData = useMemo<OrgNode[]>(() => {
     return departments.map((department) => {
@@ -1004,6 +1032,8 @@ export default function Organization() {
     return false;
   };
 
+  const canCreateStructure = currentUser?.role === "admin";
+
   const openSlot = (slot: SlotSelection) => {
     setSelectedSlot(slot);
     setIsEmployeeDialogOpen(true);
@@ -1039,10 +1069,12 @@ export default function Organization() {
           <h1 className="text-3xl font-bold">Структура организации</h1>
           <p className="text-muted-foreground">Управляйте департаментами, управлениями, отделами и сотрудниками</p>
         </div>
-        <Button onClick={() => setIsDialogOpen(true)} data-testid="button-add-department">
-          <Plus size={18} className="mr-2" />
-          Создать структуру
-        </Button>
+        {canCreateStructure && (
+          <Button onClick={() => setIsDialogOpen(true)} data-testid="button-add-department">
+            <Plus size={18} className="mr-2" />
+            Создать структуру
+          </Button>
+        )}
       </div>
 
       {orgTreeData.length > 0 && (
@@ -1050,12 +1082,16 @@ export default function Organization() {
       )}
 
       {departments.length === 0 ? (
-        <div className="border rounded-lg p-12 text-center">
-          <p className="text-muted-foreground mb-4">Структура организации пока не создана</p>
-          <Button onClick={() => setIsDialogOpen(true)} variant="outline">
-            <Plus size={18} className="mr-2" />
-            Создать первый департамент
-          </Button>
+        <div className="border rounded-lg p-12 text-center space-y-4">
+          <p className="text-muted-foreground">Структура организации пока не создана</p>
+          {canCreateStructure ? (
+            <Button onClick={() => setIsDialogOpen(true)} variant="outline">
+              <Plus size={18} className="mr-2" />
+              Создать первый департамент
+            </Button>
+          ) : (
+            <p className="text-sm text-muted-foreground">Обратитесь к администратору для создания структуры.</p>
+          )}
         </div>
       ) : (
         <div className="space-y-6">
@@ -1068,62 +1104,133 @@ export default function Organization() {
 
             return (
               <Card key={department.id}>
-                <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <CardTitle>{department.name}</CardTitle>
-                    <p className="text-sm text-muted-foreground">Директор и заместитель находятся на верхнем уровне дерева</p>
-                  </div>
-                  {canEdit && (
-                    <Button variant="outline" size="sm" onClick={() => openManagementDialog(department)}>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Добавить управление
-                    </Button>
-                  )}
+                <CardHeader className="space-y-2">
+                  <CardTitle>{department.name}</CardTitle>
+                  <p className="text-sm text-muted-foreground">Директор и заместитель находятся на верхнем уровне дерева</p>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <PositionCell
-                      positionType="director"
-                      employee={director ? { id: director.id, name: director.name, rating: parseRating(director.rating) } : undefined}
-                      canEdit={canEdit}
-                      onClick={canEdit ? () => openSlot({ positionType: "director", departmentId: department.id, departmentName: department.name, employee: director }) : undefined}
-                    />
-                    <PositionCell
-                      positionType="deputy"
-                      employee={deputy ? { id: deputy.id, name: deputy.name, rating: parseRating(deputy.rating) } : undefined}
-                      canEdit={canEdit}
-                      onClick={canEdit ? () => openSlot({ positionType: "deputy", departmentId: department.id, departmentName: department.name, employee: deputy }) : undefined}
-                    />
-                  </div>
+                  {(() => {
+                    const leadersSectionId = `leaders-${department.id}`;
+                    const leadersOpen = getSectionOpen(leadersSectionId, true);
+                    return (
+                      <Collapsible
+                        open={leadersOpen}
+                        onOpenChange={(open) => handleSectionToggle(leadersSectionId, open)}
+                      >
+                        <div className="flex items-center justify-between rounded-md border bg-muted/40 px-4 py-3">
+                          <div>
+                            <p className="font-medium">Руководство департамента</p>
+                            <p className="text-xs text-muted-foreground">Директор и заместитель департамента</p>
+                          </div>
+                          <CollapsibleTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label="Переключить руководство департамента"
+                              className={`h-8 w-8 rounded-full transition-transform ${leadersOpen ? "" : "-rotate-90"}`}
+                            >
+                              <ChevronDown className="h-4 w-4" />
+                            </Button>
+                          </CollapsibleTrigger>
+                        </div>
+                        <CollapsibleContent className="pt-4">
+                          <div className="grid gap-4 sm:grid-cols-2">
+                            <PositionCell
+                              positionType="director"
+                              employee={director ? { id: director.id, name: director.name, rating: parseRating(director.rating) } : undefined}
+                              canEdit={canEdit}
+                              onClick={canEdit ? () => openSlot({ positionType: "director", departmentId: department.id, departmentName: department.name, employee: director }) : undefined}
+                            />
+                            <PositionCell
+                              positionType="deputy"
+                              employee={deputy ? { id: deputy.id, name: deputy.name, rating: parseRating(deputy.rating) } : undefined}
+                              canEdit={canEdit}
+                              onClick={canEdit ? () => openSlot({ positionType: "deputy", departmentId: department.id, departmentName: department.name, employee: deputy }) : undefined}
+                            />
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    );
+                  })()}
 
-                  <div className="space-y-4">
-                    {departmentManagements.length === 0 ? (
-                      <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-                        Управления пока не созданы. {canEdit ? "Добавьте первое управление, чтобы продолжить построение структуры." : "Обратитесь к администратору или директору департамента."}
-                      </div>
-                    ) : (
-                      departmentManagements.map((management) => {
-                        const managementEmployees = departmentEmployees.filter((emp) => emp.managementId === management.id);
-                        const managementHead = managementEmployees.find((emp) => emp.role === "manager" && !emp.divisionId);
-                        const deputyId = managementDeputies[management.id] ?? null;
-                        const managementDeputy = deputyId ? managementEmployees.find((emp) => emp.id === deputyId) ?? null : null;
-                        const managementDivisions = divisions.filter((division) => division.managementId === management.id);
+                  {(() => {
+                    const managementSectionId = `department-managements-${department.id}`;
+                    const managementOpen = getSectionOpen(managementSectionId, true);
+                    return (
+                      <Collapsible
+                        open={managementOpen}
+                        onOpenChange={(open) => handleSectionToggle(managementSectionId, open)}
+                      >
+                        <div className="flex flex-col gap-3 rounded-md border bg-muted/40 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <p className="font-medium">Управления и отделы</p>
+                            <p className="text-xs text-muted-foreground">Полная структура департамента по управлениям</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {canEdit && (
+                              <Button variant="outline" size="sm" onClick={() => openManagementDialog(department)}>
+                                <Plus className="h-4 w-4 mr-2" />
+                                Добавить управление
+                              </Button>
+                            )}
+                            <CollapsibleTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label="Переключить список управлений"
+                                className={`h-8 w-8 rounded-full transition-transform ${managementOpen ? "" : "-rotate-90"}`}
+                              >
+                                <ChevronDown className="h-4 w-4" />
+                              </Button>
+                            </CollapsibleTrigger>
+                          </div>
+                        </div>
+                        <CollapsibleContent className="pt-4 space-y-4">
+                          {departmentManagements.length === 0 ? (
+                            <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
+                              Управления пока не созданы. {canEdit ? "Добавьте первое управление, чтобы продолжить построение структуры." : "Обратитесь к администратору или директору департамента."}
+                            </div>
+                          ) : (
+                            departmentManagements.map((management) => {
+                              const managementEmployees = departmentEmployees.filter((emp) => emp.managementId === management.id);
+                              const managementHead = managementEmployees.find((emp) => emp.role === "manager" && !emp.divisionId);
+                              const deputyId = managementDeputies[management.id] ?? null;
+                              const managementDeputy = deputyId ? managementEmployees.find((emp) => emp.id === deputyId) ?? null : null;
+                              const managementDivisions = divisions.filter((division) => division.managementId === management.id);
 
-                        return (
-                          <Card key={management.id} className="border border-muted">
-                            <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                              <div>
-                                <CardTitle className="text-lg">{management.name}</CardTitle>
-                                <p className="text-sm text-muted-foreground">Руководитель управления и его отделы</p>
-                              </div>
-                              {canEdit && (
-                                <Button variant="outline" size="sm" onClick={() => openDivisionDialog(department, management)}>
-                                  <Plus className="h-4 w-4 mr-2" />
-                                  Добавить отдел
-                                </Button>
-                              )}
-                            </CardHeader>
-                            <CardContent className="space-y-4">
+                              return (
+                                <Collapsible
+                                  key={management.id}
+                                  open={getSectionOpen(management.id, true)}
+                                  onOpenChange={(open) => handleSectionToggle(management.id, open)}
+                                >
+                                  <Card className="border border-muted">
+                                    <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                      <div>
+                                        <CardTitle className="text-lg">{management.name}</CardTitle>
+                                        <p className="text-sm text-muted-foreground">Руководитель управления и его отделы</p>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        {canEdit && (
+                                          <Button variant="outline" size="sm" onClick={() => openDivisionDialog(department, management)}>
+                                            <Plus className="h-4 w-4 mr-2" />
+                                            Добавить отдел
+                                          </Button>
+                                        )}
+                                        <CollapsibleTrigger asChild>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            aria-label={`Переключить управление ${management.name}`}
+                                            className={`h-8 w-8 rounded-full transition-transform ${getSectionOpen(management.id, true) ? "" : "-rotate-90"}`}
+                                          >
+                                            <ChevronDown className="h-4 w-4" />
+                                          </Button>
+                                        </CollapsibleTrigger>
+                                      </div>
+                                    </CardHeader>
+                                    <CollapsibleContent>
+                                      <CardContent className="space-y-4">
                               <PositionCell
                                 positionType="management_head"
                                 employee={managementHead ? { id: managementHead.id, name: managementHead.name, rating: parseRating(managementHead.rating) } : undefined}
@@ -1176,11 +1283,27 @@ export default function Organization() {
                                     const regulars = divisionEmployees.filter((emp) => emp.role === "employee");
 
                                     return (
-                                      <Card key={division.id} className="bg-muted/30">
-                                        <CardHeader>
-                                          <CardTitle className="text-base">{division.name}</CardTitle>
-                                        </CardHeader>
-                                        <CardContent className="space-y-4">
+                                      <Collapsible
+                                        key={division.id}
+                                        open={getSectionOpen(division.id, true)}
+                                        onOpenChange={(open) => handleSectionToggle(division.id, open)}
+                                      >
+                                        <Card className="bg-muted/30">
+                                          <CardHeader className="flex items-center justify-between">
+                                            <CardTitle className="text-base">{division.name}</CardTitle>
+                                            <CollapsibleTrigger asChild>
+                                              <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                aria-label={`Переключить отдел ${division.name}`}
+                                                className={`h-8 w-8 rounded-full transition-transform ${getSectionOpen(division.id, true) ? "" : "-rotate-90"}`}
+                                              >
+                                                <ChevronDown className="h-4 w-4" />
+                                              </Button>
+                                            </CollapsibleTrigger>
+                                          </CardHeader>
+                                          <CollapsibleContent>
+                                            <CardContent className="space-y-4">
                                           <PositionCell
                                             positionType="division_head"
                                             employee={divisionHead ? { id: divisionHead.id, name: divisionHead.name, rating: parseRating(divisionHead.rating) } : undefined}
@@ -1231,18 +1354,25 @@ export default function Organization() {
                                               )}
                                             </div>
                                           </div>
-                                        </CardContent>
-                                      </Card>
+                                            </CardContent>
+                                          </CollapsibleContent>
+                                        </Card>
+                                      </Collapsible>
                                     );
                                   })
                                 )}
                               </div>
-                            </CardContent>
-                          </Card>
+                                      </CardContent>
+                                    </CollapsibleContent>
+                                  </Card>
+                                </Collapsible>
                         );
                       })
                     )}
-                  </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    );
+                  })()}
                 </CardContent>
               </Card>
             );

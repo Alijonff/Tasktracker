@@ -11,8 +11,12 @@ export interface AuctionTaskSummary {
   description: string;
   status: AuctionStatus;
   departmentId?: string | null;
+  managementId?: string | null;
+  divisionId?: string | null;
   creatorId: string;
   creatorName: string;
+  assigneeId?: string | null;
+  assigneeName?: string | null;
   minimumGrade: Grade;
   deadline: string;
   startingPrice: number;
@@ -29,6 +33,20 @@ export interface ListTasksParams {
   participantId?: string;
   onlyMyDepartment?: boolean;
   currentUser?: Pick<SelectUser, "id" | "departmentId"> | null;
+  departmentId?: string;
+  managementId?: string;
+  divisionId?: string;
+  statuses?: AuctionStatus[];
+}
+
+export interface ListAuctionsParams extends Omit<ListTasksParams, "scope"> {
+  scope?: ListTasksParams["scope"];
+  status?: AuctionStatus | AuctionStatus[];
+}
+
+export interface ReportsDefaultDepartment {
+  defaultDepartmentId: string | null;
+  allowAllDepartments: boolean;
 }
 
 export interface DashboardMetrics {
@@ -45,7 +63,7 @@ export interface PointsOverview {
   pointsToNext?: number;
 }
 
-const ENABLE_AUCTION_MOCKS = true;
+const ENABLE_API_MOCKS = true;
 
 const mockAuctionTasks: AuctionTaskSummary[] = [
   {
@@ -191,8 +209,12 @@ function transformTask(task: Task): AuctionTaskSummary {
     description: task.description,
     status: (task.status === "overdue" ? "inProgress" : task.status) as AuctionStatus,
     departmentId: task.departmentId,
+    managementId: task.managementId ?? undefined,
+    divisionId: task.divisionId ?? undefined,
     creatorId: task.creatorId,
     creatorName: task.creatorName,
+    assigneeId: task.assigneeId ?? undefined,
+    assigneeName: task.assigneeName ?? undefined,
     minimumGrade: (task.minimumGrade ?? "D") as Grade,
     deadline: new Date(task.deadline).toISOString(),
     startingPrice,
@@ -211,6 +233,10 @@ async function fetchTasksFromServer(params: ListTasksParams): Promise<AuctionTas
   if (params.currentUser?.departmentId && params.onlyMyDepartment) {
     searchParams.set("departmentId", params.currentUser.departmentId);
   }
+  if (params.departmentId) searchParams.set("departmentId", params.departmentId);
+  if (params.managementId) searchParams.set("managementId", params.managementId);
+  if (params.divisionId) searchParams.set("divisionId", params.divisionId);
+  if (params.statuses?.length) searchParams.set("statuses", params.statuses.join(","));
 
   const baseUrl = params.scope === "mine" ? "/api/my-tasks" : "/api/tasks";
   const query = searchParams.toString();
@@ -228,6 +254,18 @@ function applyClientFilters(tasks: AuctionTaskSummary[], params: ListTasksParams
     filtered = filtered.filter((task) => task.departmentId === params.currentUser?.departmentId);
   }
 
+  if (params.departmentId) {
+    filtered = filtered.filter((task) => task.departmentId === params.departmentId);
+  }
+
+  if (params.managementId) {
+    filtered = filtered.filter((task) => task.managementId === params.managementId);
+  }
+
+  if (params.divisionId) {
+    filtered = filtered.filter((task) => task.divisionId === params.divisionId);
+  }
+
   if (params.participantId) {
     filtered = filtered.filter(
       (task) => task.creatorId === params.participantId || task.leadingBidderId === params.participantId,
@@ -241,11 +279,16 @@ function applyClientFilters(tasks: AuctionTaskSummary[], params: ListTasksParams
     );
   }
 
+  if (params.statuses?.length) {
+    const allowed = new Set(params.statuses);
+    filtered = filtered.filter((task) => allowed.has(task.status));
+  }
+
   return filtered;
 }
 
 export async function listTasks(params: ListTasksParams = {}): Promise<AuctionTaskSummary[]> {
-  if (ENABLE_AUCTION_MOCKS) {
+  if (ENABLE_API_MOCKS) {
     return applyClientFilters(mockAuctionTasks, params);
   }
 
@@ -258,6 +301,23 @@ export async function listTasks(params: ListTasksParams = {}): Promise<AuctionTa
   }
 }
 
+export async function listAuctions(params: ListAuctionsParams = {}): Promise<AuctionTaskSummary[]> {
+  const { status, scope = "all", ...rest } = params;
+  const statuses = Array.isArray(status)
+    ? status
+    : status
+    ? [status]
+    : rest.statuses ?? ["backlog"];
+
+  const baseParams: ListTasksParams = {
+    ...rest,
+    scope,
+    statuses,
+  };
+
+  return listTasks(baseParams);
+}
+
 export interface CreateAuctionTaskPayload {
   title: string;
   description: string;
@@ -267,7 +327,7 @@ export interface CreateAuctionTaskPayload {
 }
 
 export async function createAuctionTask(payload: CreateAuctionTaskPayload): Promise<AuctionTaskSummary> {
-  if (ENABLE_AUCTION_MOCKS) {
+  if (ENABLE_API_MOCKS) {
     const fallbackDepartment = payload.minimumGrade === "A" ? "dep-1" : "dep-2";
 
     const newTask: AuctionTaskSummary = {
@@ -298,7 +358,7 @@ export async function createAuctionTask(payload: CreateAuctionTaskPayload): Prom
 
 
 export async function updateTaskStatus(taskId: string, status: AuctionStatus): Promise<void> {
-  if (ENABLE_AUCTION_MOCKS) {
+  if (ENABLE_API_MOCKS) {
     const task = mockAuctionTasks.find((item) => item.id === taskId);
     if (task) {
       task.status = status;
@@ -310,7 +370,7 @@ export async function updateTaskStatus(taskId: string, status: AuctionStatus): P
 }
 
 export async function placeBid(taskId: string, amountSum: number): Promise<{ taskId: string; amount: number }> {
-  if (ENABLE_AUCTION_MOCKS) {
+  if (ENABLE_API_MOCKS) {
     const task = mockAuctionTasks.find((item) => item.id === taskId);
     if (task) {
       task.currentPrice = amountSum;
@@ -327,7 +387,7 @@ export async function placeBid(taskId: string, amountSum: number): Promise<{ tas
 }
 
 export async function getDashboardMetrics(): Promise<DashboardMetrics> {
-  if (ENABLE_AUCTION_MOCKS) {
+  if (ENABLE_API_MOCKS) {
     return mockMetrics;
   }
 
@@ -347,7 +407,7 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
 }
 
 export async function getMyPoints(): Promise<PointsOverview> {
-  if (ENABLE_AUCTION_MOCKS) {
+  if (ENABLE_API_MOCKS) {
     return mockPointsOverview;
   }
 
@@ -382,7 +442,7 @@ export async function getMyPoints(): Promise<PointsOverview> {
 }
 
 export async function getMyPointsHistory(): Promise<PointTransaction[]> {
-  if (ENABLE_AUCTION_MOCKS) {
+  if (ENABLE_API_MOCKS) {
     return mockPointHistory;
   }
 
@@ -397,8 +457,36 @@ export async function getMyPointsHistory(): Promise<PointTransaction[]> {
 
 export function getAdapterMockControls() {
   return {
-    isUsingMocks: ENABLE_AUCTION_MOCKS,
+    isUsingMocks: ENABLE_API_MOCKS,
     toggleHint:
-      "Чтобы переключить моки, измените флаг ENABLE_AUCTION_MOCKS в client/src/api/adapter.ts и перезапустите dev-сервер.",
+      "Чтобы переключить моки, измените флаг ENABLE_API_MOCKS в client/src/api/adapter.ts и перезапустите dev-сервер.",
   } as const;
+}
+
+export async function getReportsDefaultDept(
+  currentUser?: Pick<SelectUser, "role" | "departmentId"> | null,
+): Promise<ReportsDefaultDepartment> {
+  if (ENABLE_API_MOCKS) {
+    const isAdmin = currentUser?.role === "admin";
+    return {
+      defaultDepartmentId: currentUser?.departmentId ?? (isAdmin ? mockAuctionTasks[0]?.departmentId ?? null : "dep-1"),
+      allowAllDepartments: isAdmin,
+    };
+  }
+
+  try {
+    const response = await apiRequest("GET", "/api/reports/default-department");
+    const data = await response.json();
+    return {
+      defaultDepartmentId: data.departmentId ?? null,
+      allowAllDepartments: Boolean(data.allowAllDepartments ?? (currentUser?.role === "admin")),
+    };
+  } catch (error) {
+    console.warn("Falling back to reports default department", error);
+    const isAdmin = currentUser?.role === "admin";
+    return {
+      defaultDepartmentId: currentUser?.departmentId ?? (isAdmin ? mockAuctionTasks[0]?.departmentId ?? null : null),
+      allowAllDepartments: isAdmin,
+    };
+  }
 }

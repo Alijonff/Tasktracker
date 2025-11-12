@@ -6,8 +6,9 @@ import StatusBadge from "./StatusBadge";
 import GradeBadge from "./GradeBadge";
 import { Badge } from "@/components/ui/badge";
 import { formatDateTime, formatMoney } from "@/lib/formatters";
-import { UsersRound, Gavel } from "lucide-react";
+import { UsersRound, Gavel, Timer } from "lucide-react";
 import type { Grade } from "@/api/adapter";
+import { formatTimeRemaining } from "@/lib/formatters";
 
 export interface TaskCardProps {
   id: string;
@@ -22,6 +23,7 @@ export interface TaskCardProps {
   bidsCount: number;
   leadingBidderName?: string;
   canBid: boolean;
+  bidRestrictionReason?: string;
   onCardClick?: () => void;
   onBidClick?: () => void;
 }
@@ -39,10 +41,12 @@ export default function TaskCard({
   bidsCount,
   leadingBidderName,
   canBid,
+  bidRestrictionReason,
   onCardClick,
   onBidClick,
 }: TaskCardProps) {
   const activePrice = currentPrice ?? startingPrice;
+  const timeRemaining = formatTimeRemaining(deadline);
 
   return (
     <Card
@@ -69,6 +73,13 @@ export default function TaskCard({
         </div>
 
         <div className="grid gap-3 text-sm text-muted-foreground">
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <Timer size={16} />
+              До завершения
+            </span>
+            <span className="font-semibold text-foreground">{timeRemaining}</span>
+          </div>
           <div className="flex items-center justify-between">
             <span>Дедлайн</span>
             <span className="font-mono">{formatDateTime(deadline)}</span>
@@ -108,7 +119,9 @@ export default function TaskCard({
           Сделать ставку
         </Button>
         {!canBid && (
-          <p className="text-xs text-muted-foreground text-center">Ставки недоступны для этого аукциона</p>
+          <p className="text-xs text-muted-foreground text-center">
+            {bidRestrictionReason ?? "Ставки недоступны для этого аукциона"}
+          </p>
         )}
       </CardContent>
     </Card>

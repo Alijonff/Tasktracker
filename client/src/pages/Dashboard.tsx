@@ -18,7 +18,7 @@ interface MetricsQueryResult {
   backlogTasks: number;
 }
 
-export const canCreateAuctionsForRole = (role?: SelectUser["role"] | null) => role === "director";
+export const canCreateAuctionsForRole = (role?: SelectUser["role"] | null) => role === "director" || role === "admin";
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();

@@ -13,7 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LogOut, Settings as SettingsIcon } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import AppSidebar from "@/components/AppSidebar";
 import { useLocation } from "wouter";
@@ -25,7 +25,6 @@ import Auctions from "@/pages/Auctions";
 import CreateTask from "@/pages/CreateTask";
 import Reports from "@/pages/Reports";
 import Organization from "@/pages/Organization";
-import Settings from "@/pages/Settings";
 import Login from "@/pages/Login";
 import NotFound from "@/pages/not-found";
 import ChangePassword from "@/pages/ChangePassword";
@@ -106,14 +105,6 @@ function UserMenu() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel>Мой аккаунт</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onClick={() => setLocation("/settings")}
-          data-testid="menu-item-settings"
-        >
-          <SettingsIcon className="mr-2 h-4 w-4" />
-          <span>Настройки</span>
-        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onClick={() => logoutMutation.mutate()}
@@ -234,9 +225,6 @@ function Router() {
       </Route>
       <Route path="/organization">
         {() => <ProtectedLayout><Organization /></ProtectedLayout>}
-      </Route>
-      <Route path="/settings">
-        {() => <ProtectedLayout><Settings /></ProtectedLayout>}
       </Route>
       <Route path="/point-history">
         {() => <ProtectedLayout><PointHistory /></ProtectedLayout>}
