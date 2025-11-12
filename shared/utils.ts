@@ -49,3 +49,70 @@ export function calculateOverdueDays(deadline: Date, completedAt: Date = new Dat
   
   return days;
 }
+
+/**
+ * Calculate difference in working hours between two dates, excluding weekends
+ * Assumes 8 working hours per day
+ * @param startDate - Start date/time
+ * @param endDate - End date/time
+ * @returns Number of working hours (can be fractional)
+ */
+export function diffWorkingHours(startDate: Date, endDate: Date): number {
+  if (endDate <= startDate) {
+    return 0;
+  }
+
+  const msPerHour = 1000 * 60 * 60;
+  const msPerDay = msPerHour * 24;
+  const workingHoursPerDay = 8;
+
+  let totalHours = 0;
+  const current = new Date(startDate);
+
+  while (current < endDate) {
+    const dayStart = new Date(current);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(dayStart);
+    dayEnd.setDate(dayEnd.getDate() + 1);
+
+    if (!isWeekend(dayStart)) {
+      const rangeStart = current < dayStart ? dayStart : current;
+      const rangeEnd = endDate < dayEnd ? endDate : dayEnd;
+      const msInDay = rangeEnd.getTime() - rangeStart.getTime();
+      const fractionOfDay = msInDay / msPerDay;
+      totalHours += fractionOfDay * workingHoursPerDay;
+    }
+
+    current.setDate(current.getDate() + 1);
+    current.setHours(0, 0, 0, 0);
+  }
+
+  return totalHours;
+}
+
+/**
+ * Add working hours to a date, excluding weekends
+ * @param startDate - Start date/time
+ * @param hours - Number of working hours to add (assumes 8 hour workday)
+ * @returns New date/time after adding working hours
+ */
+export function addWorkingHours(startDate: Date, hours: number): Date {
+  const msPerHour = 1000 * 60 * 60;
+  const msPerDay = msPerHour * 24;
+  const workingHoursPerDay = 8;
+
+  let remainingHours = hours;
+  const result = new Date(startDate);
+
+  while (remainingHours > 0) {
+    if (!isWeekend(result)) {
+      const hoursToAdd = Math.min(remainingHours, workingHoursPerDay);
+      result.setTime(result.getTime() + (hoursToAdd / workingHoursPerDay) * msPerDay);
+      remainingHours -= hoursToAdd;
+    } else {
+      result.setDate(result.getDate() + 1);
+    }
+  }
+
+  return result;
+}

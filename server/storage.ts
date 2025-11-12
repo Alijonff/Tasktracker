@@ -131,6 +131,19 @@ export interface IStorage {
   updateUserPoints(userId: string, newPoints: number): Promise<User | undefined>;
   assignPointsForTask(taskId: string, points: number, comment?: string | null): Promise<void>;
   hasOverduePenalty(taskId: string): Promise<boolean>;
+
+  // Auction management
+  getActiveAuctions(filters?: { departmentId?: string }): Promise<Task[]>;
+  getAuctionsToClose(): Promise<Task[]>;
+  closeAuction(taskId: string, winnerId?: string, winnerName?: string, assignedSum?: string): Promise<Task | undefined>;
+  
+  // Monthly metrics
+  getMonthlyMetrics(departmentId?: string): Promise<{
+    completedTasksCount: number;
+    closedAuctionsSum: string;
+    activeAuctionsCount: number;
+    backlogCount: number;
+  }>;
 }
 
 export class DbStorage implements IStorage {
@@ -394,7 +407,7 @@ export class DbStorage implements IStorage {
       .select()
       .from(auctionBids)
       .where(eq(auctionBids.taskId, taskId))
-      .orderBy(auctionBids.hours);
+      .orderBy(auctionBids.bidAmount);
   }
 
   async createBid(bidData: InsertBid): Promise<AuctionBid> {
@@ -436,15 +449,6 @@ export class DbStorage implements IStorage {
       .from(tasks)
       .where(withPeriodConditions(eq(tasks.status, "completed" as const)));
 
-    const [hoursRow] = await db
-      .select({ value: sql<string>`coalesce(sum(${tasks.actualHours}), '0')` })
-      .from(tasks)
-      .where(
-        withPeriodConditions(
-          inArray(tasks.status, ["inProgress", "underReview", "completed"] as any)
-        )
-      );
-
     const activeAuctionConditions: any[] = [];
     if (filters.departmentId) {
       activeAuctionConditions.push(eq(tasks.departmentId, filters.departmentId));
@@ -463,15 +467,7 @@ export class DbStorage implements IStorage {
     if (filters.departmentId) {
       backlogConditions.push(eq(tasks.departmentId, filters.departmentId));
     }
-    backlogConditions.push(
-      or(
-        eq(tasks.status, "backlog" as const),
-        and(
-          eq(tasks.status, "inProgress" as const),
-          or(isNull(tasks.actualHours), eq(tasks.actualHours, "0"))
-        )
-      )
-    );
+    backlogConditions.push(eq(tasks.status, "backlog" as const));
 
     const [backlogRow] = await db
       .select({ value: sql<number>`count(*)` })
@@ -479,13 +475,12 @@ export class DbStorage implements IStorage {
       .where(and(...backlogConditions));
 
     const completedValue = Number(completedRow?.value ?? 0);
-    const hoursValue = Number(hoursRow?.value ?? 0);
     const auctionsValue = Number(activeAuctionsRow?.value ?? 0);
     const backlogValue = Number(backlogRow?.value ?? 0);
 
     return {
       completedTasks: { value: completedValue, hasData: completedValue > 0 },
-      totalHours: { value: hoursValue, hasData: hoursValue > 0 },
+      totalHours: { value: 0, hasData: false },
       activeAuctions: { value: auctionsValue, hasData: auctionsValue > 0 },
       backlogTasks: { value: backlogValue, hasData: backlogValue > 0 },
     };
@@ -640,6 +635,121 @@ export class DbStorage implements IStorage {
         .set({ points: newPoints })
         .where(eq(users.id, assignee.id));
     });
+  }
+
+  // Auction management
+  async getActiveAuctions(filters?: { departmentId?: string }): Promise<Task[]> {
+    const conditions: any[] = [
+      eq(tasks.type, "auction" as const),
+      inArray(tasks.status, ["backlog", "inProgress"] as any)
+    ];
+    
+    if (filters?.departmentId) {
+      conditions.push(eq(tasks.departmentId, filters.departmentId));
+    }
+    
+    return await db
+      .select()
+      .from(tasks)
+      .where(and(...conditions))
+      .orderBy(tasks.auctionPlannedEndAt);
+  }
+
+  async getAuctionsToClose(): Promise<Task[]> {
+    return await db
+      .select()
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.type, "auction" as const),
+          eq(tasks.status, "backlog" as const),
+          sql`${tasks.auctionPlannedEndAt} <= NOW()`
+        )
+      );
+  }
+
+  async closeAuction(
+    taskId: string,
+    winnerId?: string,
+    winnerName?: string,
+    assignedSum?: string
+  ): Promise<Task | undefined> {
+    const [task] = await db
+      .update(tasks)
+      .set({
+        status: "inProgress" as const,
+        assigneeId: winnerId || null,
+        assigneeName: winnerName || null,
+        auctionAssignedSum: assignedSum || null,
+        auctionEndAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(tasks.id, taskId))
+      .returning();
+    return task;
+  }
+
+  async getMonthlyMetrics(departmentId?: string): Promise<{
+    completedTasksCount: number;
+    closedAuctionsSum: string;
+    activeAuctionsCount: number;
+    backlogCount: number;
+  }> {
+    const now = new Date();
+    const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
+
+    const baseConditions: any[] = [gte(tasks.updatedAt, startOfMonth)];
+    if (departmentId) {
+      baseConditions.push(eq(tasks.departmentId, departmentId));
+    }
+
+    const [completedRow] = await db
+      .select({ value: sql<number>`count(*)` })
+      .from(tasks)
+      .where(and(...baseConditions, eq(tasks.status, "completed" as const)));
+
+    const [sumRow] = await db
+      .select({ 
+        value: sql<string>`coalesce(sum(${tasks.auctionAssignedSum}), '0')` 
+      })
+      .from(tasks)
+      .where(
+        and(
+          ...baseConditions,
+          eq(tasks.status, "completed" as const),
+          isNull(tasks.auctionAssignedSum)
+        )
+      );
+
+    const activeConditions: any[] = [
+      eq(tasks.type, "auction" as const),
+      inArray(tasks.status, ["backlog", "inProgress", "underReview"] as any)
+    ];
+    if (departmentId) {
+      activeConditions.push(eq(tasks.departmentId, departmentId));
+    }
+
+    const [activeRow] = await db
+      .select({ value: sql<number>`count(*)` })
+      .from(tasks)
+      .where(and(...activeConditions));
+
+    const backlogConditions: any[] = [eq(tasks.status, "backlog" as const)];
+    if (departmentId) {
+      backlogConditions.push(eq(tasks.departmentId, departmentId));
+    }
+
+    const [backlogRow] = await db
+      .select({ value: sql<number>`count(*)` })
+      .from(tasks)
+      .where(and(...backlogConditions));
+
+    return {
+      completedTasksCount: Number(completedRow?.value ?? 0),
+      closedAuctionsSum: String(sumRow?.value ?? '0'),
+      activeAuctionsCount: Number(activeRow?.value ?? 0),
+      backlogCount: Number(backlogRow?.value ?? 0),
+    };
   }
 }
 

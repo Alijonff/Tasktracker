@@ -8,6 +8,7 @@ import {
   decimal,
   pgEnum,
   boolean,
+  index,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -28,7 +29,7 @@ export const taskStatusEnum = pgEnum("task_status", [
   "completed",
   "overdue",
 ]);
-export const taskTypeEnum = pgEnum("task_type", ["individual", "auction"]);
+export const taskTypeEnum = pgEnum("task_type", ["auction"]);
 export const positionTypeEnum = pgEnum("position_type", [
   "department_director",
   "department_deputy",
@@ -142,21 +143,17 @@ export const tasks = pgTable("tasks", {
   assigneeName: text("assignee_name"),
   minimumGrade: gradeEnum("required_grade").notNull().default("D"),
   deadline: timestamp("deadline").notNull(),
-  estimatedHours: decimal("estimated_hours", {
-    precision: 6,
-    scale: 2,
-  }),
-  actualHours: decimal("actual_hours", { precision: 6, scale: 2 }),
   rating: decimal("rating", { precision: 3, scale: 2 }),
   assignedPoints: integer("assigned_points"),
   auctionStartAt: timestamp("auction_start_at"),
+  auctionPlannedEndAt: timestamp("auction_planned_end_at"),
   auctionEndAt: timestamp("auction_end_at"),
-  auctionInitialPrice: decimal("auction_initial_price", {
+  auctionInitialSum: decimal("auction_initial_sum", {
     precision: 10,
     scale: 2,
   }),
-  auctionMaxPrice: decimal("auction_max_price", { precision: 10, scale: 2 }),
-  auctionAssignedPrice: decimal("auction_assigned_price", {
+  auctionMaxSum: decimal("auction_max_sum", { precision: 10, scale: 2 }),
+  auctionAssignedSum: decimal("auction_assigned_sum", {
     precision: 10,
     scale: 2,
   }),
@@ -166,7 +163,11 @@ export const tasks = pgTable("tasks", {
   auctionWinnerName: text("auction_winner_name"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => ({
+  statusIdx: index("tasks_status_idx").on(table.status),
+  departmentIdx: index("tasks_department_idx").on(table.departmentId),
+  plannedEndIdx: index("tasks_planned_end_idx").on(table.auctionPlannedEndAt),
+}));
 
 export const auctionBids = pgTable("auction_bids", {
   id: varchar("id")
@@ -180,7 +181,8 @@ export const auctionBids = pgTable("auction_bids", {
     .references(() => users.id, { onDelete: "cascade" }),
   bidderName: text("bidder_name").notNull(),
   bidderRating: decimal("bidder_rating", { precision: 3, scale: 2 }).notNull(),
-  hours: decimal("hours", { precision: 6, scale: 2 }).notNull(),
+  bidderGrade: gradeEnum("bidder_grade").notNull(),
+  bidAmount: decimal("bid_amount", { precision: 10, scale: 2 }).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
