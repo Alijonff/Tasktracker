@@ -32,7 +32,6 @@ export interface IStorage {
     name: string,
     email: string | null,
     role: "admin" | "director" | "manager" | "senior" | "employee",
-    grade: Grade,
     departmentId?: string | null,
     managementId?: string | null,
     divisionId?: string | null,
@@ -47,7 +46,6 @@ export interface IStorage {
       name?: string;
       email?: string | null;
       role?: "admin" | "director" | "manager" | "senior" | "employee";
-      grade?: Grade;
       departmentId?: string | null;
       managementId?: string | null;
       divisionId?: string | null;
@@ -143,7 +141,6 @@ export class DbStorage implements IStorage {
     name: string,
     email: string | null,
     role: "admin" | "director" | "manager" | "senior" | "employee",
-    grade: Grade,
     departmentId?: string | null,
     managementId?: string | null,
     divisionId?: string | null,
@@ -155,7 +152,6 @@ export class DbStorage implements IStorage {
       name,
       email: email ?? null,
       role,
-      grade,
       departmentId: departmentId || null,
       managementId: managementId || null,
       divisionId: divisionId || null,
@@ -193,7 +189,6 @@ export class DbStorage implements IStorage {
       name?: string;
       email?: string | null;
       role?: "admin" | "director" | "manager" | "senior" | "employee";
-      grade?: Grade;
       departmentId?: string | null;
       managementId?: string | null;
       divisionId?: string | null;

@@ -98,7 +98,6 @@ export const users = pgTable("users", {
   name: text("name").notNull(),
   email: text("email").unique(),
   role: roleEnum("role").notNull().default("employee"),
-  grade: gradeEnum("grade").notNull().default("D"),
   divisionId: varchar("division_id").references(() => divisions.id, {
     onDelete: "set null",
   }),
@@ -320,7 +319,6 @@ export const insertUserSchema = createInsertSchema(users)
     points: true,
     completedTasks: true,
     totalHours: true,
-    grade: true,
   })
   .extend({
     email: z
