@@ -34,15 +34,24 @@ Preferred communication style: Simple, everyday language.
 
 **Data Access Patterns:** Hierarchical filtering, security enforced via `departmentId`, efficient relationship queries.
 
+**Background Workers:** 
+- **Auction Closer** (`server/workers/auctionCloser.ts`): Runs every 5 minutes, processes expired auctions (where `auctionPlannedEndAt` has passed), assigns to lowest bidder or department director if no bids, updates task status from `backlog` to `inProgress`.
+
+**Working Hours Utilities** (`shared/utils.ts`): 
+- `diffWorkingHours`: Calculates working hours between dates (8-hour workdays, excludes weekends).
+- `addWorkingHours`: Adds working hours to a date, used for 24-hour auction timers.
+- `calculateAuctionEnd`: Computes auction end time by adding 24 working hours to start time.
+
 ### Data Storage
 
 **Database:** PostgreSQL (configured for Neon serverless).
 
 **Schema Design:**
-- **Organizational Hierarchy:** `departments`, `managements`, `divisions`, `employees` (with role, rating, time metrics).
-- **Task Management:** `tasks` (auction-based, statuses: backlog, inProgress, underReview, completed, overdue; tracks deadlines, assignees, minimumGrade).
-- **Auction System:** `auctionBids` (employee bids, tracks bid amount, rating, auto-assignment logic based on lowest bid and rating, 4-hour timeout).
-- **Rating System:** Decimal precision (0-5 scale) for employees and leaders, calculated based on task completion and timeliness, affects auction prioritization.
+- **Organizational Hierarchy:** `departments`, `managements`, `divisions`, `employees` (with role, rating, points, time metrics).
+- **Task Management:** `tasks` (auction-only, statuses: backlog, inProgress, underReview, completed, overdue; tracks deadlines, assignees, minimumGrade, monetary auction fields).
+- **Monetary Auction System:** All tasks use monetary auctions with linear price growth from `auctionInitialSum` to `auctionMaxSum` (initial × 1.5) over 24 working hours. Fields: `auctionInitialSum`, `auctionMaxSum`, `auctionAssignedSum`, `auctionPlannedEndAt`.
+- **Auction Bids:** `auctionBids` table tracks monetary bids (`bidAmount` in decimal), bidder grade, and rating. Auto-closure assigns to lowest bidder; if no bids, assigns to department director with max sum.
+- **Rating & Grade System:** Employees have decimal rating (0-5) and points that determine grade (D/C/B/A). Grades calculated dynamically: <45=D, 45-64=C, 65-84=B, ≥85=A. Only employees with grade ≥ task's `minimumGrade` can bid.
 
 ### Authentication & Authorization
 
