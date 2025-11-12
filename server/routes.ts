@@ -14,7 +14,7 @@ import {
   type AuctionBid,
   type Grade,
 } from "@shared/schema";
-import { getInitialPointsByPosition } from "@shared/utils";
+import { getInitialPointsByPosition, calculateGrade } from "@shared/utils";
 
 // Authentication middleware
 function requireAuth(req: Request, res: Response, next: NextFunction) {
@@ -241,7 +241,6 @@ async function resolveEmployeeAssignment(
         managementId: null,
         divisionId: null,
         role: positionRoleMap[positionType],
-        grade: positionGradeMap[positionType],
       } as const;
     }
     case "management_head": {
@@ -261,7 +260,6 @@ async function resolveEmployeeAssignment(
         managementId: management.id,
         divisionId: null,
         role: positionRoleMap[positionType],
-        grade: positionGradeMap[positionType],
       } as const;
     }
     case "division_head":
@@ -286,7 +284,6 @@ async function resolveEmployeeAssignment(
         managementId: division.managementId,
         divisionId: division.id,
         role: positionRoleMap[positionType],
-        grade: positionGradeMap[positionType],
       } as const;
     }
     default: {
@@ -620,7 +617,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         parsed.name,
         parsed.email ?? null,
         assignment.role,
-        assignment.grade,
         assignment.departmentId,
         assignment.managementId,
         assignment.divisionId,
@@ -753,7 +749,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         updates.role = assignment.role;
-        updates.grade = assignment.grade;
         updates.departmentId = assignment.departmentId;
         updates.managementId = assignment.managementId;
         updates.divisionId = assignment.divisionId;
@@ -910,7 +905,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(400).json({ error: "Исполнитель не найден или относится к другому департаменту" });
         }
 
-        const assigneeGrade = assignee.grade ?? getRoleGrade(assignee.role);
+        const assigneeGrade = calculateGrade(assignee.points);
         if (!hasGradeAccess(assigneeGrade, parsed.minimumGrade)) {
           return res.status(400).json({ error: "Грейд исполнителя ниже минимального для задачи" });
         }
@@ -1215,7 +1210,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       task = refreshedTask;
 
-      const userGrade: Grade = (currentUser.grade as Grade) ?? getRoleGrade(currentUser.role);
+      const userGrade: Grade = calculateGrade(currentUser.points);
       const minimumGrade = task.minimumGrade as Grade;
       if (!hasGradeAccess(userGrade, minimumGrade)) {
         return res.status(403).json({ error: "Ваш грейд не допускает участие в этом аукционе" });
@@ -1358,7 +1353,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const passwordHash = await hashPassword(userData.password);
       
       const role = userData.role || "employee";
-      const grade = getRoleGrade(role);
 
       const user = await storage.createUser(
         userData.username,
@@ -1366,7 +1360,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userData.name,
         userData.email ?? null,
         role,
-        grade,
         userData.departmentId || null,
         userData.managementId || null,
         userData.divisionId || null,
@@ -1394,10 +1387,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } else if (updates.email === "" || updates.email === undefined) {
           updates.email = null;
         }
-      }
-
-      if (typeof updates.role === "string") {
-        updates.grade = getRoleGrade(updates.role as any);
       }
 
       const user = await storage.updateUser(id, updates);

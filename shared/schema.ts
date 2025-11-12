@@ -140,7 +140,7 @@ export const tasks = pgTable("tasks", {
     onDelete: "set null",
   }),
   assigneeName: text("assignee_name"),
-  minimumGrade: gradeEnum("minimum_grade").notNull().default("D"),
+  minimumGrade: gradeEnum("required_grade").notNull().default("D"),
   deadline: timestamp("deadline").notNull(),
   estimatedHours: decimal("estimated_hours", {
     precision: 6,
@@ -148,7 +148,6 @@ export const tasks = pgTable("tasks", {
   }).notNull(),
   actualHours: decimal("actual_hours", { precision: 6, scale: 2 }),
   rating: decimal("rating", { precision: 3, scale: 2 }),
-  requiredGrade: gradeEnum("required_grade"),
   assignedPoints: integer("assigned_points"),
   auctionStartAt: timestamp("auction_start_at"),
   auctionEndAt: timestamp("auction_end_at"),
