@@ -7,6 +7,7 @@ import { setupVite, serveStatic, log } from "./vite";
 import { DbStorage } from "./storage";
 import { createAdminUser } from "./auth";
 import { User } from "@shared/schema";
+import { startAuctionCloser } from "./workers/auctionCloser";
 
 declare module 'express-session' {
   interface SessionData {
@@ -109,6 +110,8 @@ app.use((req, res, next) => {
   await createAdminUser(storage);
   
   const server = await registerRoutes(app);
+  
+  startAuctionCloser();
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
