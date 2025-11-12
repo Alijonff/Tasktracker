@@ -1,11 +1,33 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, decimal, pgEnum, boolean } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  text,
+  varchar,
+  integer,
+  timestamp,
+  decimal,
+  pgEnum,
+  boolean,
+} from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 // Enums
-export const roleEnum = pgEnum("role", ["admin", "director", "manager", "senior", "employee"]);
-export const taskStatusEnum = pgEnum("task_status", ["backlog", "inProgress", "underReview", "completed", "overdue"]);
+export const roleEnum = pgEnum("role", [
+  "admin",
+  "director",
+  "manager",
+  "senior",
+  "employee",
+]);
+export const gradeEnum = pgEnum("grade", ["A", "B", "C", "D"]);
+export const taskStatusEnum = pgEnum("task_status", [
+  "backlog",
+  "inProgress",
+  "underReview",
+  "completed",
+  "overdue",
+]);
 export const taskTypeEnum = pgEnum("task_type", ["individual", "auction"]);
 export const positionTypeEnum = pgEnum("position_type", [
   "department_director",
@@ -13,18 +35,19 @@ export const positionTypeEnum = pgEnum("position_type", [
   "management_head",
   "division_head",
   "division_senior",
-  "division_employee"
+  "division_employee",
 ]);
-export const gradeEnum = pgEnum("grade", ["D", "C", "B", "A"]);
 export const pointTransactionTypeEnum = pgEnum("point_transaction_type", [
   "task_completion",
   "overdue_penalty",
-  "position_assigned"
+  "position_assigned",
 ]);
 
 // Organization structure tables
 export const departments = pgTable("departments", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   leaderId: varchar("leader_id"),
   leaderName: text("leader_name"),
@@ -34,9 +57,13 @@ export const departments = pgTable("departments", {
 });
 
 export const managements = pgTable("managements", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
-  departmentId: varchar("department_id").notNull().references(() => departments.id, { onDelete: "cascade" }),
+  departmentId: varchar("department_id")
+    .notNull()
+    .references(() => departments.id, { onDelete: "cascade" }),
   leaderId: varchar("leader_id"),
   leaderName: text("leader_name"),
   rating: decimal("rating", { precision: 3, scale: 2 }).default("0"),
@@ -45,10 +72,16 @@ export const managements = pgTable("managements", {
 });
 
 export const divisions = pgTable("divisions", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
-  managementId: varchar("management_id").notNull().references(() => managements.id, { onDelete: "cascade" }),
-  departmentId: varchar("department_id").notNull().references(() => departments.id, { onDelete: "cascade" }),
+  managementId: varchar("management_id")
+    .notNull()
+    .references(() => managements.id, { onDelete: "cascade" }),
+  departmentId: varchar("department_id")
+    .notNull()
+    .references(() => departments.id, { onDelete: "cascade" }),
   leaderId: varchar("leader_id"),
   leaderName: text("leader_name"),
   rating: decimal("rating", { precision: 3, scale: 2 }).default("0"),
@@ -57,15 +90,24 @@ export const divisions = pgTable("divisions", {
 });
 
 export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   name: text("name").notNull(),
   email: text("email").unique(),
   role: roleEnum("role").notNull().default("employee"),
-  divisionId: varchar("division_id").references(() => divisions.id, { onDelete: "set null" }),
-  managementId: varchar("management_id").references(() => managements.id, { onDelete: "set null" }),
-  departmentId: varchar("department_id").references(() => departments.id, { onDelete: "set null" }),
+  grade: gradeEnum("grade").notNull().default("D"),
+  divisionId: varchar("division_id").references(() => divisions.id, {
+    onDelete: "set null",
+  }),
+  managementId: varchar("management_id").references(() => managements.id, {
+    onDelete: "set null",
+  }),
+  departmentId: varchar("department_id").references(() => departments.id, {
+    onDelete: "set null",
+  }),
   rating: decimal("rating", { precision: 3, scale: 2 }).default("0"),
   points: integer("points").notNull().default(0),
   completedTasks: integer("completed_tasks").default(0),
@@ -75,32 +117,69 @@ export const users = pgTable("users", {
 });
 
 export const tasks = pgTable("tasks", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   title: text("title").notNull(),
   description: text("description").notNull(),
   status: taskStatusEnum("status").notNull().default("backlog"),
   type: taskTypeEnum("type").notNull(),
-  departmentId: varchar("department_id").notNull().references(() => departments.id, { onDelete: "cascade" }),
-  managementId: varchar("management_id").references(() => managements.id, { onDelete: "set null" }),
-  divisionId: varchar("division_id").references(() => divisions.id, { onDelete: "set null" }),
-  creatorId: varchar("creator_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  departmentId: varchar("department_id")
+    .notNull()
+    .references(() => departments.id, { onDelete: "cascade" }),
+  managementId: varchar("management_id").references(() => managements.id, {
+    onDelete: "set null",
+  }),
+  divisionId: varchar("division_id").references(() => divisions.id, {
+    onDelete: "set null",
+  }),
+  creatorId: varchar("creator_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
   creatorName: text("creator_name").notNull(),
-  assigneeId: varchar("assignee_id").references(() => users.id, { onDelete: "set null" }),
+  assigneeId: varchar("assignee_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
   assigneeName: text("assignee_name"),
+  minimumGrade: gradeEnum("minimum_grade").notNull().default("D"),
   deadline: timestamp("deadline").notNull(),
-  estimatedHours: decimal("estimated_hours", { precision: 6, scale: 2 }).notNull(),
+  estimatedHours: decimal("estimated_hours", {
+    precision: 6,
+    scale: 2,
+  }).notNull(),
   actualHours: decimal("actual_hours", { precision: 6, scale: 2 }),
   rating: decimal("rating", { precision: 3, scale: 2 }),
   requiredGrade: gradeEnum("required_grade"),
   assignedPoints: integer("assigned_points"),
+  auctionStartAt: timestamp("auction_start_at"),
+  auctionEndAt: timestamp("auction_end_at"),
+  auctionInitialPrice: decimal("auction_initial_price", {
+    precision: 10,
+    scale: 2,
+  }),
+  auctionMaxPrice: decimal("auction_max_price", { precision: 10, scale: 2 }),
+  auctionAssignedPrice: decimal("auction_assigned_price", {
+    precision: 10,
+    scale: 2,
+  }),
+  auctionWinnerId: varchar("auction_winner_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  auctionWinnerName: text("auction_winner_name"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 export const auctionBids = pgTable("auction_bids", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  taskId: varchar("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
-  bidderId: varchar("bidder_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  taskId: varchar("task_id")
+    .notNull()
+    .references(() => tasks.id, { onDelete: "cascade" }),
+  bidderId: varchar("bidder_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
   bidderName: text("bidder_name").notNull(),
   bidderRating: decimal("bidder_rating", { precision: 3, scale: 2 }).notNull(),
   hours: decimal("hours", { precision: 6, scale: 2 }).notNull(),
@@ -108,18 +187,30 @@ export const auctionBids = pgTable("auction_bids", {
 });
 
 export const taskComments = pgTable("task_comments", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  taskId: varchar("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
-  authorId: varchar("author_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  taskId: varchar("task_id")
+    .notNull()
+    .references(() => tasks.id, { onDelete: "cascade" }),
+  authorId: varchar("author_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
   authorName: text("author_name").notNull(),
   content: text("content").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const timeLogs = pgTable("time_logs", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  taskId: varchar("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  taskId: varchar("task_id")
+    .notNull()
+    .references(() => tasks.id, { onDelete: "cascade" }),
+  userId: varchar("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
   userName: text("user_name").notNull(),
   hours: decimal("hours", { precision: 6, scale: 2 }).notNull(),
   date: timestamp("date").notNull(),
@@ -128,12 +219,18 @@ export const timeLogs = pgTable("time_logs", {
 });
 
 export const pointTransactions = pgTable("point_transactions", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  userId: varchar("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
   userName: text("user_name").notNull(),
   amount: integer("amount").notNull(),
   type: pointTransactionTypeEnum("type").notNull(),
-  taskId: varchar("task_id").references(() => tasks.id, { onDelete: "set null" }),
+  taskId: varchar("task_id").references(() => tasks.id, {
+    onDelete: "set null",
+  }),
   taskTitle: text("task_title"),
   comment: text("comment"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -149,6 +246,8 @@ export type AuctionBid = typeof auctionBids.$inferSelect;
 export type TaskComment = typeof taskComments.$inferSelect;
 export type TimeLog = typeof timeLogs.$inferSelect;
 export type PointTransaction = typeof pointTransactions.$inferSelect;
+
+export type Grade = (typeof gradeEnum.enumValues)[number];
 
 // Aliases for consistency
 export type SelectUser = User;
@@ -169,13 +268,21 @@ export const insertDivisionSchema = createInsertSchema(divisions).omit({
   createdAt: true,
 });
 
-export const insertTaskSchema = createInsertSchema(tasks).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-}).extend({
-  deadline: z.string().transform((val) => new Date(val)),
-});
+const dateTransform = z
+  .union([z.string(), z.date()])
+  .transform((value) => (value instanceof Date ? value : new Date(value)));
+
+export const insertTaskSchema = createInsertSchema(tasks)
+  .omit({
+    id: true,
+    createdAt: true,
+    updatedAt: true,
+  })
+  .extend({
+    deadline: dateTransform,
+    auctionStartAt: dateTransform.optional(),
+    auctionEndAt: dateTransform.optional(),
+  });
 
 export const insertBidSchema = createInsertSchema(auctionBids).omit({
   id: true,
@@ -187,37 +294,44 @@ export const insertCommentSchema = createInsertSchema(taskComments).omit({
   createdAt: true,
 });
 
-export const insertTimeLogSchema = createInsertSchema(timeLogs).omit({
+export const insertTimeLogSchema = createInsertSchema(timeLogs)
+  .omit({
+    id: true,
+    createdAt: true,
+  })
+  .extend({
+    date: z.string().transform((val) => new Date(val)),
+  });
+
+export const insertPointTransactionSchema = createInsertSchema(
+  pointTransactions,
+).omit({
   id: true,
   createdAt: true,
-}).extend({
-  date: z.string().transform((val) => new Date(val)),
 });
 
-export const insertPointTransactionSchema = createInsertSchema(pointTransactions).omit({
-  id: true,
-  createdAt: true,
-});
-
-export const insertUserSchema = createInsertSchema(users).omit({
-  id: true,
-  passwordHash: true,
-  createdAt: true,
-  mustChangePassword: true,
-  rating: true,
-  points: true,
-  completedTasks: true,
-  totalHours: true,
-}).extend({
-  email: z
-    .string()
-    .trim()
-    .email("Введите корректный email")
-    .optional()
-    .or(z.literal(""))
-    .transform((value) => (value === "" ? undefined : value)),
-  password: z.string().min(6, "Пароль должен содержать минимум 6 символов"),
-});
+export const insertUserSchema = createInsertSchema(users)
+  .omit({
+    id: true,
+    passwordHash: true,
+    createdAt: true,
+    mustChangePassword: true,
+    rating: true,
+    points: true,
+    completedTasks: true,
+    totalHours: true,
+    grade: true,
+  })
+  .extend({
+    email: z
+      .string()
+      .trim()
+      .email("Введите корректный email")
+      .optional()
+      .or(z.literal(""))
+      .transform((value) => (value === "" ? undefined : value)),
+    password: z.string().min(6, "Пароль должен содержать минимум 6 символов"),
+  });
 
 export const loginSchema = z.object({
   username: z.string().min(1, "Введите имя пользователя"),
@@ -226,7 +340,9 @@ export const loginSchema = z.object({
 
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, "Введите текущий пароль"),
-  newPassword: z.string().min(6, "Новый пароль должен содержать минимум 6 символов"),
+  newPassword: z
+    .string()
+    .min(6, "Новый пароль должен содержать минимум 6 символов"),
 });
 
 // Insert types
@@ -241,7 +357,11 @@ export type InsertUser = z.infer<typeof insertUserSchema>;
 export type Login = z.infer<typeof loginSchema>;
 
 // Additional types for analytics
-export type AnalyticsLevel = "department" | "management" | "division" | "employee";
+export type AnalyticsLevel =
+  | "department"
+  | "management"
+  | "division"
+  | "employee";
 
 export type AnalyticsMetrics = {
   totalTasks: number;
