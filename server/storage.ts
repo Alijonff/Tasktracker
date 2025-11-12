@@ -684,7 +684,13 @@ export class DbStorage implements IStorage {
         auctionEndAt: new Date(),
         updatedAt: new Date(),
       })
-      .where(eq(tasks.id, taskId))
+      .where(
+        and(
+          eq(tasks.id, taskId),
+          eq(tasks.type, "auction" as const),
+          eq(tasks.status, "backlog" as const)
+        )
+      )
       .returning();
     return task;
   }
