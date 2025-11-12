@@ -154,16 +154,16 @@ function parseDecimal(value: string | number | null | undefined): number | null 
 }
 
 function calculateAuctionPrice(task: Task, now: Date = new Date()): number | null {
-  if (!task.auctionInitialPrice || !task.auctionMaxPrice || !task.auctionStartAt || !task.auctionEndAt) {
+  if (!task.auctionInitialSum || !task.auctionMaxSum || !task.auctionStartAt || !task.auctionPlannedEndAt) {
     return null;
   }
 
   const start = new Date(task.auctionStartAt);
-  const end = new Date(task.auctionEndAt);
-  const initial = parseDecimal(task.auctionInitialPrice);
-  const max = parseDecimal(task.auctionMaxPrice);
+  const plannedEnd = new Date(task.auctionPlannedEndAt);
+  const initial = parseDecimal(task.auctionInitialSum);
+  const max = parseDecimal(task.auctionMaxSum);
 
-  if (!initial || !max || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start.getTime() === end.getTime()) {
+  if (!initial || !max || Number.isNaN(start.getTime()) || Number.isNaN(plannedEnd.getTime()) || start.getTime() === plannedEnd.getTime()) {
     return null;
   }
 
@@ -171,11 +171,11 @@ function calculateAuctionPrice(task: Task, now: Date = new Date()): number | nul
     return initial;
   }
 
-  if (now >= end) {
+  if (now >= plannedEnd) {
     return max;
   }
 
-  const total = end.getTime() - start.getTime();
+  const total = plannedEnd.getTime() - start.getTime();
   const elapsed = now.getTime() - start.getTime();
   const progress = Math.min(Math.max(elapsed / total, 0), 1);
   return initial + (max - initial) * progress;
@@ -190,33 +190,15 @@ const createTaskSchema = z
   .object({
     title: z.string().min(1, "Введите название задачи"),
     description: z.string().min(1, "Введите описание задачи"),
-    type: z.enum(["individual", "auction"]),
+    type: z.literal("auction"),
     deadline: dateInputSchema,
-    estimatedHours: decimalNumberSchema,
     minimumGrade: gradeSchema.default("D"),
-    assigneeId: z.string().min(1).optional(),
     departmentId: z.string().min(1, "Укажите департамент").optional(),
-    auctionInitialPrice: decimalNumberSchema.optional(),
-  })
-  .superRefine((value, ctx) => {
-    if (value.type === "individual" && (!value.assigneeId || value.assigneeId.trim() === "")) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["assigneeId"],
-        message: "Выберите исполнителя",
-      });
-    }
-    if (value.type === "auction" && value.auctionInitialPrice === undefined) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["auctionInitialPrice"],
-        message: "Укажите стартовую ставку",
-      });
-    }
+    auctionInitialSum: decimalNumberSchema,
   });
 
 const placeBidSchema = z.object({
-  hours: decimalNumberSchema,
+  bidAmount: decimalNumberSchema,
 });
 
 class PositionAssignmentError extends Error {}
@@ -340,9 +322,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const now = new Date();
 
     for (const task of backlogAuctions) {
-      if (!task.auctionEndAt) continue;
-      const auctionEnd = new Date(task.auctionEndAt);
-      if (Number.isNaN(auctionEnd.getTime()) || auctionEnd.getTime() > now.getTime()) {
+      if (!task.auctionPlannedEndAt) continue;
+      const plannedEnd = new Date(task.auctionPlannedEndAt);
+      if (Number.isNaN(plannedEnd.getTime()) || plannedEnd.getTime() > now.getTime()) {
         continue;
       }
 
@@ -359,12 +341,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           assigneeName,
           auctionWinnerId: assigneeId,
           auctionWinnerName: assigneeName,
-          auctionAssignedPrice: task.auctionMaxPrice ?? task.auctionInitialPrice ?? null,
+          auctionAssignedSum: task.auctionMaxSum ?? task.auctionInitialSum ?? null,
         });
       } else {
         const winningBid = bids.reduce((best, bid) => {
-          const bestValue = parseDecimal(best.hours) ?? Number.POSITIVE_INFINITY;
-          const currentValue = parseDecimal(bid.hours) ?? Number.POSITIVE_INFINITY;
+          const bestValue = parseDecimal(best.bidAmount) ?? Number.POSITIVE_INFINITY;
+          const currentValue = parseDecimal(bid.bidAmount) ?? Number.POSITIVE_INFINITY;
           return currentValue < bestValue ? bid : best;
         }, bids[0] as AuctionBid);
 
@@ -374,7 +356,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           assigneeName: winningBid.bidderName,
           auctionWinnerId: winningBid.bidderId,
           auctionWinnerName: winningBid.bidderName,
-          auctionAssignedPrice: winningBid.hours,
+          auctionAssignedSum: winningBid.bidAmount,
         });
       }
     }
@@ -873,10 +855,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      const startAt = new Date();
+      const initialSum = parsed.auctionInitialSum;
+      const plannedEndAt = calculateAuctionEnd(startAt);
+      
       const taskData: any = {
         title: parsed.title,
         description: parsed.description,
-        type: parsed.type,
+        type: "auction",
         status: "backlog",
         departmentId,
         managementId: null,
@@ -887,40 +873,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         assigneeName: null,
         minimumGrade: parsed.minimumGrade,
         deadline: parsed.deadline,
-        estimatedHours: decimalToString(parsed.estimatedHours),
-        actualHours: null,
         rating: null,
-        auctionStartAt: null,
+        auctionStartAt: startAt,
+        auctionPlannedEndAt: plannedEndAt,
+        auctionInitialSum: decimalToString(initialSum),
+        auctionMaxSum: decimalToString(initialSum * 1.5),
+        auctionAssignedSum: null,
         auctionEndAt: null,
-        auctionInitialPrice: null,
-        auctionMaxPrice: null,
-        auctionAssignedPrice: null,
         auctionWinnerId: null,
         auctionWinnerName: null,
       } satisfies Partial<Task>;
-
-      if (parsed.type === "individual") {
-        const assignee = parsed.assigneeId ? await storage.getUserById(parsed.assigneeId) : null;
-        if (!assignee || assignee.departmentId !== departmentId) {
-          return res.status(400).json({ error: "Исполнитель не найден или относится к другому департаменту" });
-        }
-
-        const assigneeGrade = calculateGrade(assignee.points);
-        if (!hasGradeAccess(assigneeGrade, parsed.minimumGrade)) {
-          return res.status(400).json({ error: "Грейд исполнителя ниже минимального для задачи" });
-        }
-
-        taskData.assigneeId = assignee.id;
-        taskData.assigneeName = assignee.name;
-      } else {
-        const startAt = new Date();
-        const initialPrice = parsed.auctionInitialPrice!;
-        const endAt = calculateAuctionEnd(startAt);
-        taskData.auctionStartAt = startAt;
-        taskData.auctionEndAt = endAt;
-        taskData.auctionInitialPrice = decimalToString(initialPrice);
-        taskData.auctionMaxPrice = decimalToString(initialPrice * 1.5);
-      }
 
       const created = await storage.createTask(taskData);
       res.status(201).json(created);
@@ -1222,17 +1184,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Ставки недоступны для этой задачи" });
       }
 
-      if (parsed.hours > auctionPrice) {
+      if (parsed.bidAmount > auctionPrice) {
         return res.status(400).json({ error: "Ставка должна быть не выше текущей цены" });
       }
 
       const existingBids = await storage.getTaskBids(id);
       const currentBest = existingBids.reduce((best, bid) => {
-        const value = parseDecimal(bid.hours) ?? Number.POSITIVE_INFINITY;
+        const value = parseDecimal(bid.bidAmount) ?? Number.POSITIVE_INFINITY;
         return value < best ? value : best;
       }, Number.POSITIVE_INFINITY);
 
-      if (currentBest !== Number.POSITIVE_INFINITY && parsed.hours > currentBest) {
+      if (currentBest !== Number.POSITIVE_INFINITY && parsed.bidAmount > currentBest) {
         return res.status(400).json({ error: "Есть более выгодная ставка" });
       }
 
@@ -1241,7 +1203,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         bidderId: currentUser.id,
         bidderName: currentUser.name,
         bidderRating: (currentUser.rating as string | null) ?? "0",
-        hours: decimalToString(parsed.hours),
+        bidderGrade: userGrade,
+        bidAmount: decimalToString(parsed.bidAmount),
       });
 
       res.status(201).json(bidRecord);
