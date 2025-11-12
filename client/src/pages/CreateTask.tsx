@@ -4,25 +4,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useState } from "react";
 import { PlusCircle } from "lucide-react";
 
 export default function CreateTask() {
-  const [taskType, setTaskType] = useState<"individual" | "auction">("individual");
   const [formData, setFormData] = useState({
     title: "",
     description: "",
     department: "",
-    assignee: "",
-    estimatedHours: "",
     deadline: "",
-    requiredGrade: "",
+    minimumGrade: "D",
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Создание задачи:", { ...formData, type: taskType });
+    console.log("Создание аукционной задачи:", formData);
   };
 
   return (
@@ -33,7 +29,7 @@ export default function CreateTask() {
         </div>
         <div>
           <h1 className="text-3xl font-bold">Создать задачу</h1>
-          <p className="text-muted-foreground">Создайте новую индивидуальную или аукционную задачу</p>
+          <p className="text-muted-foreground">Создайте новую аукционную задачу для сотрудников</p>
         </div>
       </div>
 
@@ -44,24 +40,6 @@ export default function CreateTask() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-4">
-              <div className="space-y-2">
-                <Label>Тип задачи</Label>
-                <RadioGroup value={taskType} onValueChange={(v: any) => setTaskType(v)}>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="individual" id="individual" data-testid="radio-individual" />
-                    <Label htmlFor="individual" className="font-normal cursor-pointer">
-                      Индивидуальная задача - Назначить конкретному сотруднику
-                    </Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="auction" id="auction" data-testid="radio-auction" />
-                    <Label htmlFor="auction" className="font-normal cursor-pointer">
-                      Аукционная задача - Сотрудники смогут делать ставки
-                    </Label>
-                  </div>
-                </RadioGroup>
-              </div>
-
               <div className="space-y-2">
                 <Label htmlFor="title">Название задачи *</Label>
                 <Input
@@ -103,45 +81,6 @@ export default function CreateTask() {
                   </Select>
                 </div>
 
-                {taskType === "individual" && (
-                  <div className="space-y-2">
-                    <Label htmlFor="assignee">Исполнитель *</Label>
-                    <Select value={formData.assignee} onValueChange={(v) => setFormData({ ...formData, assignee: v })}>
-                      <SelectTrigger id="assignee" data-testid="select-assignee">
-                        <SelectValue placeholder="Выберите исполнителя" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="mike">Михаил Чен</SelectItem>
-                        <SelectItem value="emma">Эмма Уилсон</SelectItem>
-                        <SelectItem value="alex">Алекс Ривера</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="estimatedHours">
-                    {taskType === "auction" ? "Начальное время (часы) *" : "Плановое время (часы) *"}
-                  </Label>
-                  <Input
-                    id="estimatedHours"
-                    type="number"
-                    min="1"
-                    placeholder="0"
-                    value={formData.estimatedHours}
-                    onChange={(e) => setFormData({ ...formData, estimatedHours: e.target.value })}
-                    required
-                    data-testid="input-estimated-hours"
-                  />
-                  {taskType === "auction" && (
-                    <p className="text-xs text-muted-foreground">
-                      Время автоматически увеличится через 4 часа, если не будет новых ставок
-                    </p>
-                  )}
-                </div>
-
                 <div className="space-y-2">
                   <Label htmlFor="deadline">Дедлайн *</Label>
                   <Input
@@ -155,25 +94,23 @@ export default function CreateTask() {
                 </div>
               </div>
 
-              {taskType === "auction" && (
-                <div className="space-y-2">
-                  <Label htmlFor="requiredGrade">Минимальный грейд</Label>
-                  <Select value={formData.requiredGrade} onValueChange={(v) => setFormData({ ...formData, requiredGrade: v })}>
-                    <SelectTrigger id="requiredGrade" data-testid="select-required-grade">
-                      <SelectValue placeholder="Выберите минимальный грейд (необязательно)" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="D">Грейд D (≥0 баллов) - Все сотрудники</SelectItem>
-                      <SelectItem value="C">Грейд C (≥45 баллов)</SelectItem>
-                      <SelectItem value="B">Грейд B (≥65 баллов)</SelectItem>
-                      <SelectItem value="A">Грейд A (≥85 баллов)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    Только сотрудники с указанным или более высоким грейдом смогут делать ставки
-                  </p>
-                </div>
-              )}
+              <div className="space-y-2">
+                <Label htmlFor="minimumGrade">Минимальный грейд</Label>
+                <Select value={formData.minimumGrade} onValueChange={(v) => setFormData({ ...formData, minimumGrade: v })}>
+                  <SelectTrigger id="minimumGrade" data-testid="select-minimum-grade">
+                    <SelectValue placeholder="Выберите минимальный грейд" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="D">Грейд D - Все сотрудники</SelectItem>
+                    <SelectItem value="C">Грейд C (≥45 баллов)</SelectItem>
+                    <SelectItem value="B">Грейд B (≥65 баллов)</SelectItem>
+                    <SelectItem value="A">Грейд A (≥85 баллов)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Только сотрудники с указанным или более высоким грейдом смогут делать ставки
+                </p>
+              </div>
             </div>
 
             <div className="flex gap-3">

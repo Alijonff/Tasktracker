@@ -145,7 +145,7 @@ export const tasks = pgTable("tasks", {
   estimatedHours: decimal("estimated_hours", {
     precision: 6,
     scale: 2,
-  }).notNull(),
+  }),
   actualHours: decimal("actual_hours", { precision: 6, scale: 2 }),
   rating: decimal("rating", { precision: 3, scale: 2 }),
   assignedPoints: integer("assigned_points"),

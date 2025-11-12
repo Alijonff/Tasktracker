@@ -3,7 +3,6 @@ import {
   CheckSquare, 
   ListTodo,
   Gavel, 
-  PlusCircle, 
   BarChart3, 
   Settings,
   Building2,
@@ -27,7 +26,6 @@ const menuItems = [
   { title: "Мои задачи", url: "/my-tasks", icon: CheckSquare },
   { title: "Все задачи", url: "/all-tasks", icon: ListTodo },
   { title: "Аукционы", url: "/auctions", icon: Gavel },
-  { title: "Создать задачу", url: "/create-task", icon: PlusCircle },
   { title: "Мои баллы", url: "/point-history", icon: Award },
   { title: "Отчёты", url: "/reports", icon: BarChart3 },
 ];
