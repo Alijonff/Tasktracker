@@ -13,6 +13,7 @@ import {
   type Task,
   type AuctionBid,
   type Grade,
+  type Department,
 } from "@shared/schema";
 import { getInitialPointsByPosition, calculateGrade } from "@shared/utils";
 
@@ -329,16 +330,9 @@ const updateEmployeeSchema = z.object({
 
 export async function registerRoutes(app: Express): Promise<Server> {
   async function finalizeExpiredAuctions(departmentId?: string) {
-    const filters: Parameters<typeof storage.getAllTasks>[0] = {
-      type: "auction",
-      status: "backlog",
-    };
-
-    if (departmentId) {
-      filters.departmentId = departmentId;
-    }
-
-    const backlogAuctions = await storage.getAllTasks(filters);
+    const backlogAuctions = await storage.getActiveAuctions(
+      departmentId ? { departmentId } : undefined,
+    );
     const now = new Date();
 
     for (const task of backlogAuctions) {
@@ -1075,28 +1069,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const currentUser = req.session.user!;
       const parsed = createTaskSchema.parse(req.body);
-
-      let departmentId = parsed.departmentId ?? currentUser.departmentId ?? undefined;
-
-      if (!departmentId) {
-        return res.status(400).json({ error: "Укажите департамент для задачи" });
+      if (currentUser.role !== "director") {
+        return res
+          .status(403)
+          .json({ error: "Вы не привязаны как директор ни к одному департаменту" });
       }
 
-      const department = await storage.getDepartment(departmentId);
-      if (!department) {
-        return res.status(404).json({ error: "Департамент не найден" });
+      const allDepartments = await storage.getAllDepartments();
+      const directorDepartments = allDepartments.filter(
+        (department) => department.leaderId === currentUser.id,
+      );
+
+      if (directorDepartments.length === 0) {
+        return res
+          .status(403)
+          .json({ error: "Вы не привязаны как директор ни к одному департаменту" });
       }
 
-      if (currentUser.role !== "admin") {
-        if (currentUser.role !== "director" || currentUser.departmentId !== departmentId) {
-          return res.status(403).json({ error: "Создавать задачи может только директор департамента" });
+      let selectedDepartment: Department | undefined;
+
+      if (parsed.departmentId) {
+        const department = allDepartments.find((dept) => dept.id === parsed.departmentId);
+        if (!department) {
+          return res.status(404).json({ error: "Департамент не найден" });
         }
+        if (department.leaderId !== currentUser.id) {
+          return res
+            .status(403)
+            .json({ error: "У вас нет прав на создание аукциона в этом департаменте" });
+        }
+        selectedDepartment = department;
+      } else {
+        if (directorDepartments.length > 1) {
+          return res.status(400).json({ error: "Укажите департамент для аукциона" });
+        }
+        selectedDepartment = directorDepartments[0];
       }
+
+      if (!selectedDepartment) {
+        return res.status(500).json({ error: "Не удалось определить департамент" });
+      }
+
+      const departmentId = selectedDepartment.id;
 
       const startAt = new Date();
       const initialSum = parsed.auctionInitialSum;
       const plannedEndAt = calculateAuctionEnd(startAt);
-      
+
       const taskData: any = {
         title: parsed.title,
         description: parsed.description,
@@ -1219,23 +1238,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/auctions/active", requireAuth, async (req, res) => {
     try {
       const currentUser = req.session.user!;
-      
-      if (!currentUser.departmentId && currentUser.role !== "admin") {
+
+      const scope =
+        currentUser.role === "admin"
+          ? { departmentId: undefined as string | undefined }
+          : currentUser.departmentId
+          ? { departmentId: currentUser.departmentId }
+          : null;
+
+      if (!scope) {
         return res.json([]);
       }
 
-      await finalizeExpiredAuctions(currentUser.departmentId || undefined);
+      await finalizeExpiredAuctions(scope.departmentId);
 
-      const filters: Parameters<typeof storage.getAllTasks>[0] = {
-        type: "auction",
-        status: "backlog",
-      };
-
-      if (currentUser.role !== "admin") {
-        filters.departmentId = currentUser.departmentId!;
-      }
-
-      const activeAuctions = await storage.getAllTasks(filters);
+      const activeAuctions = await storage.getActiveAuctions(
+        scope.departmentId ? { departmentId: scope.departmentId } : undefined,
+      );
       const now = new Date();
       const auctionsWithPrice = activeAuctions.map((task) => {
         const auctionPrice = calculateAuctionPrice(task, now);
