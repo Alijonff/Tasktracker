@@ -63,131 +63,18 @@ export interface PointsOverview {
   pointsToNext?: number;
 }
 
-const ENABLE_API_MOCKS = true;
-
-const mockAuctionTasks: AuctionTaskSummary[] = [
-  {
-    id: "mock-1",
-    title: "Редизайн лендинга корпоративного портала",
-    description:
-      "Подготовить полностью адаптивный лендинг с акцентом на новый брендбук и оплатой через UzPay.",
-    status: "backlog",
-    departmentId: "dep-1",
-    creatorId: "user-director",
-    creatorName: "Дилшод Каримов",
-    minimumGrade: "C",
-    deadline: new Date(Date.now() + 1000 * 60 * 60 * 72).toISOString(),
-    startingPrice: 1_500_000,
-    currentPrice: 1_750_000,
-    bidsCount: 4,
-    leadingBidderId: "user-8",
-    leadingBidderName: "Севинч Эргашева",
-    canBid: true,
-  },
-  {
-    id: "mock-2",
-    title: "Интеграция автоплатежей в CRM",
-    description:
-      "Настроить синхронизацию с банковскими API и провести нагрузочное тестирование до 10k транзакций.",
-    status: "inProgress",
-    departmentId: "dep-1",
-    creatorId: "user-director",
-    creatorName: "Дилшод Каримов",
-    minimumGrade: "B",
-    deadline: new Date(Date.now() + 1000 * 60 * 60 * 120).toISOString(),
-    startingPrice: 2_800_000,
-    currentPrice: 3_200_000,
-    bidsCount: 7,
-    leadingBidderId: "user-5",
-    leadingBidderName: "Фаррух Норматов",
-    canBid: false,
-  },
-  {
-    id: "mock-3",
-    title: "UX-аудит процесса регистрации",
-    description:
-      "Собрать аналитику по воронке регистрации и подготовить улучшения с обязательными A/B-тестами.",
-    status: "underReview",
-    departmentId: "dep-2",
-    creatorId: "user-3",
-    creatorName: "Нилуфар Саидова",
-    minimumGrade: "D",
-    deadline: new Date(Date.now() + 1000 * 60 * 60 * 48).toISOString(),
-    startingPrice: 900_000,
-    currentPrice: 1_050_000,
-    bidsCount: 3,
-    leadingBidderId: "user-6",
-    leadingBidderName: "Мурат Алиев",
-    canBid: false,
-  },
-  {
-    id: "mock-4",
-    title: "Исследование лояльности корпоративных клиентов",
-    description:
-      "Подготовить опрос, провести 25 интервью и оформить отчёт с рекомендациями по удержанию.",
-    status: "completed",
-    departmentId: "dep-3",
-    creatorId: "user-7",
-    creatorName: "Матлуба Рахматова",
-    minimumGrade: "B",
-    deadline: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3).toISOString(),
-    startingPrice: 1_200_000,
-    currentPrice: 1_400_000,
-    bidsCount: 5,
-    leadingBidderId: "user-9",
-    leadingBidderName: "Сардор Юсупов",
-    canBid: false,
-  },
-];
-
-const mockPointHistory: PointTransaction[] = [
-  {
-    id: "ph-1",
-    userId: "current",
-    userName: "Дилшод Каримов",
-    type: "task_completion",
-    amount: 15,
-    taskId: "mock-2",
-    taskTitle: "Интеграция автоплатежей в CRM",
-    comment: "Закрыта в срок",
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2),
-  },
-  {
-    id: "ph-2",
-    userId: "current",
-    userName: "Дилшод Каримов",
-    type: "task_completion",
-    amount: 10,
-    taskId: "mock-3",
-    taskTitle: "UX-аудит процесса регистрации",
-    comment: "Высокая оценка от заказчика",
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 6),
-  },
-  {
-    id: "ph-3",
-    userId: "current",
-    userName: "Дилшод Каримов",
-    type: "position_assigned",
-    amount: 5,
-    taskId: null,
-    taskTitle: null,
-    comment: "Замещение руководителя на период отпуска",
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 10),
-  },
-];
-
-const mockPointsOverview: PointsOverview = {
-  points: 72,
-  grade: "B",
-  nextGrade: "A",
-  pointsToNext: 13,
+const EMPTY_METRICS: DashboardMetrics = {
+  completedTasks: 0,
+  closedAuctionsAmount: 0,
+  activeAuctions: 0,
+  backlogTasks: 0,
 };
 
-const mockMetrics: DashboardMetrics = {
-  completedTasks: 18,
-  closedAuctionsAmount: 12_450_000,
-  activeAuctions: 6,
-  backlogTasks: 9,
+const DEFAULT_POINTS_OVERVIEW: PointsOverview = {
+  points: 0,
+  grade: "D",
+  nextGrade: "C",
+  pointsToNext: 45,
 };
 
 type TaskApiResponse = { tasks: Task[] } | Task[];
@@ -288,16 +175,12 @@ function applyClientFilters(tasks: AuctionTaskSummary[], params: ListTasksParams
 }
 
 export async function listTasks(params: ListTasksParams = {}): Promise<AuctionTaskSummary[]> {
-  if (ENABLE_API_MOCKS) {
-    return applyClientFilters(mockAuctionTasks, params);
-  }
-
   try {
     const tasks = await fetchTasksFromServer(params);
     return applyClientFilters(tasks, params);
   } catch (error) {
-    console.warn("Falling back to auction mocks", error);
-    return applyClientFilters(mockAuctionTasks, params);
+    console.warn("Failed to load tasks", error);
+    return [];
   }
 }
 
@@ -327,153 +210,82 @@ export interface CreateAuctionTaskPayload {
 }
 
 export async function createAuctionTask(payload: CreateAuctionTaskPayload): Promise<AuctionTaskSummary> {
-  if (ENABLE_API_MOCKS) {
-    const fallbackDepartment = payload.minimumGrade === "A" ? "dep-1" : "dep-2";
-
-    const newTask: AuctionTaskSummary = {
-      id: `mock-${Date.now()}`,
-      title: payload.title,
-      description: payload.description,
-      status: "backlog",
-      departmentId: fallbackDepartment,
-      creatorId: "user-director",
-      creatorName: "Дилшод Каримов",
-      minimumGrade: payload.minimumGrade,
-      deadline: payload.deadline,
-      startingPrice: payload.startingPrice,
-      currentPrice: undefined,
-      bidsCount: 0,
-      leadingBidderId: undefined,
-      leadingBidderName: undefined,
-      canBid: true,
-    };
-    mockAuctionTasks.unshift(newTask);
-    return newTask;
-  }
-
   const response = await apiRequest("POST", "/api/tasks/auction", payload);
   const data = (await response.json()) as Task;
   return transformTask(data);
 }
 
-
 export async function updateTaskStatus(taskId: string, status: AuctionStatus): Promise<void> {
-  if (ENABLE_API_MOCKS) {
-    const task = mockAuctionTasks.find((item) => item.id === taskId);
-    if (task) {
-      task.status = status;
-    }
-    return;
-  }
-
   await apiRequest("PATCH", `/api/tasks/${taskId}/status`, { status });
 }
 
 export async function placeBid(taskId: string, amountSum: number): Promise<{ taskId: string; amount: number }> {
-  if (ENABLE_API_MOCKS) {
-    const task = mockAuctionTasks.find((item) => item.id === taskId);
-    if (task) {
-      task.currentPrice = amountSum;
-      task.bidsCount += 1;
-      task.leadingBidderId = "current";
-      task.leadingBidderName = "Вы";
-      task.canBid = false;
-    }
-    return { taskId, amount: amountSum };
-  }
-
   await apiRequest("POST", `/api/tasks/${taskId}/bids`, { amount: amountSum });
   return { taskId, amount: amountSum };
 }
 
 export async function getDashboardMetrics(): Promise<DashboardMetrics> {
-  if (ENABLE_API_MOCKS) {
-    return mockMetrics;
-  }
-
   try {
     const response = await apiRequest("GET", "/api/dashboard/overview");
     const data = await response.json();
     return {
-      completedTasks: data.metrics.completedTasks?.value ?? 0,
-      closedAuctionsAmount: data.metrics.closedAuctionsAmount?.value ?? 0,
-      activeAuctions: data.metrics.activeAuctions?.value ?? 0,
-      backlogTasks: data.metrics.backlogTasks?.value ?? 0,
+      completedTasks: data.metrics?.completedTasks?.value ?? 0,
+      closedAuctionsAmount: data.metrics?.closedAuctionsAmount?.value ?? 0,
+      activeAuctions: data.metrics?.activeAuctions?.value ?? 0,
+      backlogTasks: data.metrics?.backlogTasks?.value ?? 0,
     };
   } catch (error) {
-    console.warn("Falling back to dashboard mocks", error);
-    return mockMetrics;
+    console.warn("Failed to load dashboard metrics", error);
+    return EMPTY_METRICS;
   }
 }
 
 export async function getMyPoints(): Promise<PointsOverview> {
-  if (ENABLE_API_MOCKS) {
-    return mockPointsOverview;
-  }
-
   try {
     const response = await apiRequest("GET", "/api/users/me/points");
     const data = await response.json();
-    const grade = calculateGrade(data.points ?? 0);
+    const points = data.points ?? 0;
+    const grade = calculateGrade(points);
     let nextGrade: Grade | undefined;
     let pointsToNext: number | undefined;
 
     if (grade === "D") {
       nextGrade = "C";
-      pointsToNext = Math.max(0, 45 - data.points);
+      pointsToNext = Math.max(0, 45 - points);
     } else if (grade === "C") {
       nextGrade = "B";
-      pointsToNext = Math.max(0, 65 - data.points);
+      pointsToNext = Math.max(0, 65 - points);
     } else if (grade === "B") {
       nextGrade = "A";
-      pointsToNext = Math.max(0, 85 - data.points);
+      pointsToNext = Math.max(0, 85 - points);
     }
 
     return {
-      points: data.points ?? 0,
+      points,
       grade,
       nextGrade,
       pointsToNext,
     };
   } catch (error) {
-    console.warn("Falling back to points overview mocks", error);
-    return mockPointsOverview;
+    console.warn("Failed to load points overview", error);
+    return DEFAULT_POINTS_OVERVIEW;
   }
 }
 
 export async function getMyPointsHistory(): Promise<PointTransaction[]> {
-  if (ENABLE_API_MOCKS) {
-    return mockPointHistory;
-  }
-
   try {
     const response = await apiRequest("GET", "/api/users/me/point-history");
-    return await response.json();
+    const data = await response.json();
+    return Array.isArray(data) ? data : [];
   } catch (error) {
-    console.warn("Falling back to points history mocks", error);
-    return mockPointHistory;
+    console.warn("Failed to load points history", error);
+    return [];
   }
-}
-
-export function getAdapterMockControls() {
-  return {
-    isUsingMocks: ENABLE_API_MOCKS,
-    toggleHint:
-      "Чтобы переключить моки, измените флаг ENABLE_API_MOCKS в client/src/api/adapter.ts и перезапустите dev-сервер.",
-  } as const;
 }
 
 export async function getReportsDefaultDept(
   currentUser?: Pick<SelectUser, "role" | "departmentId"> | null,
 ): Promise<ReportsDefaultDepartment> {
-  if (ENABLE_API_MOCKS) {
-    const isAdmin = currentUser?.role === "admin";
-    return {
-      defaultDepartmentId: currentUser?.departmentId ?? (isAdmin ? mockAuctionTasks[0]?.departmentId ?? null : "dep-1"),
-      allowAllDepartments: isAdmin,
-    };
-  }
-
   try {
     const response = await apiRequest("GET", "/api/reports/default-department");
     const data = await response.json();
@@ -482,11 +294,10 @@ export async function getReportsDefaultDept(
       allowAllDepartments: Boolean(data.allowAllDepartments ?? (currentUser?.role === "admin")),
     };
   } catch (error) {
-    console.warn("Falling back to reports default department", error);
-    const isAdmin = currentUser?.role === "admin";
+    console.warn("Failed to load reports default department", error);
     return {
-      defaultDepartmentId: currentUser?.departmentId ?? (isAdmin ? mockAuctionTasks[0]?.departmentId ?? null : null),
-      allowAllDepartments: isAdmin,
+      defaultDepartmentId: currentUser?.departmentId ?? null,
+      allowAllDepartments: currentUser?.role === "admin",
     };
   }
 }
