@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import TaskCard from "@/components/TaskCard";
 import PlaceBidDialog from "@/components/PlaceBidDialog";
 import {
@@ -62,6 +63,7 @@ function createInitialFormState(): CreateFormState {
 export default function Auctions() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [bidDialogOpen, setBidDialogOpen] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -79,7 +81,7 @@ export default function Auctions() {
 
   const { data: tasks = [], isLoading } = useQuery<AuctionTaskSummary[]>({
     queryKey: ["auctions", "backlog"],
-    queryFn: () => listAuctions({ scope: "all" }),
+    queryFn: () => listAuctions({ scope: "all", status: "backlog" }),
   });
 
   const canCreateAuction = currentUser?.role === "admin" || currentUser?.role === "director";
@@ -103,6 +105,7 @@ export default function Auctions() {
       queryClient.invalidateQueries({ queryKey: ["auctions"], exact: false });
       setCreateDialogOpen(false);
       setFormState(createInitialFormState());
+      setLocation("/auctions");
     },
     onError: () => {
       toast({ title: "Не удалось создать аукцион", variant: "destructive" });
@@ -155,7 +158,8 @@ export default function Auctions() {
   };
 
   const backlogAuctions = useMemo(() => {
-    return tasks.map((task) => {
+    const backlogTasks = tasks.filter((task) => task.status === "backlog");
+    return backlogTasks.map((task) => {
       const gradeAllowed = userGrade ? gradeWeights[userGrade] >= gradeWeights[task.minimumGrade] : true;
       const restrictionReason = userGrade && !gradeAllowed ? `Ставка доступна с грейда ${task.minimumGrade}` : undefined;
       return {
@@ -193,9 +197,7 @@ export default function Auctions() {
           ))}
         </div>
       ) : backlogAuctions.length === 0 ? (
-        <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
-          Нет аукционов в бэклоге. Попробуйте позже.
-        </div>
+        <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">Нет данных</div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {backlogAuctions.map(({ task, canBid, restrictionReason }) => (

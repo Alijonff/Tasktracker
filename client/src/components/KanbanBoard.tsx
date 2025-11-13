@@ -189,7 +189,7 @@ function KanbanColumn({
         {children}
         {column.tasks.length === 0 && (
           <div className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">
-            Нет аукционов
+            Нет данных
           </div>
         )}
       </div>
@@ -202,7 +202,7 @@ export default function KanbanBoard({
   onStatusChange,
   onTaskClick,
   isLoading = false,
-  emptyMessage = "Нет аукционов по выбранным условиям",
+  emptyMessage = "Нет данных",
 }: KanbanBoardProps) {
   const createEmptyColumns = useCallback(
     (): Record<KanbanStatus, KanbanTask[]> => ({

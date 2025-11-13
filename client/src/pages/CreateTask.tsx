@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +31,7 @@ const DEFAULT_FORM: FormState = {
 export default function CreateTask() {
   const [formData, setFormData] = useState<FormState>(DEFAULT_FORM);
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -40,9 +42,10 @@ export default function CreateTask() {
         startingPrice: Number(formData.startingPrice),
         deadline: new Date(formData.deadline).toISOString(),
       }),
-    onSuccess: (task) => {
-      toast({ title: "Аукцион создан", description: `Добавлена задача «${task.title}»` });
+    onSuccess: () => {
+      toast({ title: "Аукцион создан" });
       setFormData(DEFAULT_FORM);
+      setLocation("/auctions");
     },
     onError: () => {
       toast({

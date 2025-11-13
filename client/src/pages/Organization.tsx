@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import {
@@ -15,7 +15,6 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import PositionCell, { PositionType, positionLabels } from "@/components/PositionCell";
-import OrganizationTree, { type OrgNode } from "@/components/OrganizationTree";
 import { Plus, X, ChevronDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { Department, Management, Division, SelectUser } from "@shared/schema";
@@ -920,7 +919,6 @@ export default function Organization() {
   const currentUser = authData?.user;
   const managementDeputyStorageKey = currentUser ? `org-management-deputy-${currentUser.id}` : "org-management-deputy";
   const collapsibleStorageKey = currentUser ? `org-sections-${currentUser.id}` : "org-sections";
-  const treeStorageKey = currentUser ? `org-tree-${currentUser.id}` : "org-tree";
 
   const [managementDeputies, setManagementDeputies] = useState<Record<string, string | null>>({});
   const [sectionState, setSectionState] = useState<Record<string, boolean>>({});
@@ -962,68 +960,6 @@ export default function Organization() {
     if (typeof window === "undefined") return;
     localStorage.setItem(collapsibleStorageKey, JSON.stringify(sectionState));
   }, [sectionState, collapsibleStorageKey]);
-
-  const orgTreeData = useMemo<OrgNode[]>(() => {
-    return departments.map((department) => {
-      const deptEmployees = employees.filter((emp) => emp.departmentId === department.id);
-      const director = deptEmployees.find((emp) => emp.role === 'director');
-
-      const managementNodes = managements
-        .filter((management) => management.departmentId === department.id)
-        .map((management) => {
-          const managementEmployees = deptEmployees.filter((emp) => emp.managementId === management.id);
-          const managementHead = managementEmployees.find((emp) => emp.role === 'manager' && !emp.divisionId);
-          const divisionNodes = divisions
-            .filter((division) => division.managementId === management.id)
-            .map((division) => {
-              const divisionEmployees = managementEmployees.filter((emp) => emp.divisionId === division.id);
-              const divisionHead = divisionEmployees.find((emp) => emp.role === 'manager');
-              return {
-                id: division.id,
-                name: division.name,
-                type: 'division' as const,
-                leader: division.leaderName ?? divisionHead?.name ?? undefined,
-                employeeCount: divisionEmployees.length,
-                children: divisionEmployees.map((emp) => ({
-                  id: emp.id,
-                  name: emp.name ?? emp.username,
-                  type: 'employee' as const,
-                  points: typeof emp.points === 'number' ? emp.points : undefined,
-                  rating: parseRating(emp.rating),
-                })),
-              };
-            });
-
-          const managementLevelEmployees = managementEmployees
-            .filter((emp) => !emp.divisionId)
-            .map((emp) => ({
-              id: emp.id,
-              name: emp.name ?? emp.username,
-              type: 'employee' as const,
-              points: typeof emp.points === 'number' ? emp.points : undefined,
-              rating: parseRating(emp.rating),
-            }));
-
-          return {
-            id: management.id,
-            name: management.name,
-            type: 'management' as const,
-            leader: management.leaderName ?? managementHead?.name ?? undefined,
-            employeeCount: managementEmployees.length,
-            children: [...divisionNodes, ...managementLevelEmployees],
-          };
-        });
-
-    return {
-      id: department.id,
-      name: department.name,
-      type: 'department' as const,
-      leader: department.leaderName ?? director?.name ?? undefined,
-      employeeCount: deptEmployees.length,
-      children: managementNodes,
-    };
-  });
-  }, [departments, managements, divisions, employees]);
 
   const canEditDepartment = (departmentId: string) => {
     if (!currentUser) return false;
@@ -1077,20 +1013,14 @@ export default function Organization() {
         )}
       </div>
 
-      {orgTreeData.length > 0 && (
-        <OrganizationTree data={orgTreeData} storageKey={treeStorageKey} />
-      )}
-
       {departments.length === 0 ? (
         <div className="border rounded-lg p-12 text-center space-y-4">
-          <p className="text-muted-foreground">Структура организации пока не создана</p>
-          {canCreateStructure ? (
+          <p className="text-muted-foreground">Нет данных</p>
+          {canCreateStructure && (
             <Button onClick={() => setIsDialogOpen(true)} variant="outline">
               <Plus size={18} className="mr-2" />
-              Создать первый департамент
+              Создать структуру
             </Button>
-          ) : (
-            <p className="text-sm text-muted-foreground">Обратитесь к администратору для создания структуры.</p>
           )}
         </div>
       ) : (

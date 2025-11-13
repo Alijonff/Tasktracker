@@ -10,7 +10,7 @@ export function calculateGrade(points: number): Grade {
 export function getInitialPointsByPosition(positionType: string): number {
   switch (positionType) {
     case "department_director":
-      return 95;
+      return 85;
     case "department_deputy":
     case "management_head":
       return 80;

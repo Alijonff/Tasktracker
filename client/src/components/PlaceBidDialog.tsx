@@ -60,11 +60,16 @@ export default function PlaceBidDialog({
 
   if (!task) return null;
 
+  const currentPrice = task.currentPrice ?? 0;
+  const parsedAmount = parseBidAmount(amount);
+  const isAmountEntered = parsedAmount !== null;
+  const isAmountWithinLimit = parsedAmount !== null && parsedAmount <= currentPrice;
+  const isBidValid = isAmountEntered && isAmountWithinLimit;
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const parsed = parseBidAmount(amount);
-    if (parsed === null) return;
-    onSubmit?.(parsed);
+    if (!isBidValid || parsedAmount === null) return;
+    onSubmit?.(parsedAmount);
   };
 
   return (
@@ -97,13 +102,16 @@ export default function PlaceBidDialog({
                 id="bidAmount"
                 type="number"
                 min="1"
-                step="1000"
+                step="1"
                 placeholder="Введите сумму"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 required
                 data-testid="input-bid-amount"
               />
+              {isAmountEntered && !isAmountWithinLimit && (
+                <p className="text-xs text-status-overdue">Ставка должна быть не больше текущей цены</p>
+              )}
             </div>
 
             <Separator />
@@ -142,7 +150,7 @@ export default function PlaceBidDialog({
                     </div>
                   ))}
                   {task.bids.length === 0 && (
-                    <div className="text-sm text-muted-foreground text-center py-4">Ставок пока нет</div>
+                    <div className="text-sm text-muted-foreground text-center py-4">Нет данных</div>
                   )}
                 </div>
               </ScrollArea>
@@ -157,7 +165,7 @@ export default function PlaceBidDialog({
               >
                 Отмена
               </Button>
-              <Button type="submit" disabled={isSubmitting} data-testid="button-submit-bid">
+              <Button type="submit" disabled={isSubmitting || !isBidValid} data-testid="button-submit-bid">
                 {isSubmitting ? "Отправка..." : "Сделать ставку"}
               </Button>
             </DialogFooter>

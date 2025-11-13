@@ -144,9 +144,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             {topHistory.length === 0 ? (
-              <div className="text-sm text-muted-foreground text-center py-10">
-                Нет транзакций. Участвуйте в аукционах, чтобы заработать баллы.
-              </div>
+              <div className="text-sm text-muted-foreground text-center py-10">Нет данных</div>
             ) : (
               <Table>
                 <TableHeader>
