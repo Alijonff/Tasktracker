@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { createAuctionTask, type CreateAuctionTaskPayload, type Grade } from "@/api/adapter";
+import type { Department, SelectUser } from "@shared/schema";
 
 interface CreateAuctionModalProps {
   open: boolean;
@@ -21,6 +22,7 @@ interface FormState {
   minimumGrade: Grade;
   startingPrice: string;
   deadlineDate: string;
+  departmentId?: string;
 }
 
 function formatDateOnly(date: Date): string {
@@ -39,6 +41,7 @@ function createInitialFormState(): FormState {
     minimumGrade: "D",
     startingPrice: "",
     deadlineDate: formatDateOnly(defaultDeadline),
+    departmentId: undefined,
   };
 }
 
@@ -101,12 +104,32 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
+  const { data: authResponse } = useQuery<{ user: SelectUser | null }>({ queryKey: ["/api/auth/me"] });
+  const currentUser = authResponse?.user;
+  const isDirector = currentUser?.role === "director";
+  const shouldLoadDepartments = open && isDirector;
+  const { data: departments } = useQuery<Department[]>({
+    queryKey: ["/api/departments"],
+    enabled: shouldLoadDepartments,
+  });
+
+  const directorDepartments = useMemo(() => {
+    if (!currentUser) return [] as Department[];
+    return (departments ?? []).filter((department) => department.leaderId === currentUser.id);
+  }, [currentUser, departments]);
 
   useEffect(() => {
     if (!open) {
       setFormState(createInitialFormState());
     }
   }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (directorDepartments.length === 1 && !formState.departmentId) {
+      setFormState((prev) => ({ ...prev, departmentId: directorDepartments[0].id }));
+    }
+  }, [open, directorDepartments, formState.departmentId]);
 
   const minDate = useMemo(() => formatDateOnly(new Date()), []);
 
@@ -122,7 +145,10 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
     onError: (error: unknown) => {
       const { status, message } = parseApiError(error);
       if (status === 403) {
-        toast({ title: "У вас нет прав на создание аукциона", variant: "destructive" });
+        toast({
+          title: message ?? "У вас нет прав создавать аукционы в этом департаменте",
+          variant: "destructive",
+        });
         return;
       }
 
@@ -136,8 +162,7 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
       }
 
       toast({
-        title: "Не удалось создать аукцион",
-        description: "Попробуйте позже",
+        title: "Не удалось создать аукцион, попробуйте позже",
         variant: "destructive",
       });
     },
@@ -157,6 +182,11 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
     const trimmedDescription = formState.description.trim();
     const amount = Number(formState.startingPrice);
     const deadline = composeDeadline(formState.deadlineDate);
+
+    if (directorDepartments.length > 1 && !formState.departmentId) {
+      toast({ title: "Выберите департамент", variant: "destructive" });
+      return;
+    }
 
     if (!trimmedTitle) {
       toast({ title: "Введите название", variant: "destructive" });
@@ -184,6 +214,7 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
       minimumGrade: formState.minimumGrade,
       startingPrice: amount,
       deadline: deadline.toISOString(),
+      departmentId: formState.departmentId,
     });
   };
 
@@ -218,6 +249,29 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
                 rows={5}
               />
             </div>
+
+            {directorDepartments.length > 1 && (
+              <div className="space-y-2">
+                <Label htmlFor="auction-department">Департамент *</Label>
+                <Select
+                  value={formState.departmentId ?? ""}
+                  onValueChange={(value) => setFormState((prev) => ({ ...prev, departmentId: value }))}
+                  disabled={mutation.isPending}
+                >
+                  <SelectTrigger id="auction-department">
+                    <SelectValue placeholder="Выберите департамент" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {directorDepartments.map((department) => (
+                      <SelectItem key={department.id} value={department.id}>
+                        {department.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Выберите департамент, от имени которого создаёте аукцион</p>
+              </div>
+            )}
 
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">

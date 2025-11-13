@@ -653,9 +653,9 @@ export class DbStorage implements IStorage {
   async getActiveAuctions(filters?: { departmentId?: string }): Promise<Task[]> {
     const conditions: any[] = [
       eq(tasks.type, "auction" as const),
-      inArray(tasks.status, ["backlog", "inProgress"] as any)
+      eq(tasks.status, "backlog" as const),
     ];
-    
+
     if (filters?.departmentId) {
       conditions.push(eq(tasks.departmentId, filters.departmentId));
     }

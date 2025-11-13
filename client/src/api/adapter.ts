@@ -200,10 +200,19 @@ export interface CreateAuctionTaskPayload {
   minimumGrade: Grade;
   startingPrice: number;
   deadline: string;
+  departmentId?: string;
 }
 
 export async function createAuctionTask(payload: CreateAuctionTaskPayload): Promise<AuctionTaskSummary> {
-  const response = await apiRequest("POST", "/api/tasks/auction", payload);
+  const response = await apiRequest("POST", "/api/tasks", {
+    title: payload.title,
+    description: payload.description,
+    type: "auction" as const,
+    minimumGrade: payload.minimumGrade,
+    deadline: payload.deadline,
+    departmentId: payload.departmentId,
+    auctionInitialSum: payload.startingPrice,
+  });
   const data = (await response.json()) as Task;
   return transformTask(data);
 }
