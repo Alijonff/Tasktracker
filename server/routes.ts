@@ -43,6 +43,7 @@ const positionTypeSchema = z.enum([
   "director",
   "deputy",
   "management_head",
+  "management_deputy",
   "division_head",
   "senior",
   "employee",
@@ -54,6 +55,7 @@ const positionRoleMap: Record<PositionType, "director" | "manager" | "senior" | 
   director: "director",
   deputy: "manager",
   management_head: "manager",
+  management_deputy: "manager",
   division_head: "manager",
   senior: "senior",
   employee: "employee",
@@ -73,6 +75,7 @@ const positionGradeMap: Record<PositionType, Grade> = {
   director: "A",
   deputy: "A",
   management_head: "A",
+  management_deputy: "A",
   division_head: "B",
   senior: "C",
   employee: "D",
@@ -201,6 +204,22 @@ const placeBidSchema = z.object({
   bidAmount: decimalNumberSchema,
 });
 
+const updateManagementDeputySchema = z.object({
+  deputyId: z.string().min(1).nullable(),
+});
+
+async function findManagementByDeputyId(userId: string) {
+  const managements = await storage.getAllManagements();
+  return managements.find((management) => management.deputyId === userId) ?? null;
+}
+
+async function clearManagementDeputyAssignment(userId: string) {
+  const management = await findManagementByDeputyId(userId);
+  if (management) {
+    await storage.updateManagement(management.id, { deputyId: null });
+  }
+}
+
 class PositionAssignmentError extends Error {}
 
 async function resolveEmployeeAssignment(
@@ -225,7 +244,8 @@ async function resolveEmployeeAssignment(
         role: positionRoleMap[positionType],
       } as const;
     }
-    case "management_head": {
+    case "management_head":
+    case "management_deputy": {
       const managementId = data.managementId;
       if (!managementId) {
         throw new PositionAssignmentError("Укажите управление для этой должности");
@@ -480,6 +500,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.put("/api/managements/:id/deputy", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const management = await storage.getManagement(id);
+
+      if (!management) {
+        return res.status(404).json({ error: "Управление не найдено" });
+      }
+
+      if (!canModifyDepartment(req.session.user, management.departmentId)) {
+        return res.status(403).json({ error: "Недостаточно прав для изменения управления" });
+      }
+
+      const parsed = updateManagementDeputySchema.parse(req.body);
+
+      if (!parsed.deputyId) {
+        const updated = await storage.updateManagement(id, { deputyId: null });
+        return res.json(updated ?? { ...management, deputyId: null });
+      }
+
+      const candidate = await storage.getUserById(parsed.deputyId);
+      if (!candidate) {
+        return res.status(404).json({ error: "Сотрудник не найден" });
+      }
+
+      if (candidate.departmentId !== management.departmentId) {
+        return res.status(400).json({ error: "Сотрудник должен принадлежать этому департаменту" });
+      }
+
+      const departmentEmployees = await storage.getAllUsers({ departmentId: management.departmentId });
+      const departmentManagements = await storage.getAllManagements({ departmentId: management.departmentId });
+
+      const blockedUserIds = new Set<string>();
+      for (const employee of departmentEmployees) {
+        if (employee.role === "director") {
+          blockedUserIds.add(employee.id);
+        } else if (employee.role === "manager") {
+          if (!employee.managementId && !employee.divisionId) {
+            blockedUserIds.add(employee.id);
+          } else if (employee.managementId && !employee.divisionId) {
+            blockedUserIds.add(employee.id);
+          } else if (employee.divisionId) {
+            blockedUserIds.add(employee.id);
+          }
+        }
+      }
+
+      for (const deptManagement of departmentManagements) {
+        if (deptManagement.deputyId) {
+          blockedUserIds.add(deptManagement.deputyId);
+        }
+      }
+
+      if (management.deputyId) {
+        blockedUserIds.delete(management.deputyId);
+      }
+
+      if (blockedUserIds.has(parsed.deputyId)) {
+        return res.status(409).json({ error: "Сотрудник уже занимает управленческую должность в этом департаменте" });
+      }
+
+      const updated = await storage.updateManagement(id, { deputyId: parsed.deputyId });
+      res.json(updated);
+    } catch (error) {
+      res.status(400).json({ error: "Не удалось обновить заместителя управления" });
+    }
+  });
+
   // Create division (admin or director of that department)
   app.post("/api/divisions", requireAuth, async (req, res) => {
     try {
@@ -676,27 +764,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Недостаточно прав для добавления сотрудника" });
       }
 
-      const uniquePositions: PositionType[] = ["director", "deputy", "management_head", "division_head"];
-      if (uniquePositions.includes(parsed.positionType)) {
-        const employees = await storage.getAllUsers({ departmentId: assignment.departmentId });
-        const isTaken = employees.some((emp) => {
-          if (parsed.positionType === "director") {
-            return emp.role === "director" && !emp.managementId && !emp.divisionId;
-          }
-          if (parsed.positionType === "deputy") {
-            return emp.role === "manager" && !emp.managementId && !emp.divisionId;
-          }
-          if (parsed.positionType === "management_head") {
-            return emp.role === "manager" && emp.managementId === assignment.managementId && !emp.divisionId;
-          }
-          if (parsed.positionType === "division_head") {
-            return emp.role === "manager" && emp.divisionId === assignment.divisionId;
-          }
-          return false;
-        });
+      if (parsed.positionType === "management_deputy") {
+        if (!assignment.managementId) {
+          return res.status(400).json({ error: "Укажите управление для этой должности" });
+        }
+        const management = await storage.getManagement(assignment.managementId);
+        if (!management) {
+          return res.status(404).json({ error: "Управление не найдено" });
+        }
+        if (management.deputyId) {
+          return res.status(400).json({ error: "У этого управления уже есть заместитель" });
+        }
+      } else {
+        const uniquePositions: PositionType[] = ["director", "deputy", "management_head", "division_head"];
+        if (uniquePositions.includes(parsed.positionType)) {
+          const employees = await storage.getAllUsers({ departmentId: assignment.departmentId });
+          const isTaken = employees.some((emp) => {
+            if (parsed.positionType === "director") {
+              return emp.role === "director" && !emp.managementId && !emp.divisionId;
+            }
+            if (parsed.positionType === "deputy") {
+              return emp.role === "manager" && !emp.managementId && !emp.divisionId;
+            }
+            if (parsed.positionType === "management_head") {
+              return emp.role === "manager" && emp.managementId === assignment.managementId && !emp.divisionId;
+            }
+            if (parsed.positionType === "division_head") {
+              return emp.role === "manager" && emp.divisionId === assignment.divisionId;
+            }
+            return false;
+          });
 
-        if (isTaken) {
-          return res.status(400).json({ error: "Эта должность уже занята" });
+          if (isTaken) {
+            return res.status(400).json({ error: "Эта должность уже занята" });
+          }
         }
       }
 
@@ -713,12 +814,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         true
       );
 
+      if (parsed.positionType === "management_deputy" && assignment.managementId) {
+        await storage.updateManagement(assignment.managementId, { deputyId: user.id });
+      }
+
       // Assign starting points for the position
       // Map PositionType to getInitialPointsByPosition keys
       const positionKeyMap: Record<PositionType, string> = {
         director: "department_director",
         deputy: "department_deputy",
         management_head: "management_head",
+        management_deputy: "management_deputy",
         division_head: "division_head",
         senior: "division_senior",
         employee: "division_employee",
@@ -730,6 +836,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         director: "Директор",
         deputy: "Заместитель",
         management_head: "Руководитель управления",
+        management_deputy: "Заместитель руководителя управления",
         division_head: "Руководитель отдела",
         senior: "Старший сотрудник",
         employee: "Сотрудник",
@@ -813,28 +920,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(403).json({ error: "Недостаточно прав для изменения сотрудника" });
         }
 
-        const uniquePositions: PositionType[] = ["director", "deputy", "management_head", "division_head"];
-        if (uniquePositions.includes(parsed.positionType)) {
-          const employees = await storage.getAllUsers({ departmentId: assignment.departmentId });
-          const isTaken = employees.some((emp) => {
-            if (emp.id === id) return false;
-            if (parsed.positionType === "director") {
-              return emp.role === "director" && !emp.managementId && !emp.divisionId;
-            }
-            if (parsed.positionType === "deputy") {
-              return emp.role === "manager" && !emp.managementId && !emp.divisionId;
-            }
-            if (parsed.positionType === "management_head") {
-              return emp.role === "manager" && emp.managementId === assignment.managementId && !emp.divisionId;
-            }
-            if (parsed.positionType === "division_head") {
-              return emp.role === "manager" && emp.divisionId === assignment.divisionId;
-            }
-            return false;
-          });
+        if (parsed.positionType === "management_deputy") {
+          if (!assignment.managementId) {
+            return res.status(400).json({ error: "Укажите управление для этой должности" });
+          }
+          const management = await storage.getManagement(assignment.managementId);
+          if (!management) {
+            return res.status(404).json({ error: "Управление не найдено" });
+          }
+          if (management.deputyId && management.deputyId !== id) {
+            return res.status(400).json({ error: "У этого управления уже есть заместитель" });
+          }
+          const currentManagement = await findManagementByDeputyId(id);
+          if (currentManagement && currentManagement.id !== assignment.managementId) {
+            await storage.updateManagement(currentManagement.id, { deputyId: null });
+          }
+        } else {
+          await clearManagementDeputyAssignment(id);
+          const uniquePositions: PositionType[] = ["director", "deputy", "management_head", "division_head"];
+          if (uniquePositions.includes(parsed.positionType)) {
+            const employees = await storage.getAllUsers({ departmentId: assignment.departmentId });
+            const isTaken = employees.some((emp) => {
+              if (emp.id === id) return false;
+              if (parsed.positionType === "director") {
+                return emp.role === "director" && !emp.managementId && !emp.divisionId;
+              }
+              if (parsed.positionType === "deputy") {
+                return emp.role === "manager" && !emp.managementId && !emp.divisionId;
+              }
+              if (parsed.positionType === "management_head") {
+                return emp.role === "manager" && emp.managementId === assignment.managementId && !emp.divisionId;
+              }
+              if (parsed.positionType === "division_head") {
+                return emp.role === "manager" && emp.divisionId === assignment.divisionId;
+              }
+              return false;
+            });
 
-          if (isTaken) {
-            return res.status(400).json({ error: "Эта должность уже занята" });
+            if (isTaken) {
+              return res.status(400).json({ error: "Эта должность уже занята" });
+            }
           }
         }
 
@@ -860,6 +985,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updated = await storage.updateUser(id, updates);
       if (!updated) {
         return res.status(404).json({ error: "Сотрудник не найден" });
+      }
+
+      if (parsed.positionType === "management_deputy" && updates.managementId) {
+        await storage.updateManagement(updates.managementId, { deputyId: id });
       }
 
       const { passwordHash: _, ...userWithoutPassword } = updated;
@@ -889,6 +1018,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Недостаточно прав для удаления сотрудника" });
       }
 
+      await clearManagementDeputyAssignment(id);
       await storage.deleteUser(id);
       res.json({ success: true });
     } catch (error) {
