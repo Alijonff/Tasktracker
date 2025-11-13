@@ -244,6 +244,10 @@ export class DbStorage implements IStorage {
     return department;
   }
 
+  async deleteDepartment(id: string): Promise<void> {
+    await db.delete(departments).where(eq(departments.id, id));
+  }
+
   // Managements
   async getAllManagements(filters?: { departmentId?: string }): Promise<Management[]> {
     if (filters?.departmentId) {
@@ -269,6 +273,10 @@ export class DbStorage implements IStorage {
       .where(eq(managements.id, id))
       .returning();
     return management;
+  }
+
+  async deleteManagement(id: string): Promise<void> {
+    await db.delete(managements).where(eq(managements.id, id));
   }
 
   // Divisions
@@ -299,6 +307,10 @@ export class DbStorage implements IStorage {
       .where(eq(divisions.id, id))
       .returning();
     return division;
+  }
+
+  async deleteDivision(id: string): Promise<void> {
+    await db.delete(divisions).where(eq(divisions.id, id));
   }
 
   // Tasks

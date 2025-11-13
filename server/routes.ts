@@ -526,6 +526,102 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Delete department (admin only)
+  app.delete("/api/departments/:id", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const existing = await storage.getDepartment(id);
+      
+      if (!existing) {
+        return res.status(404).json({ error: "Департамент не найден" });
+      }
+
+      const managements = await storage.getAllManagements({ departmentId: id });
+      if (managements.length > 0) {
+        return res.status(409).json({ error: "Невозможно удалить департамент с управлениями" });
+      }
+
+      const divisions = await storage.getAllDivisions({ departmentId: id });
+      if (divisions.length > 0) {
+        return res.status(409).json({ error: "Невозможно удалить департамент с подразделениями" });
+      }
+
+      const users = await storage.getAllUsers({ departmentId: id });
+      if (users.length > 0) {
+        return res.status(409).json({ error: "Невозможно удалить департамент с сотрудниками" });
+      }
+
+      const tasks = await storage.getAllTasks({ departmentId: id });
+      if (tasks.length > 0) {
+        return res.status(409).json({ error: "Невозможно удалить департамент с задачами" });
+      }
+
+      await storage.deleteDepartment(id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(400).json({ error: "Ошибка при удалении департамента" });
+    }
+  });
+
+  // Delete management (admin only)
+  app.delete("/api/managements/:id", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const existing = await storage.getManagement(id);
+      
+      if (!existing) {
+        return res.status(404).json({ error: "Управление не найдено" });
+      }
+
+      const divisions = await storage.getAllDivisions({ managementId: id });
+      if (divisions.length > 0) {
+        return res.status(409).json({ error: "Невозможно удалить управление с подразделениями" });
+      }
+
+      const users = await storage.getAllUsers({ managementId: id });
+      if (users.length > 0) {
+        return res.status(409).json({ error: "Невозможно удалить управление с сотрудниками" });
+      }
+
+      const tasks = await storage.getAllTasks({ managementId: id });
+      if (tasks.length > 0) {
+        return res.status(409).json({ error: "Невозможно удалить управление с задачами" });
+      }
+
+      await storage.deleteManagement(id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(400).json({ error: "Ошибка при удалении управления" });
+    }
+  });
+
+  // Delete division (admin only)
+  app.delete("/api/divisions/:id", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const existing = await storage.getDivision(id);
+      
+      if (!existing) {
+        return res.status(404).json({ error: "Подразделение не найдено" });
+      }
+
+      const users = await storage.getAllUsers({ divisionId: id });
+      if (users.length > 0) {
+        return res.status(409).json({ error: "Невозможно удалить подразделение с сотрудниками" });
+      }
+
+      const tasks = await storage.getAllTasks({ divisionId: id });
+      if (tasks.length > 0) {
+        return res.status(409).json({ error: "Невозможно удалить подразделение с задачами" });
+      }
+
+      await storage.deleteDivision(id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(400).json({ error: "Ошибка при удалении подразделения" });
+    }
+  });
+
   // Get all users (employees) - optionally filtered
   app.get("/api/employees", requireAuth, async (req, res) => {
     try {
