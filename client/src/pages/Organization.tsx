@@ -76,6 +76,13 @@ function getErrorStatusCode(error: any): number | null {
   return Number.isNaN(status) ? null : status;
 }
 
+function invalidateOrganizationQueries() {
+  queryClient.invalidateQueries({ queryKey: ["/api/departments"] });
+  queryClient.invalidateQueries({ queryKey: ["/api/managements"] });
+  queryClient.invalidateQueries({ queryKey: ["/api/divisions"] });
+  queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
+}
+
 const optionalEmailField = z
   .string()
   .trim()
@@ -127,7 +134,7 @@ function AddDepartmentDialog({
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/departments"] });
+      invalidateOrganizationQueries();
       toast({ title: "Департамент создан" });
     },
     onError: () => {
@@ -258,8 +265,7 @@ function AddDepartmentDialog({
         }
       }
 
-      queryClient.invalidateQueries({ queryKey: ["/api/managements"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/divisions"] });
+      invalidateOrganizationQueries();
 
       toast({ title: "Структура создана успешно" });
       resetForm();
@@ -416,7 +422,7 @@ function CreateManagementDialog({
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/managements"] });
+      invalidateOrganizationQueries();
       toast({ title: "Управление создано" });
       onOpenChange(false);
     },
@@ -519,7 +525,7 @@ function CreateDivisionDialog({
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/divisions"] });
+      invalidateOrganizationQueries();
       toast({ title: "Отдел создан" });
       onOpenChange(false);
     },

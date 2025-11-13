@@ -1,5 +1,4 @@
-import { useMemo } from "react";
-import { useLocation } from "wouter";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import StatsCard from "@/components/StatsCard";
@@ -10,6 +9,7 @@ import { getDashboardMetrics, getMyPoints, getMyPointsHistory } from "@/api/adap
 import { formatMoney, formatDateTime } from "@/lib/formatters";
 import type { PointTransaction, SelectUser } from "@shared/schema";
 import { calculateGrade } from "@shared/utils";
+import CreateAuctionModal from "@/components/CreateAuctionModal";
 
 interface MetricsQueryResult {
   completedTasks: number;
@@ -21,7 +21,7 @@ interface MetricsQueryResult {
 export const canCreateAuctionsForRole = (role?: SelectUser["role"] | null) => role === "director" || role === "admin";
 
 export default function Dashboard() {
-  const [, setLocation] = useLocation();
+  const [createAuctionOpen, setCreateAuctionOpen] = useState(false);
   const { data: userResponse } = useQuery<{ user: SelectUser | null }>({ queryKey: ["/api/auth/me"] });
   const currentUser = userResponse?.user;
 
@@ -83,7 +83,7 @@ export default function Dashboard() {
           <p className="text-muted-foreground">Актуальные показатели департамента</p>
         </div>
         {canCreateAuctions && (
-          <Button onClick={() => setLocation("/create-task")} data-testid="button-create-task-header">
+          <Button onClick={() => setCreateAuctionOpen(true)} data-testid="button-create-task-header">
             Создать аукцион
             <ArrowRight size={18} />
           </Button>
@@ -173,6 +173,9 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+      {canCreateAuctions && (
+        <CreateAuctionModal open={createAuctionOpen} onOpenChange={setCreateAuctionOpen} />
+      )}
     </div>
   );
 }

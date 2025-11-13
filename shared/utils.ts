@@ -1,10 +1,38 @@
 export type Grade = "D" | "C" | "B" | "A";
 
+export const gradeThresholds: Record<Grade, number> = {
+  D: 0,
+  C: 45,
+  B: 65,
+  A: 85,
+};
+
+const orderedGrades: Grade[] = ["D", "C", "B", "A"];
+
 export function calculateGrade(points: number): Grade {
-  if (points < 45) return "D";
-  if (points < 65) return "C";
-  if (points < 85) return "B";
+  if (points < gradeThresholds.C) return "D";
+  if (points < gradeThresholds.B) return "C";
+  if (points < gradeThresholds.A) return "B";
   return "A";
+}
+
+export function calculateGradeProgress(points: number): {
+  grade: Grade;
+  nextGrade?: Grade;
+  pointsToNext?: number;
+} {
+  const grade = calculateGrade(points);
+  const currentIndex = orderedGrades.indexOf(grade);
+  const nextGrade = orderedGrades[currentIndex + 1];
+
+  if (!nextGrade) {
+    return { grade };
+  }
+
+  const nextThreshold = gradeThresholds[nextGrade];
+  const pointsToNext = Math.max(0, nextThreshold - points);
+
+  return { grade, nextGrade, pointsToNext };
 }
 
 export function getInitialPointsByPosition(positionType: string): number {
