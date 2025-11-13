@@ -59,6 +59,8 @@ Preferred communication style: Simple, everyday language.
 
 **Access Control:** Role-based permissions enforced at API level, hierarchical visibility for leaders, employees limited to assigned tasks and division auctions, task creation restricted to Senior Employee and above.
 
+**DELETE Endpoints (Admin-only):** Basic implementation with dependency checks for departments, managements, divisions. Returns 409 Conflict if dependent entities exist (managements, divisions, users, tasks). **Limitations:** Does not check all dependencies (bids, point transactions, etc.). Production requires cascade deletes or soft deletes. No transactional safeguards against race conditions.
+
 ### Development Workflow
 
 **Build System:** Vite for frontend, esbuild for backend, TypeScript with strict mode, shared schema definitions.

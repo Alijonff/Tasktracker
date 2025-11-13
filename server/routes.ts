@@ -527,6 +527,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Delete department (admin only)
+  // NOTE: Basic implementation - checks managements, divisions, users, tasks
+  // TODO: Add checks for bids, point transactions, and other dependencies
+  // TODO: Implement transaction for race condition prevention
+  // Production: Consider cascade deletes or soft deletes
   app.delete("/api/departments/:id", requireAuth, requireAdmin, async (req, res) => {
     try {
       const { id } = req.params;
@@ -564,6 +568,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Delete management (admin only)
+  // NOTE: Basic implementation - checks divisions, users, tasks
+  // TODO: Add checks for bids, point transactions, and other dependencies
+  // TODO: Implement transaction for race condition prevention
+  // Production: Consider cascade deletes or soft deletes
   app.delete("/api/managements/:id", requireAuth, requireAdmin, async (req, res) => {
     try {
       const { id } = req.params;
@@ -596,6 +604,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Delete division (admin only)
+  // NOTE: Basic implementation - checks users, tasks
+  // TODO: Add checks for bids, point transactions, and other dependencies
+  // TODO: Implement transaction for race condition prevention
+  // Production: Consider cascade deletes or soft deletes
   app.delete("/api/divisions/:id", requireAuth, requireAdmin, async (req, res) => {
     try {
       const { id } = req.params;
