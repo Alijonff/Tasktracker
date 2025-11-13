@@ -1,6 +1,6 @@
 import { apiRequest } from "@/lib/queryClient";
 import type { Task, PointTransaction, SelectUser } from "@shared/schema";
-import { calculateGrade } from "@shared/utils";
+import { calculateGradeProgress } from "@shared/utils";
 
 export type AuctionStatus = "backlog" | "inProgress" | "underReview" | "completed";
 export type Grade = "A" | "B" | "C" | "D";
@@ -68,13 +68,6 @@ const EMPTY_METRICS: DashboardMetrics = {
   closedAuctionsAmount: 0,
   activeAuctions: 0,
   backlogTasks: 0,
-};
-
-const DEFAULT_POINTS_OVERVIEW: PointsOverview = {
-  points: 0,
-  grade: "D",
-  nextGrade: "C",
-  pointsToNext: 45,
 };
 
 type TaskApiResponse = { tasks: Task[] } | Task[];
@@ -241,46 +234,34 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
 }
 
 export async function getMyPoints(): Promise<PointsOverview> {
-  try {
-    const response = await apiRequest("GET", "/api/users/me/points");
-    const data = await response.json();
-    const points = data.points ?? 0;
-    const grade = calculateGrade(points);
-    let nextGrade: Grade | undefined;
-    let pointsToNext: number | undefined;
+  const response = await apiRequest("GET", "/api/users/me/points");
+  const data = await response.json();
+  const numericPoints = typeof data.points === "number" ? data.points : Number(data.points);
 
-    if (grade === "D") {
-      nextGrade = "C";
-      pointsToNext = Math.max(0, 45 - points);
-    } else if (grade === "C") {
-      nextGrade = "B";
-      pointsToNext = Math.max(0, 65 - points);
-    } else if (grade === "B") {
-      nextGrade = "A";
-      pointsToNext = Math.max(0, 85 - points);
-    }
-
-    return {
-      points,
-      grade,
-      nextGrade,
-      pointsToNext,
-    };
-  } catch (error) {
-    console.warn("Failed to load points overview", error);
-    return DEFAULT_POINTS_OVERVIEW;
+  if (!Number.isFinite(numericPoints)) {
+    throw new Error("Некорректное значение баллов пользователя");
   }
+
+  const safePoints = Number(numericPoints);
+  const { grade, nextGrade, pointsToNext } = calculateGradeProgress(safePoints);
+
+  return {
+    points: safePoints,
+    grade,
+    nextGrade,
+    pointsToNext,
+  };
 }
 
 export async function getMyPointsHistory(): Promise<PointTransaction[]> {
-  try {
-    const response = await apiRequest("GET", "/api/users/me/point-history");
-    const data = await response.json();
-    return Array.isArray(data) ? data : [];
-  } catch (error) {
-    console.warn("Failed to load points history", error);
-    return [];
+  const response = await apiRequest("GET", "/api/users/me/point-history");
+  const data = await response.json();
+
+  if (!Array.isArray(data)) {
+    throw new Error("Некорректный ответ сервера: ожидался список транзакций");
   }
+
+  return data;
 }
 
 export async function getReportsDefaultDept(
