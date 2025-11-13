@@ -978,6 +978,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/auctions/active", requireAuth, async (req, res) => {
+    try {
+      const currentUser = req.session.user!;
+      
+      if (!currentUser.departmentId && currentUser.role !== "admin") {
+        return res.json([]);
+      }
+
+      await finalizeExpiredAuctions(currentUser.departmentId || undefined);
+
+      const filters: Parameters<typeof storage.getAllTasks>[0] = {
+        type: "auction",
+        status: "backlog",
+      };
+
+      if (currentUser.role !== "admin") {
+        filters.departmentId = currentUser.departmentId!;
+      }
+
+      const activeAuctions = await storage.getAllTasks(filters);
+      const now = new Date();
+      const auctionsWithPrice = activeAuctions.map((task) => {
+        const auctionPrice = calculateAuctionPrice(task, now);
+        return auctionPrice !== null ? { ...task, auctionCurrentPrice: decimalToString(auctionPrice) } : task;
+      });
+
+      res.json(auctionsWithPrice);
+    } catch (error) {
+      console.error("Ошибка при получении активных аукционов:", error);
+      res.status(500).json({ error: "Не удалось получить активные аукционы" });
+    }
+  });
+
   // Get task by ID
   app.get("/api/tasks/:id", requireAuth, async (req, res) => {
     try {
@@ -1437,6 +1470,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(history);
     } catch (error) {
       res.status(500).json({ error: "Не удалось получить историю баллов" });
+    }
+  });
+
+  app.get("/api/metrics/month", requireAuth, async (req, res) => {
+    try {
+      const user = req.session.user!;
+      const departmentId = user.role === "admin" ? undefined : user.departmentId || undefined;
+
+      if (!departmentId && user.role !== "admin") {
+        return res.json({
+          completed_tasks_count: 0,
+          closed_auctions_sum: 0,
+          active_auctions_count: 0,
+          backlog_count: 0,
+        });
+      }
+
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+      const allTasks = await storage.getAllTasks(departmentId ? { departmentId } : {});
+
+      const completed_tasks_count = allTasks.filter(
+        (task) =>
+          task.status === "completed" &&
+          task.updatedAt &&
+          new Date(task.updatedAt) >= startOfMonth &&
+          new Date(task.updatedAt) <= endOfMonth
+      ).length;
+
+      const closedAuctionsThisMonth = allTasks.filter(
+        (task) =>
+          task.type === "auction" &&
+          task.status !== "backlog" &&
+          task.auctionAssignedSum &&
+          task.updatedAt &&
+          new Date(task.updatedAt) >= startOfMonth &&
+          new Date(task.updatedAt) <= endOfMonth
+      );
+
+      const closed_auctions_sum = closedAuctionsThisMonth.reduce((sum, task) => {
+        const amount = parseDecimal(task.auctionAssignedSum);
+        return sum + (amount || 0);
+      }, 0);
+
+      const active_auctions_count = allTasks.filter(
+        (task) => task.type === "auction" && task.status === "backlog"
+      ).length;
+
+      const backlog_count = allTasks.filter((task) => task.status === "backlog").length;
+
+      res.json({
+        completed_tasks_count,
+        closed_auctions_sum,
+        active_auctions_count,
+        backlog_count,
+      });
+    } catch (error) {
+      console.error("Ошибка при получении метрик:", error);
+      res.status(500).json({ error: "Не удалось получить метрики" });
     }
   });
 
