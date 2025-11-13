@@ -67,6 +67,7 @@ export const managements = pgTable("managements", {
     .references(() => departments.id, { onDelete: "cascade" }),
   leaderId: varchar("leader_id"),
   leaderName: text("leader_name"),
+  deputyId: varchar("deputy_id"),
   rating: decimal("rating", { precision: 3, scale: 2 }).default("0"),
   employeeCount: integer("employee_count").default(0),
   createdAt: timestamp("created_at").defaultNow(),

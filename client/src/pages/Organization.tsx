@@ -69,6 +69,13 @@ function parseRating(value: SelectUser["rating"]) {
   return Number.isNaN(numeric) ? undefined : numeric;
 }
 
+function getErrorStatusCode(error: any): number | null {
+  if (!error?.message) return null;
+  const [statusPart] = String(error.message).split(":");
+  const status = Number(statusPart?.trim());
+  return Number.isNaN(status) ? null : status;
+}
+
 const optionalEmailField = z
   .string()
   .trim()
@@ -890,6 +897,7 @@ function EmployeeDialog({
 }
 
 export default function Organization() {
+  const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<SlotSelection | null>(null);
   const [isEmployeeDialogOpen, setIsEmployeeDialogOpen] = useState(false);
@@ -917,10 +925,8 @@ export default function Organization() {
   });
 
   const currentUser = authData?.user;
-  const managementDeputyStorageKey = currentUser ? `org-management-deputy-${currentUser.id}` : "org-management-deputy";
   const collapsibleStorageKey = currentUser ? `org-sections-${currentUser.id}` : "org-sections";
 
-  const [managementDeputies, setManagementDeputies] = useState<Record<string, string | null>>({});
   const [sectionState, setSectionState] = useState<Record<string, boolean>>({});
 
   const getSectionOpen = (id: string, fallback = true) => (id in sectionState ? sectionState[id] : fallback);
@@ -934,16 +940,6 @@ export default function Organization() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
-      const storedDeputies = localStorage.getItem(managementDeputyStorageKey);
-      setManagementDeputies(storedDeputies ? JSON.parse(storedDeputies) : {});
-    } catch {
-      setManagementDeputies({});
-    }
-  }, [managementDeputyStorageKey]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
       const storedSections = localStorage.getItem(collapsibleStorageKey);
       setSectionState(storedSections ? JSON.parse(storedSections) : {});
     } catch {
@@ -953,13 +949,31 @@ export default function Organization() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    localStorage.setItem(managementDeputyStorageKey, JSON.stringify(managementDeputies));
-  }, [managementDeputies, managementDeputyStorageKey]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
     localStorage.setItem(collapsibleStorageKey, JSON.stringify(sectionState));
   }, [sectionState, collapsibleStorageKey]);
+
+  const updateManagementDeputy = useMutation({
+    mutationFn: async ({ managementId, deputyId }: { managementId: string; deputyId: string | null }) => {
+      const response = await apiRequest("PUT", `/api/managements/${managementId}/deputy`, { deputyId });
+      return response.json();
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/managements"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
+      toast({ title: variables.deputyId ? "Заместитель назначен" : "Назначение снято" });
+    },
+    onError: (error: any) => {
+      const status = getErrorStatusCode(error);
+      toast({
+        title: "Ошибка",
+        description:
+          status === 409 || status === 422
+            ? "Сотрудник уже занимает управленческую должность в этом департаменте"
+            : extractErrorMessage(error, "Не удалось обновить заместителя управления"),
+        variant: "destructive",
+      });
+    },
+  });
 
   const canEditDepartment = (departmentId: string) => {
     if (!currentUser) return false;
@@ -988,6 +1002,10 @@ export default function Organization() {
 
   const openDivisionDialog = (department: Department, management: Management) => {
     setDivisionDialogState({ open: true, department, management });
+  };
+
+  const handleManagementDeputyChange = (managementId: string, deputyId: string | null) => {
+    updateManagementDeputy.mutate({ managementId, deputyId });
   };
 
   if (departmentsLoading) {
@@ -1031,6 +1049,30 @@ export default function Organization() {
             const director = departmentEmployees.find((emp) => emp.role === "director");
             const deputy = departmentEmployees.find((emp) => emp.role === "manager" && !emp.managementId && !emp.divisionId);
             const departmentManagements = managements.filter((mgmt) => mgmt.departmentId === department.id);
+            const employeesByManagement = departmentManagements.reduce<Record<string, SelectUser[]>>((acc, mgmt) => {
+              acc[mgmt.id] = departmentEmployees.filter((emp) => emp.managementId === mgmt.id);
+              return acc;
+            }, {});
+            const blockedManagementRoleIds = new Set<string>();
+            if (director) {
+              blockedManagementRoleIds.add(director.id);
+            }
+            if (deputy) {
+              blockedManagementRoleIds.add(deputy.id);
+            }
+            Object.values(employeesByManagement).forEach((mgmtEmployees) => {
+              mgmtEmployees
+                .filter((emp) => emp.role === "manager" && !emp.divisionId)
+                .forEach((leader) => blockedManagementRoleIds.add(leader.id));
+            });
+            departmentEmployees
+              .filter((emp) => emp.role === "manager" && Boolean(emp.divisionId))
+              .forEach((leader) => blockedManagementRoleIds.add(leader.id));
+            departmentManagements.forEach((mgmt) => {
+              if (mgmt.deputyId) {
+                blockedManagementRoleIds.add(mgmt.deputyId);
+              }
+            });
 
             return (
               <Card key={department.id}>
@@ -1122,10 +1164,17 @@ export default function Organization() {
                             </div>
                           ) : (
                             departmentManagements.map((management) => {
-                              const managementEmployees = departmentEmployees.filter((emp) => emp.managementId === management.id);
+                              const managementEmployees = employeesByManagement[management.id] ?? [];
                               const managementHead = managementEmployees.find((emp) => emp.role === "manager" && !emp.divisionId);
-                              const deputyId = managementDeputies[management.id] ?? null;
-                              const managementDeputy = deputyId ? managementEmployees.find((emp) => emp.id === deputyId) ?? null : null;
+                              const managementDeputy = management.deputyId
+                                ? departmentEmployees.find((emp) => emp.id === management.deputyId) ?? null
+                                : null;
+                              const availableDeputyCandidates = departmentEmployees
+                                .filter((emp) => emp.id !== management.deputyId)
+                                .filter((emp) => !blockedManagementRoleIds.has(emp.id))
+                                .sort((a, b) => a.name.localeCompare(b.name, "ru"));
+                              const deputySelectValue = management.deputyId ?? "none";
+                              const isDeputySelectDisabled = availableDeputyCandidates.length === 0;
                               const managementDivisions = divisions.filter((division) => division.managementId === management.id);
 
                               return (
@@ -1173,30 +1222,69 @@ export default function Organization() {
                                 <PositionCell
                                   positionType="management_deputy"
                                   employee={managementDeputy ? { id: managementDeputy.id, name: managementDeputy.name, rating: parseRating(managementDeputy.rating) } : undefined}
-                                  canEdit={false}
+                                  canEdit={canEdit}
+                                  onClick={
+                                    canEdit
+                                      ? () =>
+                                          openSlot({
+                                            positionType: "management_deputy",
+                                            departmentId: department.id,
+                                            departmentName: department.name,
+                                            managementId: management.id,
+                                            managementName: management.name,
+                                            employee: managementDeputy ?? undefined,
+                                          })
+                                      : undefined
+                                  }
                                 />
                                 {canEdit && (
-                                  <Select
-                                    value={deputyId ?? 'none'}
-                                    onValueChange={(value) =>
-                                      setManagementDeputies((prev) => ({
-                                        ...prev,
-                                        [management.id]: value === 'none' ? null : value,
-                                      }))
-                                    }
-                                  >
-                                    <SelectTrigger className="w-full sm:w-64">
-                                      <SelectValue placeholder="Выберите сотрудника" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="none">Нет заместителя</SelectItem>
-                                      {managementEmployees.map((emp) => (
-                                        <SelectItem key={emp.id} value={emp.id}>
-                                          {emp.name} ({emp.username})
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
+                                  <div className="space-y-2">
+                                    <Select
+                                      value={deputySelectValue}
+                                      onValueChange={(value) => {
+                                        if (value === "none") {
+                                          if (management.deputyId) {
+                                            handleManagementDeputyChange(management.id, null);
+                                          }
+                                          return;
+                                        }
+                                        if (value !== management.deputyId) {
+                                          handleManagementDeputyChange(management.id, value);
+                                        }
+                                      }}
+                                      disabled={updateManagementDeputy.isPending || isDeputySelectDisabled}
+                                    >
+                                      <SelectTrigger className="w-full sm:w-64">
+                                        <SelectValue placeholder="Выберите сотрудника" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="none">Нет заместителя</SelectItem>
+                                        {managementDeputy && (
+                                          <SelectItem value={managementDeputy.id}>
+                                            {managementDeputy.name} ({managementDeputy.username})
+                                          </SelectItem>
+                                        )}
+                                        {availableDeputyCandidates.map((emp) => (
+                                          <SelectItem key={emp.id} value={emp.id}>
+                                            {emp.name} ({emp.username})
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    {isDeputySelectDisabled && (
+                                      <p className="text-xs text-muted-foreground">Нет доступных сотрудников для назначения</p>
+                                    )}
+                                    {management.deputyId && (
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => handleManagementDeputyChange(management.id, null)}
+                                        disabled={updateManagementDeputy.isPending}
+                                      >
+                                        Снять назначение
+                                      </Button>
+                                    )}
+                                  </div>
                                 )}
                               </div>
 

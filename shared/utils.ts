@@ -14,6 +14,8 @@ export function getInitialPointsByPosition(positionType: string): number {
     case "department_deputy":
     case "management_head":
       return 80;
+    case "management_deputy":
+      return 80;
     case "division_head":
       return 65;
     case "division_senior":
