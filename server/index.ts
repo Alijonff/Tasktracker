@@ -9,10 +9,12 @@ import { createAdminUser } from "./auth";
 import { User } from "@shared/schema";
 import { startAuctionCloser } from "./workers/auctionCloser";
 
+type SessionUser = Omit<User, "passwordHash"> & { canCreateAuctions: boolean };
+
 declare module 'express-session' {
   interface SessionData {
     userId?: string;
-    user?: Omit<User, 'passwordHash'>;
+    user?: SessionUser;
   }
 }
 

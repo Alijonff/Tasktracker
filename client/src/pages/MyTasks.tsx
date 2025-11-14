@@ -4,7 +4,7 @@ import KanbanBoard, { type KanbanTask } from "@/components/KanbanBoard";
 import TaskDetailDialog from "@/components/TaskDetailDialog";
 import { listTasks, updateTaskStatus, type AuctionTaskSummary } from "@/api/adapter";
 import { useToast } from "@/hooks/use-toast";
-import type { SelectUser } from "@shared/schema";
+import { SessionUser } from "@/types/session";
 
 export default function MyTasks() {
   const queryClient = useQueryClient();
@@ -12,7 +12,7 @@ export default function MyTasks() {
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
-  const { data: userResponse } = useQuery<{ user: SelectUser | null }>({ queryKey: ["/api/auth/me"] });
+  const { data: userResponse } = useQuery<{ user: SessionUser | null }>({ queryKey: ["/api/auth/me"] });
   const currentUser = userResponse?.user;
 
   const { data: tasks = [], isLoading } = useQuery<AuctionTaskSummary[]>({

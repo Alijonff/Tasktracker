@@ -18,7 +18,8 @@ import {
   User,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import type { Management, Division, User as UserModel, Department, SelectUser } from "@shared/schema";
+import type { Management, Division, User as UserModel, Department } from "@shared/schema";
+import { SessionUser } from "@/types/session";
 import { listTasks, getReportsDefaultDept, type AuctionTaskSummary, type AuctionStatus } from "@/api/adapter";
 import { formatDateTime, formatMoney } from "@/lib/formatters";
 
@@ -69,7 +70,7 @@ export default function Reports() {
   const [drilldown, setDrilldown] = useState<DrilldownState>({ level: "department" });
   const [selectedDepartmentId, setSelectedDepartmentId] = useState<string | "all" | null>(null);
 
-  const { data: authData } = useQuery<{ user: SelectUser | null }>({ queryKey: ["/api/auth/me"] });
+  const { data: authData } = useQuery<{ user: SessionUser | null }>({ queryKey: ["/api/auth/me"] });
   const currentUser = authData?.user;
 
   const { data: departments = [] } = useQuery<Department[]>({ queryKey: ["/api/departments"] });

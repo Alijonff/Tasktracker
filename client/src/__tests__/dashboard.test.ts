@@ -3,15 +3,15 @@ import test from "node:test";
 
 import { canCreateAuctionsForRole } from "@/pages/Dashboard";
 
-const cases: Array<[string | null, boolean]> = [
-  ["director", true],
-  ["admin", true],
-  ["employee", false],
+const cases: Array<[Parameters<typeof canCreateAuctionsForRole>[0], boolean]> = [
+  [{ role: "director", canCreateAuctions: true } as any, true],
+  [{ role: "admin", canCreateAuctions: true } as any, true],
+  [{ role: "employee", canCreateAuctions: false } as any, false],
   [null, false],
 ];
 
 test("Dashboard permissions for create auction button", () => {
-  for (const [role, expected] of cases) {
-    assert.equal(canCreateAuctionsForRole(role), expected);
+  for (const [user, expected] of cases) {
+    assert.equal(canCreateAuctionsForRole(user), expected);
   }
 });

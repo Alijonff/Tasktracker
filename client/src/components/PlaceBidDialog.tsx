@@ -110,7 +110,7 @@ export default function PlaceBidDialog({
                 data-testid="input-bid-amount"
               />
               {isAmountEntered && !isAmountWithinLimit && (
-                <p className="text-xs text-status-overdue">Ставка должна быть не больше текущей цены</p>
+                <p className="text-xs text-status-overdue">Ставка должна быть ниже текущей цены</p>
               )}
             </div>
 

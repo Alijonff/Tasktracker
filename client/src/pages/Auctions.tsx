@@ -7,7 +7,7 @@ import { listAuctions, placeBid, type AuctionTaskSummary, type Grade } from "@/a
 import { useToast } from "@/hooks/use-toast";
 import { Gavel, PlusCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { SelectUser } from "@shared/schema";
+import { SessionUser } from "@/types/session";
 import { calculateGrade } from "@shared/utils";
 
 const gradeWeights: Record<Grade, number> = {
@@ -24,11 +24,16 @@ export default function Auctions() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
-  const { data: userResponse } = useQuery<{ user: SelectUser | null }>({ queryKey: ["/api/auth/me"] });
+  const { data: userResponse } = useQuery<{ user: SessionUser | null }>({
+    queryKey: ["/api/auth/me"],
+  });
   const currentUser = userResponse?.user;
 
   const userGrade = useMemo<Grade | null>(() => {
     if (!currentUser) return null;
+    if (currentUser.grade) {
+      return currentUser.grade as Grade;
+    }
     const rawPoints = typeof currentUser.points === "number" ? currentUser.points : Number(currentUser.points ?? 0);
     const safePoints = Number.isFinite(rawPoints) ? Number(rawPoints) : 0;
     return calculateGrade(safePoints);
@@ -39,7 +44,7 @@ export default function Auctions() {
     queryFn: () => listAuctions({ scope: "all", status: "backlog" }),
   });
 
-  const canCreateAuction = currentUser?.role === "admin" || currentUser?.role === "director";
+  const canCreateAuction = Boolean(currentUser?.canCreateAuctions);
 
   const bidMutation = useMutation({
     mutationFn: ({ taskId, amount }: { taskId: string; amount: number }) => placeBid(taskId, amount),

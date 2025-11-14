@@ -2,8 +2,8 @@ export type Grade = "D" | "C" | "B" | "A";
 
 export const gradeThresholds: Record<Grade, number> = {
   D: 0,
-  C: 45,
-  B: 65,
+  C: 55,
+  B: 70,
   A: 85,
 };
 
@@ -35,23 +35,39 @@ export function calculateGradeProgress(points: number): {
   return { grade, nextGrade, pointsToNext };
 }
 
-export function getInitialPointsByPosition(positionType: string): number {
-  switch (positionType) {
-    case "department_director":
-      return 85;
-    case "department_deputy":
-    case "management_head":
-      return 80;
-    case "management_deputy":
-      return 80;
-    case "division_head":
-      return 65;
-    case "division_senior":
-      return 50;
-    case "division_employee":
-    default:
-      return 35;
-  }
+export type PositionType =
+  | "director"
+  | "deputy"
+  | "management_head"
+  | "management_deputy"
+  | "division_head"
+  | "senior"
+  | "employee";
+
+const gradeByPosition: Record<PositionType, Grade> = {
+  director: "A",
+  deputy: "A",
+  management_head: "A",
+  management_deputy: "B",
+  division_head: "B",
+  senior: "C",
+  employee: "D",
+};
+
+const startingPointsByGrade: Record<Grade, number> = {
+  A: 85,
+  B: 70,
+  C: 55,
+  D: 40,
+};
+
+export function getGradeByPosition(positionType: PositionType): Grade {
+  return gradeByPosition[positionType];
+}
+
+export function getInitialPointsByPosition(positionType: PositionType): number {
+  const grade = getGradeByPosition(positionType);
+  return startingPointsByGrade[grade];
 }
 
 export function isWeekend(date: Date): boolean {
@@ -93,26 +109,32 @@ export function diffWorkingHours(startDate: Date, endDate: Date): number {
   }
 
   const msPerHour = 1000 * 60 * 60;
-  const msPerDay = msPerHour * 24;
-  const workingHoursPerDay = 8;
+  const workdayStartHour = 9;
+  const workdayEndHour = 17;
 
   let totalHours = 0;
   const current = new Date(startDate);
 
   while (current < endDate) {
-    const dayStart = new Date(current);
-    dayStart.setHours(0, 0, 0, 0);
-    const dayEnd = new Date(dayStart);
-    dayEnd.setDate(dayEnd.getDate() + 1);
-
-    if (!isWeekend(dayStart)) {
-      const rangeStart = current < dayStart ? dayStart : current;
-      const rangeEnd = endDate < dayEnd ? endDate : dayEnd;
-      const msInDay = rangeEnd.getTime() - rangeStart.getTime();
-      const fractionOfDay = msInDay / msPerDay;
-      totalHours += fractionOfDay * workingHoursPerDay;
+    if (isWeekend(current)) {
+      current.setDate(current.getDate() + 1);
+      current.setHours(0, 0, 0, 0);
+      continue;
     }
 
+    const dayWorkStart = new Date(current);
+    dayWorkStart.setHours(workdayStartHour, 0, 0, 0);
+    const dayWorkEnd = new Date(current);
+    dayWorkEnd.setHours(workdayEndHour, 0, 0, 0);
+
+    const windowStartMs = Math.max(current.getTime(), dayWorkStart.getTime());
+    const windowEndMs = Math.min(endDate.getTime(), dayWorkEnd.getTime());
+
+    if (windowEndMs > windowStartMs) {
+      totalHours += (windowEndMs - windowStartMs) / msPerHour;
+    }
+
+    // Move to the start of the next day
     current.setDate(current.getDate() + 1);
     current.setHours(0, 0, 0, 0);
   }

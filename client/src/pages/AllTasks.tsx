@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import type { SelectUser } from "@shared/schema";
+import { SessionUser } from "@/types/session";
 import { Search } from "lucide-react";
 
 export default function AllTasks() {
@@ -21,7 +21,7 @@ export default function AllTasks() {
   const [participant, setParticipant] = useState("all");
   const [onlyMyDepartment, setOnlyMyDepartment] = useState(true);
 
-  const { data: userResponse } = useQuery<{ user: SelectUser | null }>({ queryKey: ["/api/auth/me"] });
+  const { data: userResponse } = useQuery<{ user: SessionUser | null }>({ queryKey: ["/api/auth/me"] });
   const currentUser = userResponse?.user;
 
   useEffect(() => {

@@ -8,6 +8,7 @@ function normalize(value: string): string {
 }
 
 const SNAPSHOT_DIR = join(dirname(fileURLToPath(import.meta.url)), "../__snapshots__");
+const shouldUpdateSnapshot = process.env.UPDATE_SNAPSHOTS === "1";
 
 export function expectToMatchSnapshot(name: string, actual: string) {
   const filePath = join(SNAPSHOT_DIR, `${name}.snap`);
@@ -17,5 +18,17 @@ export function expectToMatchSnapshot(name: string, actual: string) {
     return;
   }
   const expected = readFileSync(filePath, "utf8");
-  assert.equal(normalize(actual), normalize(expected), `Snapshot mismatch for ${name}`);
+  const normalizedActual = normalize(actual);
+  const normalizedExpected = normalize(expected);
+
+  if (normalizedActual === normalizedExpected) {
+    return;
+  }
+
+  if (shouldUpdateSnapshot) {
+    writeFileSync(filePath, actual);
+    return;
+  }
+
+  assert.equal(normalizedActual, normalizedExpected, `Snapshot mismatch for ${name}`);
 }
