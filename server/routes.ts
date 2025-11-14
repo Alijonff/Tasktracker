@@ -1026,13 +1026,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const currentUser = req.session.user!;
 
       // По бизнес-логике: только админ может уволить директора департамента
-      if (employee.positionType === "director" && currentUser.role !== "admin") {
-        return res.status(403).json({ error: "Только администратор может уволить директора департамента" });
-      }
-
-      // По бизнес-логике: зам директора не может уволить директора
-      if (employee.positionType === "director" && currentUser.positionType === "deputy") {
-        return res.status(403).json({ error: "Заместитель не может уволить директора" });
+      if (employee.positionType === "director") {
+        if (currentUser.role !== "admin") {
+          return res.status(403).json({ error: "Только администратор может уволить директора департамента" });
+        }
       }
 
       if (employee.departmentId && !canModifyDepartment(currentUser, employee.departmentId)) {

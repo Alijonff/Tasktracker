@@ -2,7 +2,7 @@ import type { Task } from "@shared/schema";
 import type { IStorage } from "../storage";
 
 export async function reassignTasksFromTerminatedEmployee(
-  storage: Pick<IStorage, "getAllTasks" | "updateTask">,
+  storage: Pick<IStorage, "getAllTasks" | "updateTask" | "deleteEmployeeBids">,
   employeeId: string,
 ): Promise<void> {
   const activeTasks = await storage.getAllTasks({
@@ -20,4 +20,6 @@ export async function reassignTasksFromTerminatedEmployee(
       } as Partial<Task>),
     ),
   );
+
+  await storage.deleteEmployeeBids(employeeId);
 }

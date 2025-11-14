@@ -101,6 +101,7 @@ export interface IStorage {
   // Auction Bids
   getTaskBids(taskId: string): Promise<AuctionBid[]>;
   createBid(bid: InsertBid): Promise<AuctionBid>;
+  deleteEmployeeBids(employeeId: string): Promise<string[]>;
 
   addTaskComment(comment: {
     taskId: string;
@@ -439,6 +440,33 @@ export class DbStorage implements IStorage {
         .set({ auctionHasBids: true })
         .where(eq(tasks.id, bidData.taskId));
       return bid;
+    });
+  }
+
+  async deleteEmployeeBids(employeeId: string): Promise<string[]> {
+    return await db.transaction(async (tx) => {
+      const deletedBids = await tx
+        .delete(auctionBids)
+        .where(eq(auctionBids.bidderId, employeeId))
+        .returning({ taskId: auctionBids.taskId });
+
+      const taskIds = Array.from(new Set(deletedBids.map(b => b.taskId)));
+
+      if (taskIds.length > 0) {
+        await tx.execute(sql`
+          SELECT id FROM tasks WHERE id = ANY(${taskIds}) FOR UPDATE
+        `);
+
+        await tx.execute(sql`
+          UPDATE tasks
+          SET auction_has_bids = EXISTS(
+            SELECT 1 FROM auction_bids WHERE task_id = tasks.id
+          )
+          WHERE id = ANY(${taskIds})
+        `);
+      }
+
+      return taskIds;
     });
   }
 
