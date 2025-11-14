@@ -79,8 +79,7 @@ export const divisions = pgTable("divisions", {
     .default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   managementId: varchar("management_id")
-    .notNull()
-    .references(() => managements.id, { onDelete: "cascade" }),
+    .references(() => managements.id, { onDelete: "set null" }),
   departmentId: varchar("department_id")
     .notNull()
     .references(() => departments.id, { onDelete: "cascade" }),
@@ -264,10 +263,18 @@ export const insertManagementSchema = createInsertSchema(managements).omit({
   createdAt: true,
 });
 
-export const insertDivisionSchema = createInsertSchema(divisions).omit({
-  id: true,
-  createdAt: true,
-});
+export const insertDivisionSchema = createInsertSchema(divisions)
+  .omit({
+    id: true,
+    createdAt: true,
+  })
+  .extend({
+    managementId: z
+      .string()
+      .min(1, "Укажите управление")
+      .optional()
+      .nullable(),
+  });
 
 const dateTransform = z
   .union([z.string(), z.date()])

@@ -126,23 +126,14 @@ function AddDepartmentDialog({
 }) {
   const [departmentName, setDepartmentName] = useState("");
   const [managements, setManagements] = useState<ManagementFormData[]>([]);
+  const [departmentDivisions, setDepartmentDivisions] = useState<DivisionFormData[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
 
   const createDepartmentMutation = useMutation({
     mutationFn: async (data: { name: string }) => {
       const response = await apiRequest("POST", "/api/departments", data);
       return response.json();
-    },
-    onSuccess: () => {
-      invalidateOrganizationQueries();
-      toast({ title: "Департамент создан" });
-    },
-    onError: () => {
-      toast({
-        title: "Ошибка",
-        description: "Не удалось создать департамент",
-        variant: "destructive",
-      });
     },
   });
 
@@ -154,8 +145,11 @@ function AddDepartmentDialog({
   });
 
   const createDivisionMutation = useMutation({
-    mutationFn: async (data: { name: string; managementId: string; departmentId: string }) => {
-      const response = await apiRequest("POST", "/api/divisions", data);
+    mutationFn: async (data: { name: string; managementId?: string | null; departmentId: string }) => {
+      const response = await apiRequest("POST", "/api/divisions", {
+        ...data,
+        managementId: data.managementId ?? null,
+      });
       return response.json();
     },
   });
@@ -163,6 +157,8 @@ function AddDepartmentDialog({
   const resetForm = () => {
     setDepartmentName("");
     setManagements([]);
+    setDepartmentDivisions([]);
+    setIsSubmitting(false);
   };
 
   const handleOpenChange = (nextOpen: boolean) => {
@@ -228,8 +224,26 @@ function AddDepartmentDialog({
     );
   };
 
+  const addDepartmentDivision = () => {
+    setDepartmentDivisions((prev) => [
+      ...prev,
+      { id: `dept-division-${Date.now()}-${prev.length}`, name: "" },
+    ]);
+  };
+
+  const removeDepartmentDivision = (divisionId: string) => {
+    setDepartmentDivisions((prev) => prev.filter((division) => division.id !== divisionId));
+  };
+
+  const updateDepartmentDivisionName = (divisionId: string, name: string) => {
+    setDepartmentDivisions((prev) =>
+      prev.map((division) => (division.id === divisionId ? { ...division, name } : division))
+    );
+  };
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (isSubmitting) return;
 
     const trimmedDepartmentName = departmentName.trim();
     if (!trimmedDepartmentName) {
@@ -241,28 +255,43 @@ function AddDepartmentDialog({
       return;
     }
 
+    setIsSubmitting(true);
+
     try {
       const department = await createDepartmentMutation.mutateAsync({
         name: trimmedDepartmentName,
       });
 
       for (const management of managements) {
-        if (!management.name.trim()) continue;
+        const trimmedManagementName = management.name.trim();
+        if (!trimmedManagementName) continue;
 
         const createdManagement = await createManagementMutation.mutateAsync({
-          name: management.name.trim(),
+          name: trimmedManagementName,
           departmentId: department.id,
         });
 
         for (const division of management.divisions) {
-          if (!division.name.trim()) continue;
+          const trimmedDivisionName = division.name.trim();
+          if (!trimmedDivisionName) continue;
 
           await createDivisionMutation.mutateAsync({
-            name: division.name.trim(),
+            name: trimmedDivisionName,
             managementId: createdManagement.id,
             departmentId: department.id,
           });
         }
+      }
+
+      for (const division of departmentDivisions) {
+        const trimmedDivisionName = division.name.trim();
+        if (!trimmedDivisionName) continue;
+
+        await createDivisionMutation.mutateAsync({
+          name: trimmedDivisionName,
+          managementId: null,
+          departmentId: department.id,
+        });
       }
 
       invalidateOrganizationQueries();
@@ -271,7 +300,13 @@ function AddDepartmentDialog({
       resetForm();
       handleOpenChange(false);
     } catch (error) {
-      console.error("Error creating structure:", error);
+      toast({
+        title: "Ошибка",
+        description: extractErrorMessage(error, "Не удалось создать структуру организации"),
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -369,6 +404,44 @@ function AddDepartmentDialog({
             ))}
           </div>
 
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label>Отделы департамента (без управления)</Label>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={addDepartmentDivision}
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Добавить отдел
+              </Button>
+            </div>
+            {departmentDivisions.length === 0 ? (
+              <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                Если в департаменте нет управлений, добавьте отделы, которые будут подчиняться напрямую директору.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {departmentDivisions.map((division, index) => (
+                  <div key={division.id} className="flex gap-2">
+                    <Input
+                      value={division.name}
+                      onChange={(event) => updateDepartmentDivisionName(division.id, event.target.value)}
+                      placeholder={`Название отдела ${index + 1}`}
+                    />
+                    <Button type="button" size="icon" variant="ghost" onClick={() => removeDepartmentDivision(division.id)}>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Эти отделы будут относиться непосредственно к департаменту и появятся в дереве структуры как отдельный блок.
+            </p>
+          </div>
+
           <DialogFooter>
             <Button
               type="button"
@@ -380,10 +453,10 @@ function AddDepartmentDialog({
             </Button>
             <Button
               type="submit"
-              disabled={createDepartmentMutation.isPending}
+              disabled={isSubmitting}
               data-testid="button-save-department"
             >
-              {createDepartmentMutation.isPending ? "Создание..." : "Создать"}
+              {isSubmitting ? "Создание..." : "Создать"}
             </Button>
           </DialogFooter>
         </form>
@@ -514,13 +587,13 @@ function CreateDivisionDialog({
 
   const createDivision = useMutation({
     mutationFn: async (divisionName: string) => {
-      if (!department || !management) {
-        throw new Error("department and management are required");
+      if (!department) {
+        throw new Error("department is required");
       }
       const response = await apiRequest("POST", "/api/divisions", {
         name: divisionName,
         departmentId: department.id,
-        managementId: management.id,
+        managementId: management?.id ?? null,
       });
       return response.json();
     },
@@ -540,7 +613,7 @@ function CreateDivisionDialog({
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!department || !management) return;
+    if (!department) return;
 
     const trimmed = name.trim();
     if (!trimmed) {
@@ -569,7 +642,9 @@ function CreateDivisionDialog({
           <DialogTitle>Добавить отдел</DialogTitle>
           <DialogDescription className="space-y-1">
             <div>Департамент: {department?.name ?? "—"}</div>
-            <div>Управление: {management?.name ?? "—"}</div>
+            <div>
+              {management ? `Управление: ${management.name}` : "Отдел будет создан без управления"}
+            </div>
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -1006,8 +1081,8 @@ export default function Organization() {
     setManagementDialogState({ open: true, department });
   };
 
-  const openDivisionDialog = (department: Department, management: Management) => {
-    setDivisionDialogState({ open: true, department, management });
+  const openDivisionDialog = (department: Department, management?: Management | null) => {
+    setDivisionDialogState({ open: true, department, management: management ?? null });
   };
 
   const handleManagementDeputyChange = (managementId: string, deputyId: string | null) => {
@@ -1055,6 +1130,9 @@ export default function Organization() {
             const director = departmentEmployees.find((emp) => emp.role === "director");
             const deputy = departmentEmployees.find((emp) => emp.role === "manager" && !emp.managementId && !emp.divisionId);
             const departmentManagements = managements.filter((mgmt) => mgmt.departmentId === department.id);
+            const directDepartmentDivisions = divisions.filter(
+              (division) => division.departmentId === department.id && !division.managementId,
+            );
             const employeesByManagement = departmentManagements.reduce<Record<string, SelectUser[]>>((acc, mgmt) => {
               acc[mgmt.id] = departmentEmployees.filter((emp) => emp.managementId === mgmt.id);
               return acc;
@@ -1126,6 +1204,200 @@ export default function Organization() {
                               onClick={canEdit ? () => openSlot({ positionType: "deputy", departmentId: department.id, departmentName: department.name, employee: deputy }) : undefined}
                             />
                           </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    );
+                  })()}
+
+                  {(() => {
+                    const sectionId = `department-direct-divisions-${department.id}`;
+                    const sectionOpen = getSectionOpen(sectionId, true);
+                    const hasDivisions = directDepartmentDivisions.length > 0;
+
+                    if (!hasDivisions && !canEdit) {
+                      return null;
+                    }
+
+                    return (
+                      <Collapsible
+                        open={sectionOpen}
+                        onOpenChange={(open) => handleSectionToggle(sectionId, open)}
+                      >
+                        <div className="flex flex-col gap-3 rounded-md border bg-muted/40 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <p className="font-medium">Отделы без управления</p>
+                            <p className="text-xs text-muted-foreground">
+                              Подчиняются напрямую директору департамента
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {canEdit && (
+                              <Button variant="outline" size="sm" onClick={() => openDivisionDialog(department, null)}>
+                                <Plus className="h-4 w-4 mr-2" />
+                                Добавить отдел
+                              </Button>
+                            )}
+                            <CollapsibleTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label="Переключить отделы без управления"
+                                className={`h-8 w-8 rounded-full transition-transform ${sectionOpen ? "" : "-rotate-90"}`}
+                              >
+                                <ChevronDown className="h-4 w-4" />
+                              </Button>
+                            </CollapsibleTrigger>
+                          </div>
+                        </div>
+                        <CollapsibleContent className="pt-4 space-y-4">
+                          {!hasDivisions ? (
+                            <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
+                              {canEdit
+                                ? "Отделы без управления ещё не созданы. Добавьте первый отдел, чтобы сотрудники могли подчиняться напрямую директору."
+                                : "В этом департаменте пока нет отделов без управления."}
+                            </div>
+                          ) : (
+                            directDepartmentDivisions.map((division) => {
+                              const divisionEmployees = departmentEmployees.filter((emp) => emp.divisionId === division.id);
+                              const divisionHead = divisionEmployees.find((emp) => emp.role === "manager");
+                              const seniors = divisionEmployees.filter((emp) => emp.role === "senior");
+                              const regulars = divisionEmployees.filter((emp) => emp.role === "employee");
+
+                              return (
+                                <Collapsible
+                                  key={division.id}
+                                  open={getSectionOpen(division.id, true)}
+                                  onOpenChange={(open) => handleSectionToggle(division.id, open)}
+                                >
+                                  <Card className="bg-muted/30">
+                                    <CardHeader className="flex items-center justify-between">
+                                      <CardTitle className="text-base">{division.name}</CardTitle>
+                                      <CollapsibleTrigger asChild>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          aria-label={`Переключить отдел ${division.name}`}
+                                          className={`h-8 w-8 rounded-full transition-transform ${getSectionOpen(division.id, true) ? "" : "-rotate-90"}`}
+                                        >
+                                          <ChevronDown className="h-4 w-4" />
+                                        </Button>
+                                      </CollapsibleTrigger>
+                                    </CardHeader>
+                                    <CollapsibleContent>
+                                      <CardContent className="space-y-4">
+                                        <PositionCell
+                                          positionType="division_head"
+                                          employee={
+                                            divisionHead
+                                              ? { id: divisionHead.id, name: divisionHead.name, rating: parseRating(divisionHead.rating) }
+                                              : undefined
+                                          }
+                                          canEdit={canEdit}
+                                          onClick={
+                                            canEdit
+                                              ? () =>
+                                                  openSlot({
+                                                    positionType: "division_head",
+                                                    departmentId: department.id,
+                                                    departmentName: department.name,
+                                                    divisionId: division.id,
+                                                    divisionName: division.name,
+                                                    employee: divisionHead,
+                                                  })
+                                              : undefined
+                                          }
+                                        />
+
+                                        <div className="space-y-2">
+                                          <p className="text-sm font-medium">Старшие сотрудники</p>
+                                          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                            {seniors.map((senior) => (
+                                              <PositionCell
+                                                key={senior.id}
+                                                positionType="senior"
+                                                employee={{ id: senior.id, name: senior.name, rating: parseRating(senior.rating) }}
+                                                canEdit={canEdit}
+                                                onClick={
+                                                  canEdit
+                                                    ? () =>
+                                                        openSlot({
+                                                          positionType: "senior",
+                                                          departmentId: department.id,
+                                                          departmentName: department.name,
+                                                          divisionId: division.id,
+                                                          divisionName: division.name,
+                                                          employee: senior,
+                                                        })
+                                                    : undefined
+                                                }
+                                              />
+                                            ))}
+                                            {canEdit && (
+                                              <PositionCell
+                                                positionType="senior"
+                                                canEdit
+                                                onClick={() =>
+                                                  openSlot({
+                                                    positionType: "senior",
+                                                    departmentId: department.id,
+                                                    departmentName: department.name,
+                                                    divisionId: division.id,
+                                                    divisionName: division.name,
+                                                  })
+                                                }
+                                              />
+                                            )}
+                                          </div>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                          <p className="text-sm font-medium">Сотрудники</p>
+                                          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                            {regulars.map((employee) => (
+                                              <PositionCell
+                                                key={employee.id}
+                                                positionType="employee"
+                                                employee={{ id: employee.id, name: employee.name, rating: parseRating(employee.rating) }}
+                                                canEdit={canEdit}
+                                                onClick={
+                                                  canEdit
+                                                    ? () =>
+                                                        openSlot({
+                                                          positionType: "employee",
+                                                          departmentId: department.id,
+                                                          departmentName: department.name,
+                                                          divisionId: division.id,
+                                                          divisionName: division.name,
+                                                          employee,
+                                                        })
+                                                    : undefined
+                                                }
+                                              />
+                                            ))}
+                                            {canEdit && (
+                                              <PositionCell
+                                                positionType="employee"
+                                                canEdit
+                                                onClick={() =>
+                                                  openSlot({
+                                                    positionType: "employee",
+                                                    departmentId: department.id,
+                                                    departmentName: department.name,
+                                                    divisionId: division.id,
+                                                    divisionName: division.name,
+                                                  })
+                                                }
+                                              />
+                                            )}
+                                          </div>
+                                        </div>
+                                      </CardContent>
+                                    </CollapsibleContent>
+                                  </Card>
+                                </Collapsible>
+                              );
+                            })
+                          )}
                         </CollapsibleContent>
                       </Collapsible>
                     );

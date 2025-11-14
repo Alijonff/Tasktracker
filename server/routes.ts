@@ -566,13 +566,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/divisions", requireAuth, async (req, res) => {
     try {
       const parsed = insertDivisionSchema.parse(req.body);
-      
+
       // Check authorization - must be able to modify the parent department
       if (!canModifyDepartment(req.session.user, parsed.departmentId)) {
         return res.status(403).json({ error: "Недостаточно прав для создания подразделения" });
       }
-      
-      const newDivision = await storage.createDivision(parsed);
+
+      if (parsed.managementId) {
+        const management = await storage.getManagement(parsed.managementId);
+        if (!management || management.departmentId !== parsed.departmentId) {
+          return res.status(400).json({ error: "Управление не найдено в этом департаменте" });
+        }
+      }
+
+      const newDivision = await storage.createDivision({
+        ...parsed,
+        managementId: parsed.managementId ?? null,
+      });
       res.status(201).json(newDivision);
     } catch (error) {
       res.status(400).json({ error: "Ошибка при создании подразделения" });
