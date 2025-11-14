@@ -7,8 +7,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { CheckCircle2, Wallet, Gavel, ListTodo, ArrowRight } from "lucide-react";
 import { getDashboardMetrics, getMyPoints, getMyPointsHistory } from "@/api/adapter";
 import { formatMoney, formatDateTime } from "@/lib/formatters";
-import type { PointTransaction, SelectUser } from "@shared/schema";
-import { calculateGrade } from "@shared/utils";
+import type { PointTransaction } from "@shared/schema";
+import { SessionUser } from "@/types/session";
 import CreateAuctionModal from "@/components/CreateAuctionModal";
 
 interface MetricsQueryResult {
@@ -18,11 +18,13 @@ interface MetricsQueryResult {
   backlogTasks: number;
 }
 
-export const canCreateAuctionsForRole = (role?: SelectUser["role"] | null) => role === "director" || role === "admin";
+type CurrentUser = SessionUser | null;
+
+export const canCreateAuctionsForRole = (user?: CurrentUser) => Boolean(user?.canCreateAuctions);
 
 export default function Dashboard() {
   const [createAuctionOpen, setCreateAuctionOpen] = useState(false);
-  const { data: userResponse } = useQuery<{ user: SelectUser | null }>({ queryKey: ["/api/auth/me"] });
+  const { data: userResponse } = useQuery<{ user: CurrentUser }>({ queryKey: ["/api/auth/me"] });
   const currentUser = userResponse?.user;
 
   const { data: metrics, isLoading: metricsLoading } = useQuery<MetricsQueryResult>({
@@ -40,7 +42,7 @@ export default function Dashboard() {
     queryFn: getMyPointsHistory,
   });
 
-  const canCreateAuctions = canCreateAuctionsForRole(currentUser?.role);
+  const canCreateAuctions = canCreateAuctionsForRole(currentUser);
 
   const dashboardCards = useMemo(() => {
     return [
@@ -72,7 +74,7 @@ export default function Dashboard() {
   }, [metrics]);
 
   const topHistory = history.slice(0, 5);
-  const grade = points?.grade ?? calculateGrade(points?.points ?? 0);
+  const grade = points?.grade ?? (currentUser?.grade as string | undefined) ?? "—";
   const pointsToNext = points?.pointsToNext;
 
   return (

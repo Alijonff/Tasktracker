@@ -18,6 +18,7 @@ import PositionCell, { PositionType, positionLabels } from "@/components/Positio
 import { Plus, X, ChevronDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { Department, Management, Division, SelectUser } from "@shared/schema";
+import { SessionUser } from "@/types/session";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -1001,7 +1002,7 @@ export default function Organization() {
     queryKey: ["/api/employees"],
   });
 
-  const { data: authData } = useQuery<{ user: SelectUser | null }>({
+  const { data: authData } = useQuery<{ user: SessionUser | null }>({
     queryKey: ["/api/auth/me"],
   });
 

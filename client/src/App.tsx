@@ -17,7 +17,7 @@ import { LogOut } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import AppSidebar from "@/components/AppSidebar";
 import { useLocation } from "wouter";
-import type { SelectUser } from "@shared/schema";
+import { SessionUser } from "@/types/session";
 import Dashboard from "@/pages/Dashboard";
 import MyTasks from "@/pages/MyTasks";
 import AllTasks from "@/pages/AllTasks";
@@ -34,7 +34,7 @@ import UserAvatar from "@/components/UserAvatar";
 function UserMenu() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const { data: response } = useQuery<{ user: SelectUser | null }>({
+  const { data: response } = useQuery<{ user: SessionUser | null }>({
     queryKey: ["/api/auth/me"],
   });
 
@@ -122,7 +122,7 @@ type ProtectedLayoutMode = "default" | "passwordChange";
 
 function ProtectedLayout({ children, mode = "default" }: { children: React.ReactNode; mode?: ProtectedLayoutMode }) {
   const [location, setLocation] = useLocation();
-  const { data: response, isLoading } = useQuery<{ user: SelectUser | null }>({
+  const { data: response, isLoading } = useQuery<{ user: SessionUser | null }>({
     queryKey: ["/api/auth/me"],
   });
 

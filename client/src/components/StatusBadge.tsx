@@ -1,7 +1,7 @@
 import React from "react";
 import { Badge } from "@/components/ui/badge";
 
-export type TaskStatus = "backlog" | "inProgress" | "underReview" | "completed" | "overdue";
+export type TaskStatus = "backlog" | "inProgress" | "underReview" | "completed";
 
 interface StatusBadgeProps {
   status: TaskStatus;
@@ -12,7 +12,6 @@ const statusConfig = {
   inProgress: { label: "В работе", className: "bg-status-inProgress/20 text-status-inProgress border-status-inProgress/30" },
   underReview: { label: "На проверке", className: "bg-status-underReview/20 text-status-underReview border-status-underReview/30" },
   completed: { label: "Выполнена", className: "bg-status-completed/20 text-status-completed border-status-completed/30" },
-  overdue: { label: "Просрочена", className: "bg-status-overdue/20 text-status-overdue border-status-overdue/30" },
 };
 
 export default function StatusBadge({ status }: StatusBadgeProps) {

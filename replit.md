@@ -48,7 +48,7 @@ Preferred communication style: Simple, everyday language.
 
 **Schema Design:**
 - **Organizational Hierarchy:** `departments`, `managements`, `divisions`, `employees` (with role, rating, points, time metrics).
-- **Task Management:** `tasks` (auction-only, statuses: backlog, inProgress, underReview, completed, overdue; tracks deadlines, assignees, minimumGrade, monetary auction fields).
+- **Task Management:** `tasks` (auction-only, статусы: backlog → inProgress → underReview → completed; хранит дедлайны, исполнителей, минимальный грейд и параметры аукциона).
 - **Monetary Auction System:** All tasks use monetary auctions with linear price growth from `auctionInitialSum` to `auctionMaxSum` (initial × 1.5) over 24 working hours. Fields: `auctionInitialSum`, `auctionMaxSum`, `auctionAssignedSum`, `auctionPlannedEndAt`.
 - **Auction Bids:** `auctionBids` table tracks monetary bids (`bidAmount` in decimal), bidder grade, and rating. Auto-closure assigns to lowest bidder; if no bids, assigns to department director with max sum.
 - **Rating & Grade System:** Employees have decimal rating (0-5) and points that determine grade (D/C/B/A). Grades calculated dynamically: <45=D, 45-64=C, 65-84=B, ≥85=A. Only employees with grade ≥ task's `minimumGrade` can bid.

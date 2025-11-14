@@ -9,7 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { createAuctionTask, type CreateAuctionTaskPayload, type Grade } from "@/api/adapter";
-import type { Department, SelectUser } from "@shared/schema";
+import type { Department } from "@shared/schema";
+import { SessionUser } from "@/types/session";
 
 interface CreateAuctionModalProps {
   open: boolean;
@@ -93,9 +94,9 @@ function parseApiError(error: unknown): { status?: number; message?: string } {
 }
 
 const gradeOptions: Array<{ value: Grade; label: string }> = [
-  { value: "D", label: "Грейд D (до 44 баллов)" },
-  { value: "C", label: "Грейд C (45–64 балла)" },
-  { value: "B", label: "Грейд B (65–84 балла)" },
+  { value: "D", label: "Грейд D (<55 баллов)" },
+  { value: "C", label: "Грейд C (55–69 баллов)" },
+  { value: "B", label: "Грейд B (70–84 баллов)" },
   { value: "A", label: "Грейд A (85+ баллов)" },
 ];
 
@@ -104,18 +105,27 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
-  const { data: authResponse } = useQuery<{ user: SelectUser | null }>({ queryKey: ["/api/auth/me"] });
+  const { data: authResponse } = useQuery<{ user: SessionUser | null }>({ queryKey: ["/api/auth/me"] });
   const currentUser = authResponse?.user;
-  const isDirector = currentUser?.role === "director";
-  const shouldLoadDepartments = open && isDirector;
+  const canChooseDepartment =
+    currentUser?.role === "director" || currentUser?.positionType === "deputy";
+  const shouldLoadDepartments = open && canChooseDepartment;
   const { data: departments } = useQuery<Department[]>({
     queryKey: ["/api/departments"],
     enabled: shouldLoadDepartments,
   });
 
-  const directorDepartments = useMemo(() => {
+  const availableDepartments = useMemo(() => {
     if (!currentUser) return [] as Department[];
-    return (departments ?? []).filter((department) => department.leaderId === currentUser.id);
+    return (departments ?? []).filter((department) => {
+      if (currentUser.role === "director") {
+        return department.leaderId === currentUser.id;
+      }
+      if (currentUser.positionType === "deputy" && currentUser.departmentId) {
+        return department.id === currentUser.departmentId;
+      }
+      return false;
+    });
   }, [currentUser, departments]);
 
   useEffect(() => {
@@ -126,10 +136,14 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
 
   useEffect(() => {
     if (!open) return;
-    if (directorDepartments.length === 1 && !formState.departmentId) {
-      setFormState((prev) => ({ ...prev, departmentId: directorDepartments[0].id }));
+    if (!formState.departmentId) {
+      if (availableDepartments.length === 1) {
+        setFormState((prev) => ({ ...prev, departmentId: availableDepartments[0].id }));
+      } else if (currentUser?.departmentId) {
+        setFormState((prev) => ({ ...prev, departmentId: currentUser.departmentId ?? prev.departmentId }));
+      }
     }
-  }, [open, directorDepartments, formState.departmentId]);
+  }, [open, availableDepartments, currentUser?.departmentId, formState.departmentId]);
 
   const minDate = useMemo(() => formatDateOnly(new Date()), []);
 

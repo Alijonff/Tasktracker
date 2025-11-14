@@ -14,7 +14,7 @@ const moneyCases: Array<[number | undefined, string]> = [
 test("calculateGrade thresholds", () => {
   assert.equal(calculateGrade(20), "D");
   assert.equal(calculateGrade(60), "C");
-  assert.equal(calculateGrade(80), "B");
+  assert.equal(calculateGrade(75), "B");
   assert.equal(calculateGrade(100), "A");
 });
 

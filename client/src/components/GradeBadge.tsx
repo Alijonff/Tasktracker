@@ -15,30 +15,30 @@ const gradeConfig = {
   A: {
     label: "A",
     className: "bg-status-completed/20 text-status-completed border-status-completed/30",
-    description: "Grade A (≥85 points)",
+    description: "Grade A (≥85 баллов)",
   },
   B: {
     label: "B",
     className: "bg-status-inProgress/20 text-status-inProgress border-status-inProgress/30",
-    description: "Grade B (65-84 points)",
+    description: "Grade B (70-84 баллов)",
   },
   C: {
     label: "C",
     className: "bg-status-underReview/20 text-status-underReview border-status-underReview/30",
-    description: "Grade C (45-64 points)",
+    description: "Grade C (55-69 баллов)",
   },
   D: {
     label: "D",
     className: "bg-status-overdue/20 text-status-overdue border-status-overdue/30",
-    description: "Grade D (<45 points)",
+    description: "Grade D (<55 баллов)",
   },
 };
 
-const gradeRangesTable = `Grade Ranges:
-• A: ≥85 points
-• B: 65-84 points
-• C: 45-64 points
-• D: <45 points`;
+const gradeRangesTable = `Границы грейдов:
+• A: ≥85 баллов
+• B: 70-84 баллов
+• C: 55-69 баллов
+• D: <55 баллов`;
 
 export default function GradeBadge({
   grade: providedGrade,
@@ -49,10 +49,10 @@ export default function GradeBadge({
 }: GradeBadgeProps) {
   // Calculate grade from points if provided, otherwise use provided grade
   let grade: Grade;
-  if (points !== undefined) {
-    grade = calculateGrade(points);
-  } else if (providedGrade) {
+  if (providedGrade) {
     grade = providedGrade;
+  } else if (points !== undefined) {
+    grade = calculateGrade(points);
   } else {
     throw new Error("GradeBadge: Either 'grade' or 'points' must be provided");
   }

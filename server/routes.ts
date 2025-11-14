@@ -2,6 +2,14 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { authenticateUser, hashPassword, verifyPassword } from "./auth";
+import {
+  calculateAuctionPrice,
+  calculateOverduePenaltyHours,
+  parseDecimal,
+  selectWinningBid,
+  shouldAutoAssignToCreator,
+} from "./businessRules";
+import { reassignTasksFromTerminatedEmployee } from "./services/employeeLifecycle";
 import { z } from "zod";
 import {
   loginSchema,
@@ -11,11 +19,16 @@ import {
   insertManagementSchema,
   insertDivisionSchema,
   type Task,
-  type AuctionBid,
   type Grade,
   type Department,
+  type User,
 } from "@shared/schema";
-import { getInitialPointsByPosition, calculateGrade } from "@shared/utils";
+import {
+  getInitialPointsByPosition,
+  getGradeByPosition,
+  calculateGradeProgress,
+  type PositionType,
+} from "@shared/utils";
 
 // Authentication middleware
 function requireAuth(req: Request, res: Response, next: NextFunction) {
@@ -37,10 +50,11 @@ function requireAdmin(req: Request, res: Response, next: NextFunction) {
 function canModifyDepartment(user: any, departmentId: string): boolean {
   if (user.role === "admin") return true;
   if (user.role === "director" && user.departmentId === departmentId) return true;
+  if (user.positionType === "deputy" && user.departmentId === departmentId) return true;
   return false;
 }
 
-const positionTypeSchema = z.enum([
+const positionTypeValues = [
   "director",
   "deputy",
   "management_head",
@@ -48,9 +62,9 @@ const positionTypeSchema = z.enum([
   "division_head",
   "senior",
   "employee",
-]);
+] as const satisfies readonly PositionType[];
 
-type PositionType = z.infer<typeof positionTypeSchema>;
+const positionTypeSchema = z.enum(positionTypeValues);
 
 const positionRoleMap: Record<PositionType, "director" | "manager" | "senior" | "employee"> = {
   director: "director",
@@ -72,11 +86,18 @@ const roleGradeMap: Record<"admin" | "director" | "manager" | "senior" | "employ
 
 const gradePriority: Record<Grade, number> = { A: 4, B: 3, C: 2, D: 1 };
 
+const basePointsByGrade: Record<Grade, number> = {
+  A: 30,
+  B: 20,
+  C: 15,
+  D: 10,
+};
+
 const positionGradeMap: Record<PositionType, Grade> = {
   director: "A",
   deputy: "A",
   management_head: "A",
-  management_deputy: "A",
+  management_deputy: "B",
   division_head: "B",
   senior: "C",
   employee: "D",
@@ -88,6 +109,11 @@ function hasGradeAccess(userGrade: Grade, minimum: Grade): boolean {
 
 function getRoleGrade(role: "admin" | "director" | "manager" | "senior" | "employee"): Grade {
   return roleGradeMap[role];
+}
+
+function getBasePointsForTask(task: Task): number {
+  const minimumGrade = (task.minimumGrade as Grade) ?? "D";
+  return basePointsByGrade[minimumGrade] ?? basePointsByGrade.D;
 }
 
 const gradeSchema = z.enum(["A", "B", "C", "D"]);
@@ -144,45 +170,6 @@ function calculateAuctionEnd(start: Date): Date {
   }
 
   return current;
-}
-
-function parseDecimal(value: string | number | null | undefined): number | null {
-  if (value === null || value === undefined) {
-    return null;
-  }
-  const numeric = typeof value === "number" ? value : Number.parseFloat(String(value));
-  if (!Number.isFinite(numeric)) {
-    return null;
-  }
-  return numeric;
-}
-
-function calculateAuctionPrice(task: Task, now: Date = new Date()): number | null {
-  if (!task.auctionInitialSum || !task.auctionMaxSum || !task.auctionStartAt || !task.auctionPlannedEndAt) {
-    return null;
-  }
-
-  const start = new Date(task.auctionStartAt);
-  const plannedEnd = new Date(task.auctionPlannedEndAt);
-  const initial = parseDecimal(task.auctionInitialSum);
-  const max = parseDecimal(task.auctionMaxSum);
-
-  if (!initial || !max || Number.isNaN(start.getTime()) || Number.isNaN(plannedEnd.getTime()) || start.getTime() === plannedEnd.getTime()) {
-    return null;
-  }
-
-  if (now <= start) {
-    return initial;
-  }
-
-  if (now >= plannedEnd) {
-    return max;
-  }
-
-  const total = plannedEnd.getTime() - start.getTime();
-  const elapsed = now.getTime() - start.getTime();
-  const progress = Math.min(Math.max(elapsed / total, 0), 1);
-  return initial + (max - initial) * progress;
 }
 
 const dateInputSchema = z
@@ -243,6 +230,7 @@ async function resolveEmployeeAssignment(
         managementId: null,
         divisionId: null,
         role: positionRoleMap[positionType],
+        positionType,
       } as const;
     }
     case "management_head":
@@ -263,6 +251,7 @@ async function resolveEmployeeAssignment(
         managementId: management.id,
         divisionId: null,
         role: positionRoleMap[positionType],
+        positionType,
       } as const;
     }
     case "division_head":
@@ -287,6 +276,7 @@ async function resolveEmployeeAssignment(
         managementId: division.managementId,
         divisionId: division.id,
         role: positionRoleMap[positionType],
+        positionType,
       } as const;
     }
     default: {
@@ -329,6 +319,26 @@ const updateEmployeeSchema = z.object({
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  async function enhanceUserCapabilities(user: Omit<User, "passwordHash">) {
+    let canCreateAuctions = false;
+
+    if (user.role === "admin") {
+      canCreateAuctions = true;
+    } else if (user.role === "director" && user.departmentId) {
+      canCreateAuctions = true;
+    } else if (user.positionType === "deputy" && user.departmentId) {
+      canCreateAuctions = true;
+    } else if (
+      user.managementId &&
+      (user.positionType === "management_head" || user.positionType === "management_deputy")
+    ) {
+      const management = await storage.getManagement(user.managementId);
+      canCreateAuctions = Boolean(management?.isAutonomous);
+    }
+
+    return { ...user, canCreateAuctions };
+  }
+
   async function finalizeExpiredAuctions(departmentId?: string) {
     const backlogAuctions = await storage.getActiveAuctions(
       departmentId ? { departmentId } : undefined,
@@ -345,24 +355,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const bids = await storage.getTaskBids(task.id);
 
       if (bids.length === 0) {
-        const departmentUsers = await storage.getAllUsers({ departmentId: task.departmentId });
-        const director = departmentUsers.find((user) => user.role === "director");
-        const assigneeId = director?.id ?? task.creatorId;
-        const assigneeName = director?.name ?? task.creatorName;
+        if (!shouldAutoAssignToCreator(task, now)) {
+          continue;
+        }
+
         await storage.updateTask(task.id, {
           status: "inProgress" as any,
-          assigneeId,
-          assigneeName,
-          auctionWinnerId: assigneeId,
-          auctionWinnerName: assigneeName,
+          assigneeId: task.creatorId,
+          assigneeName: task.creatorName,
+          auctionWinnerId: task.creatorId,
+          auctionWinnerName: task.creatorName,
           auctionAssignedSum: task.auctionMaxSum ?? task.auctionInitialSum ?? null,
+          auctionEndAt: now,
         });
       } else {
-        const winningBid = bids.reduce((best, bid) => {
-          const bestValue = parseDecimal(best.bidAmount) ?? Number.POSITIVE_INFINITY;
-          const currentValue = parseDecimal(bid.bidAmount) ?? Number.POSITIVE_INFINITY;
-          return currentValue < bestValue ? bid : best;
-        }, bids[0] as AuctionBid);
+        const winningBid = selectWinningBid(bids);
+        if (!winningBid) {
+          continue;
+        }
 
         await storage.updateTask(task.id, {
           status: "inProgress" as any,
@@ -371,6 +381,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           auctionWinnerId: winningBid.bidderId,
           auctionWinnerName: winningBid.bidderName,
           auctionAssignedSum: winningBid.bidAmount,
+          auctionEndAt: now,
         });
       }
     }
@@ -806,15 +817,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const passwordHash = await hashPassword(parsed.password);
+      const grade = getGradeByPosition(assignment.positionType);
       const user = await storage.createUser(
         parsed.username,
         passwordHash,
         parsed.name,
         parsed.email ?? null,
         assignment.role,
+        grade,
         assignment.departmentId,
         assignment.managementId,
         assignment.divisionId,
+        assignment.positionType,
         true
       );
 
@@ -822,20 +836,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await storage.updateManagement(assignment.managementId, { deputyId: user.id });
       }
 
-      // Assign starting points for the position
-      // Map PositionType to getInitialPointsByPosition keys
-      const positionKeyMap: Record<PositionType, string> = {
-        director: "department_director",
-        deputy: "department_deputy",
-        management_head: "management_head",
-        management_deputy: "management_deputy",
-        division_head: "division_head",
-        senior: "division_senior",
-        employee: "division_employee",
-      };
-      const positionKey = positionKeyMap[parsed.positionType];
-      const startingPoints = getInitialPointsByPosition(positionKey);
-      
+      const startingPoints = getInitialPointsByPosition(parsed.positionType);
+
       const positionLabels: Record<PositionType, string> = {
         director: "Директор",
         deputy: "Заместитель",
@@ -905,6 +907,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         email?: string | null;
         role?: "admin" | "director" | "manager" | "senior" | "employee";
         grade?: Grade;
+        positionType?: PositionType;
         departmentId?: string | null;
         managementId?: string | null;
         divisionId?: string | null;
@@ -968,6 +971,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         updates.role = assignment.role;
+        updates.grade = getGradeByPosition(assignment.positionType);
+        updates.positionType = assignment.positionType;
         updates.departmentId = assignment.departmentId;
         updates.managementId = assignment.managementId;
         updates.divisionId = assignment.divisionId;
@@ -1021,6 +1026,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (employee.departmentId && !canModifyDepartment(req.session.user, employee.departmentId)) {
         return res.status(403).json({ error: "Недостаточно прав для удаления сотрудника" });
       }
+
+      await reassignTasksFromTerminatedEmployee(storage, id);
 
       await clearManagementDeputyAssignment(id);
       await storage.deleteUser(id);
@@ -1079,60 +1086,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const currentUser = req.session.user!;
       const parsed = createTaskSchema.parse(req.body);
-      if (currentUser.role !== "director") {
-        return res
-          .status(403)
-          .json({ error: "Вы не привязаны как директор ни к одному департаменту" });
+
+      const allowedScopes: Array<{ departmentId: string; managementId: string | null }> = [];
+
+      if (currentUser.role === "director" && currentUser.departmentId) {
+        allowedScopes.push({ departmentId: currentUser.departmentId, managementId: null });
       }
 
-      const allDepartments = await storage.getAllDepartments();
-      const directorDepartments = allDepartments.filter(
-        (department) => department.leaderId === currentUser.id,
-      );
-
-      if (directorDepartments.length === 0) {
-        return res
-          .status(403)
-          .json({ error: "Вы не привязаны как директор ни к одному департаменту" });
+      if (currentUser.positionType === "deputy" && currentUser.departmentId) {
+        allowedScopes.push({ departmentId: currentUser.departmentId, managementId: null });
       }
 
-      let selectedDepartment: Department | undefined;
+      if (
+        currentUser.managementId &&
+        (currentUser.positionType === "management_head" || currentUser.positionType === "management_deputy")
+      ) {
+        const management = await storage.getManagement(currentUser.managementId);
+        if (management && management.isAutonomous) {
+          allowedScopes.push({ departmentId: management.departmentId, managementId: management.id });
+        }
+      }
+
+      if (allowedScopes.length === 0) {
+        return res.status(403).json({ error: "У вас нет прав для создания аукционов" });
+      }
+
+      let selectedScope: { departmentId: string; managementId: string | null } | undefined;
 
       if (parsed.departmentId) {
-        const department = allDepartments.find((dept) => dept.id === parsed.departmentId);
-        if (!department) {
-          return res.status(404).json({ error: "Департамент не найден" });
+        selectedScope = allowedScopes.find((scope) => scope.departmentId === parsed.departmentId);
+        if (!selectedScope) {
+          return res.status(403).json({ error: "Нет доступа к выбранному департаменту" });
         }
-        if (department.leaderId !== currentUser.id) {
-          return res
-            .status(403)
-            .json({ error: "У вас нет прав на создание аукциона в этом департаменте" });
-        }
-        selectedDepartment = department;
       } else {
-        if (directorDepartments.length > 1) {
+        const uniqueDepartments = Array.from(new Set(allowedScopes.map((scope) => scope.departmentId)));
+        if (uniqueDepartments.length > 1) {
           return res.status(400).json({ error: "Укажите департамент для аукциона" });
         }
-        selectedDepartment = directorDepartments[0];
+        selectedScope = allowedScopes[0];
       }
 
-      if (!selectedDepartment) {
+      if (!selectedScope) {
         return res.status(500).json({ error: "Не удалось определить департамент" });
       }
-
-      const departmentId = selectedDepartment.id;
 
       const startAt = new Date();
       const initialSum = parsed.auctionInitialSum;
       const plannedEndAt = calculateAuctionEnd(startAt);
 
-      const taskData: any = {
+      const taskData: Partial<Task> = {
         title: parsed.title,
         description: parsed.description,
         type: "auction",
         status: "backlog",
-        departmentId,
-        managementId: null,
+        departmentId: selectedScope.departmentId,
+        managementId: selectedScope.managementId,
         divisionId: null,
         creatorId: currentUser.id,
         creatorName: currentUser.name,
@@ -1149,9 +1157,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         auctionEndAt: null,
         auctionWinnerId: null,
         auctionWinnerName: null,
-      } satisfies Partial<Task>;
+        auctionHasBids: false,
+      };
 
-      const created = await storage.createTask(taskData);
+      const created = await storage.createTask(taskData as any);
       res.status(201).json(created);
     } catch (error: any) {
       if (error instanceof z.ZodError) {
@@ -1334,7 +1343,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         inProgress: ["underReview"],
         underReview: ["completed", "inProgress"],
         completed: [],
-        overdue: ["inProgress"],
       };
 
       const available = transitions[currentStatus] ?? [];
@@ -1347,7 +1355,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const isAssignee = task.assigneeId === currentUser.id;
 
       if (targetStatus === "inProgress") {
-        if (currentStatus === "backlog" || currentStatus === "overdue") {
+        if (currentStatus === "backlog") {
           if (!task.assigneeId) {
             return res.status(400).json({ error: "Задача должна иметь исполнителя" });
           }
@@ -1390,30 +1398,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Задача не найдена" });
       }
 
-      // Apply overdue penalty if task is completed/underReview past deadline
-      // Only apply once - check if penalty already exists for this task
-      if ((status === "completed" || status === "underReview") && task.assigneeId && task.deadline) {
-        const hasPenalty = await storage.hasOverduePenalty(task.id);
-        
-        if (!hasPenalty) {
-          const { calculateOverdueDays } = await import("@shared/utils");
-          const overdueDays = calculateOverdueDays(new Date(task.deadline), new Date());
-          
-          if (overdueDays > 0) {
-            const assignee = await storage.getUserById(task.assigneeId);
-            if (assignee) {
-              const penaltyPoints = overdueDays * -2;
-              await storage.createPointTransaction({
-                userId: task.assigneeId,
-                userName: assignee.name,
-                amount: penaltyPoints,
-                type: "overdue_penalty",
-                taskId: task.id,
-                comment: `Штраф за просрочку задачи "${task.title}" на ${overdueDays} ${overdueDays === 1 ? 'день' : overdueDays < 5 ? 'дня' : 'дней'}`,
-              });
-            }
-          }
+      if (targetStatus === "completed" && task.assigneeId && task.assignedPoints == null) {
+        const basePoints = getBasePointsForTask(task);
+        let penaltyPoints = 0;
+        if (task.deadline) {
+          const deadline = new Date(task.deadline);
+          penaltyPoints = calculateOverduePenaltyHours(deadline, new Date());
         }
+        await storage.assignPointsForTask(task.id, basePoints, penaltyPoints);
       }
 
       res.json(updated);
@@ -1472,7 +1464,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       task = refreshedTask;
 
-      const userGrade: Grade = calculateGrade(currentUser.points);
+      const userGrade: Grade = currentUser.grade ?? getRoleGrade(currentUser.role);
       const minimumGrade = task.minimumGrade as Grade;
       if (!hasGradeAccess(userGrade, minimumGrade)) {
         return res.status(403).json({ error: "Ваш грейд не допускает участие в этом аукционе" });
@@ -1484,8 +1476,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Ставки недоступны для этой задачи" });
       }
 
-      if (parsed.bidAmount > auctionPrice) {
-        return res.status(400).json({ error: "Ставка должна быть не выше текущей цены" });
+      if (parsed.bidAmount >= auctionPrice) {
+        return res.status(400).json({ error: "Ставка должна быть ниже текущей цены" });
       }
 
       const existingBids = await storage.getTaskBids(id);
@@ -1494,7 +1486,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return value < best ? value : best;
       }, Number.POSITIVE_INFINITY);
 
-      if (currentBest !== Number.POSITIVE_INFINITY && parsed.bidAmount > currentBest) {
+      if (currentBest !== Number.POSITIVE_INFINITY && parsed.bidAmount >= currentBest) {
         return res.status(400).json({ error: "Есть более выгодная ставка" });
       }
 
@@ -1504,6 +1496,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         bidderName: currentUser.name,
         bidderRating: (currentUser.rating as string | null) ?? "0",
         bidderGrade: userGrade,
+        bidderPoints: Number(currentUser.points ?? 0),
         bidAmount: decimalToString(parsed.bidAmount),
       });
 
@@ -1522,22 +1515,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const credentials = loginSchema.parse(req.body);
       const user = await authenticateUser(storage, credentials);
-      
+
       if (!user) {
         return res.status(401).json({ error: "Неверное имя пользователя или пароль" });
       }
-      
+
       const { passwordHash, ...userWithoutPassword } = user;
+      const enhancedUser = await enhanceUserCapabilities(userWithoutPassword);
       req.session.userId = user.id;
-      req.session.user = userWithoutPassword;
-      
+      req.session.user = enhancedUser;
+
       // Explicitly save session before responding
       req.session.save((err) => {
         if (err) {
           console.error("Ошибка сохранения сессии:", err);
           return res.status(500).json({ error: "Не удалось сохранить сессию" });
         }
-        res.json({ user: userWithoutPassword });
+        res.json({ user: enhancedUser });
       });
     } catch (error) {
       res.status(400).json({ error: "Некорректный запрос" });
@@ -1590,9 +1584,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { passwordHash: _, ...userWithoutPassword } = updatedUser;
-      req.session.user = userWithoutPassword;
+      const enhancedUser = await enhanceUserCapabilities(userWithoutPassword);
+      req.session.user = enhancedUser;
 
-      res.json({ user: userWithoutPassword });
+      res.json({ user: enhancedUser });
     } catch (error) {
       console.error("Ошибка при смене пароля:", error);
       res.status(500).json({ error: "Не удалось обновить пароль" });
@@ -1614,8 +1609,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userData = insertUserSchema.parse(req.body);
       const passwordHash = await hashPassword(userData.password);
-      
+
       const role = userData.role || "employee";
+
+      if (role !== "admin") {
+        return res.status(400).json({ error: "Создание сотрудников выполняйте через раздел кадров" });
+      }
 
       const user = await storage.createUser(
         userData.username,
@@ -1623,9 +1622,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userData.name,
         userData.email ?? null,
         role,
-        userData.departmentId || null,
-        userData.managementId || null,
-        userData.divisionId || null,
+        "A",
+        null,
+        null,
+        null,
+        "employee",
         true
       );
       
@@ -1665,54 +1666,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Point Transactions endpoints
-  app.post("/api/tasks/:id/assign-points", requireAuth, async (req, res) => {
+  app.get("/api/users/me/points", requireAuth, async (req, res) => {
     try {
-      const { id: taskId } = req.params;
-      const { points, comment } = req.body;
-      const user = req.session.user!;
-
-      // Validation
-      if (!points || typeof points !== "number" || points <= 0 || !Number.isFinite(points)) {
-        return res.status(400).json({ error: "Баллы должны быть положительным числом" });
+      const currentUserId = req.session.user!.id;
+      const freshUser = await storage.getUserById(currentUserId);
+      if (!freshUser) {
+        return res.status(404).json({ error: "Пользователь не найден" });
       }
 
-      if (user.role !== "director" && user.role !== "admin") {
-        return res.status(403).json({ error: "Только директор может назначать баллы" });
-      }
+      const points = Number(freshUser.points ?? 0);
+      const { grade, nextGrade, pointsToNext } = calculateGradeProgress(points);
 
-      const task = await storage.getTask(taskId);
-      if (!task) {
-        return res.status(404).json({ error: "Задача не найдена" });
-      }
-
-      if (!task.assigneeId) {
-        return res.status(400).json({ error: "Задача не назначена исполнителю" });
-      }
-
-      if (task.status !== "completed") {
-        return res.status(400).json({ error: "Баллы можно назначить только за выполненную задачу" });
-      }
-
-      if (task.assignedPoints !== null && task.assignedPoints !== undefined) {
-        return res.status(400).json({ error: "Баллы уже назначены за эту задачу" });
-      }
-
-      if (user.role === "director" && task.departmentId !== user.departmentId) {
-        return res.status(403).json({ error: "Нет доступа к этой задаче" });
-      }
-
-      const assignee = await storage.getUserById(task.assigneeId);
-      if (!assignee) {
-        return res.status(404).json({ error: "Исполнитель не найден" });
-      }
-
-      // Assign points atomically (DB transaction)
-      await storage.assignPointsForTask(taskId, points, comment || null);
-
-      res.json({ success: true });
+      res.json({ points, grade, nextGrade: nextGrade ?? null, pointsToNext: pointsToNext ?? null });
     } catch (error) {
-      res.status(500).json({ error: "Не удалось назначить баллы" });
+      console.error("Ошибка при получении баллов пользователя:", error);
+      res.status(500).json({ error: "Не удалось получить баллы пользователя" });
+    }
+  });
+
+  app.get("/api/users/me/point-history", requireAuth, async (req, res) => {
+    try {
+      const currentUserId = req.session.user!.id;
+      const history = await storage.getUserPointHistory(currentUserId);
+      res.json(history);
+    } catch (error) {
+      res.status(500).json({ error: "Не удалось получить историю баллов" });
     }
   });
 

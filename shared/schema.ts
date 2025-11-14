@@ -27,16 +27,16 @@ export const taskStatusEnum = pgEnum("task_status", [
   "inProgress",
   "underReview",
   "completed",
-  "overdue",
 ]);
 export const taskTypeEnum = pgEnum("task_type", ["auction"]);
 export const positionTypeEnum = pgEnum("position_type", [
-  "department_director",
-  "department_deputy",
+  "director",
+  "deputy",
   "management_head",
+  "management_deputy",
   "division_head",
-  "division_senior",
-  "division_employee",
+  "senior",
+  "employee",
 ]);
 export const pointTransactionTypeEnum = pgEnum("point_transaction_type", [
   "task_completion",
@@ -68,6 +68,7 @@ export const managements = pgTable("managements", {
   leaderId: varchar("leader_id"),
   leaderName: text("leader_name"),
   deputyId: varchar("deputy_id"),
+  isAutonomous: boolean("is_autonomous").notNull().default(false),
   rating: decimal("rating", { precision: 3, scale: 2 }).default("0"),
   employeeCount: integer("employee_count").default(0),
   createdAt: timestamp("created_at").defaultNow(),
@@ -99,6 +100,7 @@ export const users = pgTable("users", {
   name: text("name").notNull(),
   email: text("email").unique(),
   role: roleEnum("role").notNull().default("employee"),
+  positionType: positionTypeEnum("position_type").notNull().default("employee"),
   divisionId: varchar("division_id").references(() => divisions.id, {
     onDelete: "set null",
   }),
@@ -109,6 +111,7 @@ export const users = pgTable("users", {
     onDelete: "set null",
   }),
   rating: decimal("rating", { precision: 3, scale: 2 }).default("0"),
+  grade: gradeEnum("grade").notNull().default("D"),
   points: integer("points").notNull().default(0),
   completedTasks: integer("completed_tasks").default(0),
   totalHours: decimal("total_hours", { precision: 10, scale: 2 }).default("0"),
@@ -161,6 +164,7 @@ export const tasks = pgTable("tasks", {
     onDelete: "set null",
   }),
   auctionWinnerName: text("auction_winner_name"),
+  auctionHasBids: boolean("auction_has_bids").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => ({
@@ -182,6 +186,7 @@ export const auctionBids = pgTable("auction_bids", {
   bidderName: text("bidder_name").notNull(),
   bidderRating: decimal("bidder_rating", { precision: 3, scale: 2 }).notNull(),
   bidderGrade: gradeEnum("bidder_grade").notNull(),
+  bidderPoints: integer("bidder_points").notNull().default(0),
   bidAmount: decimal("bid_amount", { precision: 10, scale: 2 }).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -325,6 +330,8 @@ export const insertUserSchema = createInsertSchema(users)
     createdAt: true,
     mustChangePassword: true,
     rating: true,
+    grade: true,
+    positionType: true,
     points: true,
     completedTasks: true,
     totalHours: true,

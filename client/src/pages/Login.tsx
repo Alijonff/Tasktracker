@@ -3,7 +3,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { loginSchema, type SelectUser } from "@shared/schema";
+import { loginSchema } from "@shared/schema";
+import { SessionUser } from "@/types/session";
 import { z } from "zod";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -36,7 +37,7 @@ export default function Login() {
     return fallback;
   };
 
-  const { data: response } = useQuery<{ user: SelectUser | null }>({
+  const { data: response } = useQuery<{ user: SessionUser | null }>({
     queryKey: ["/api/auth/me"],
   });
 
@@ -60,7 +61,7 @@ export default function Login() {
       const res = await apiRequest("POST", "/api/auth/login", data);
       return await res.json();
     },
-    onSuccess: async (data: { user: SelectUser }) => {
+    onSuccess: async (data: { user: SessionUser }) => {
       toast({
         title: "Добро пожаловать",
         description: "Вы успешно вошли в систему",

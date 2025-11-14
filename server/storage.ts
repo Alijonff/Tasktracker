@@ -22,6 +22,7 @@ import {
   type InsertDivision,
   type Grade,
 } from "@shared/schema";
+import { type PositionType } from "@shared/utils";
 import { eq, and, or, like, desc, inArray, gte, isNull, sql } from "drizzle-orm";
 
 export interface IStorage {
@@ -32,9 +33,11 @@ export interface IStorage {
     name: string,
     email: string | null,
     role: "admin" | "director" | "manager" | "senior" | "employee",
+    grade: Grade,
     departmentId?: string | null,
     managementId?: string | null,
     divisionId?: string | null,
+    positionType?: PositionType,
     mustChangePassword?: boolean,
   ): Promise<User>;
   getUserByUsername(username: string): Promise<User | undefined>;
@@ -46,6 +49,8 @@ export interface IStorage {
       name?: string;
       email?: string | null;
       role?: "admin" | "director" | "manager" | "senior" | "employee";
+      grade?: Grade;
+      positionType?: PositionType;
       departmentId?: string | null;
       managementId?: string | null;
       divisionId?: string | null;
@@ -128,9 +133,7 @@ export interface IStorage {
     comment?: string | null;
   }): Promise<PointTransaction>;
   getUserPointHistory(userId: string): Promise<PointTransaction[]>;
-  updateUserPoints(userId: string, newPoints: number): Promise<User | undefined>;
-  assignPointsForTask(taskId: string, points: number, comment?: string | null): Promise<void>;
-  hasOverduePenalty(taskId: string): Promise<boolean>;
+  assignPointsForTask(taskId: string, basePoints: number, penaltyPoints: number): Promise<void>;
 
   // Auction management
   getActiveAuctions(filters?: { departmentId?: string }): Promise<Task[]>;
@@ -154,9 +157,11 @@ export class DbStorage implements IStorage {
     name: string,
     email: string | null,
     role: "admin" | "director" | "manager" | "senior" | "employee",
+    grade: Grade,
     departmentId?: string | null,
     managementId?: string | null,
     divisionId?: string | null,
+    positionType?: PositionType,
     mustChangePassword?: boolean,
   ): Promise<User> {
     const [user] = await db.insert(users).values({
@@ -165,9 +170,11 @@ export class DbStorage implements IStorage {
       name,
       email: email ?? null,
       role,
+      grade,
       departmentId: departmentId || null,
       managementId: managementId || null,
       divisionId: divisionId || null,
+      positionType: positionType ?? "employee",
       mustChangePassword: mustChangePassword ?? false,
     }).returning();
     return user;
@@ -202,6 +209,8 @@ export class DbStorage implements IStorage {
       name?: string;
       email?: string | null;
       role?: "admin" | "director" | "manager" | "senior" | "employee";
+      grade?: Grade;
+      positionType?: PositionType;
       departmentId?: string | null;
       managementId?: string | null;
       divisionId?: string | null;
@@ -209,8 +218,8 @@ export class DbStorage implements IStorage {
       mustChangePassword?: boolean;
     }
   ): Promise<User | undefined> {
-    const [user] = await db.update(users)
-      .set(updates)
+      const [user] = await db.update(users)
+        .set(updates)
       .where(eq(users.id, id))
       .returning();
     return user;
@@ -423,8 +432,14 @@ export class DbStorage implements IStorage {
   }
 
   async createBid(bidData: InsertBid): Promise<AuctionBid> {
-    const [bid] = await db.insert(auctionBids).values(bidData as any).returning();
-    return bid;
+    return await db.transaction(async (tx) => {
+      const [bid] = await tx.insert(auctionBids).values(bidData as any).returning();
+      await tx
+        .update(tasks)
+        .set({ auctionHasBids: true })
+        .where(eq(tasks.id, bidData.taskId));
+      return bid;
+    });
   }
 
   async addTaskComment(comment: {
@@ -576,72 +591,58 @@ export class DbStorage implements IStorage {
       .orderBy(desc(pointTransactions.createdAt));
   }
 
-  async updateUserPoints(userId: string, newPoints: number): Promise<User | undefined> {
-    const [updated] = await db
-      .update(users)
-      .set({ points: newPoints })
-      .where(eq(users.id, userId))
-      .returning();
-    return updated;
-  }
-
-  async hasOverduePenalty(taskId: string): Promise<boolean> {
-    const [existing] = await db
-      .select()
-      .from(pointTransactions)
-      .where(
-        and(
-          eq(pointTransactions.taskId, taskId),
-          eq(pointTransactions.type, "overdue_penalty")
-        )
-      )
-      .limit(1);
-    return !!existing;
-  }
-
-  async assignPointsForTask(taskId: string, points: number, comment?: string | null): Promise<void> {
+  async assignPointsForTask(taskId: string, basePoints: number, penaltyPoints: number): Promise<void> {
     await db.transaction(async (tx) => {
-      // Update task
-      await tx
-        .update(tasks)
-        .set({ assignedPoints: points })
-        .where(eq(tasks.id, taskId));
-      
-      // Get task details
       const [task] = await tx
         .select()
         .from(tasks)
         .where(eq(tasks.id, taskId));
-      
+
       if (!task || !task.assigneeId) {
         throw new Error("Task not found or has no assignee");
       }
-      
-      // Get assignee
+
       const [assignee] = await tx
         .select()
         .from(users)
         .where(eq(users.id, task.assigneeId));
-      
+
       if (!assignee) {
         throw new Error("Assignee not found");
       }
-      
-      // Create point transaction
+
+      const totalPoints = basePoints - penaltyPoints;
+
       await tx
-        .insert(pointTransactions)
-        .values({
+        .update(tasks)
+        .set({ assignedPoints: totalPoints })
+        .where(eq(tasks.id, taskId));
+
+      if (basePoints !== 0) {
+        await tx.insert(pointTransactions).values({
           userId: assignee.id,
           userName: assignee.name,
-          amount: points,
-          type: "task_completion" as const,
+          amount: basePoints,
+          type: "task_completion",
           taskId: task.id,
           taskTitle: task.title,
-          comment: comment ?? null,
+          comment: `Базовые баллы за задачу "${task.title}"`,
         });
-      
-      // Update user points
-      const newPoints = Number(assignee.points) + points;
+      }
+
+      if (penaltyPoints > 0) {
+        await tx.insert(pointTransactions).values({
+          userId: assignee.id,
+          userName: assignee.name,
+          amount: -penaltyPoints,
+          type: "overdue_penalty",
+          taskId: task.id,
+          taskTitle: task.title,
+          comment: `Штраф за просрочку ${penaltyPoints} ч.`,
+        });
+      }
+
+      const newPoints = Number(assignee.points) + totalPoints;
       await tx
         .update(users)
         .set({ points: newPoints })

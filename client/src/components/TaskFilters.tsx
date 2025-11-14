@@ -52,7 +52,6 @@ export default function TaskFilters({ onFilterChange }: TaskFiltersProps) {
           <SelectItem value="inProgress">В работе</SelectItem>
           <SelectItem value="underReview">На проверке</SelectItem>
           <SelectItem value="completed">Выполнена</SelectItem>
-          <SelectItem value="overdue">Просрочена</SelectItem>
         </SelectContent>
       </Select>
 

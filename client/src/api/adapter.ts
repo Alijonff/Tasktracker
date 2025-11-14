@@ -87,7 +87,7 @@ function transformTask(task: Task): AuctionTaskSummary {
     id: task.id,
     title: task.title,
     description: task.description,
-    status: (task.status === "overdue" ? "inProgress" : task.status) as AuctionStatus,
+    status: task.status as AuctionStatus,
     departmentId: task.departmentId,
     managementId: task.managementId ?? undefined,
     divisionId: task.divisionId ?? undefined,
