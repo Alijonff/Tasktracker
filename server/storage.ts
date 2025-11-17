@@ -139,7 +139,10 @@ export interface IStorage {
   // Auction management
   getActiveAuctions(filters?: { departmentId?: string }): Promise<Task[]>;
   getAuctionsToClose(): Promise<Task[]>;
-  closeAuction(taskId: string, winnerId?: string, winnerName?: string, assignedSum?: string): Promise<Task | undefined>;
+  closeAuction(
+    taskId: string,
+    options: { winnerId?: string; winnerName?: string; assignedSum?: string; endAt?: Date }
+  ): Promise<Task | undefined>;
   
   // Review management
   getReviewsToExpire(): Promise<Task[]>;
@@ -726,10 +729,9 @@ export class DbStorage implements IStorage {
 
   async closeAuction(
     taskId: string,
-    winnerId?: string,
-    winnerName?: string,
-    assignedSum?: string
+    options: { winnerId?: string; winnerName?: string; assignedSum?: string; endAt?: Date }
   ): Promise<Task | undefined> {
+    const { winnerId, winnerName, assignedSum, endAt } = options;
     const [task] = await db
       .update(tasks)
       .set({
@@ -737,7 +739,9 @@ export class DbStorage implements IStorage {
         assigneeId: winnerId || null,
         assigneeName: winnerName || null,
         auctionAssignedSum: assignedSum || null,
-        auctionEndAt: new Date(),
+        auctionWinnerId: winnerId || null,
+        auctionWinnerName: winnerName || null,
+        auctionEndAt: endAt ?? new Date(),
         updatedAt: new Date(),
       })
       .where(
