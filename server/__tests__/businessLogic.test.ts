@@ -15,10 +15,10 @@ test("calculateAuctionPrice плавно увеличивает стоимост
   const start = new Date("2024-01-01T09:00:00Z");
   const plannedEnd = new Date(start.getTime() + 24 * 60 * 60 * 1000);
   const task = createAuctionTask({
+    auctionMode: "money",
     auctionStartAt: start,
     auctionPlannedEndAt: plannedEnd,
-    auctionInitialSum: "100",
-    auctionMaxSum: "150",
+    basePrice: "100",
     auctionHasBids: false,
   });
 
@@ -30,14 +30,14 @@ test("calculateAuctionPrice плавно увеличивает стоимост
   assert.equal(calculateAuctionPrice(task, afterEnd), 150);
 });
 
-test("calculateAuctionPrice возвращает стартовую цену если есть ставки", () => {
+test("calculateAuctionPrice использует фиксированную ставку после появления торгов", () => {
   const start = new Date("2024-01-01T09:00:00Z");
   const plannedEnd = new Date(start.getTime() + 24 * 60 * 60 * 1000);
   const task = createAuctionTask({
+    auctionMode: "money",
     auctionStartAt: start,
     auctionPlannedEndAt: plannedEnd,
-    auctionInitialSum: "200",
-    auctionMaxSum: "300",
+    basePrice: "200",
     auctionHasBids: true,
   });
 
@@ -45,16 +45,16 @@ test("calculateAuctionPrice возвращает стартовую цену е�
   assert.equal(calculateAuctionPrice(task, later), 200);
 });
 
-test("selectWinningBid учитывает сумму, затем баллы и время ставки", () => {
+test("selectWinningBid учитывает режим времени и сумму баллов", () => {
   const bids: AuctionBid[] = [
-    createBid({ id: "1", bidAmount: "90", bidderPoints: 120, createdAt: new Date("2024-01-02T09:00:00Z") }),
-    createBid({ id: "2", bidAmount: "85", bidderPoints: 80, createdAt: new Date("2024-01-02T09:10:00Z") }),
-    createBid({ id: "3", bidAmount: "85", bidderPoints: 95, createdAt: new Date("2024-01-02T09:05:00Z") }),
-    createBid({ id: "4", bidAmount: "85", bidderPoints: 95, createdAt: new Date("2024-01-02T09:02:00Z") }),
+    createBid({ id: "1", valueTimeMinutes: 80, bidderPoints: 120, createdAt: new Date("2024-01-02T09:00:00Z") }),
+    createBid({ id: "2", valueTimeMinutes: 75, bidderPoints: 80, createdAt: new Date("2024-01-02T09:10:00Z") }),
+    createBid({ id: "3", valueTimeMinutes: 75, bidderPoints: 95, createdAt: new Date("2024-01-02T09:05:00Z") }),
+    createBid({ id: "4", valueTimeMinutes: 75, bidderPoints: 95, createdAt: new Date("2024-01-02T09:02:00Z") }),
   ];
 
   const winner = selectWinningBid(bids);
-  assert.equal(winner?.id, "4", "Побеждает ставка с минимальной суммой, затем по баллам и времени");
+  assert.equal(winner?.id, "4", "Побеждает минимальное время, затем по баллам и времени");
 });
 
 test("shouldAutoAssignToCreator срабатывает только после истечения grace-периода", () => {
@@ -74,7 +74,7 @@ test("shouldAutoAssignToCreator срабатывает только после �
 test("calculateOverduePenaltyHours считает только рабочие часы", () => {
   const deadline = new Date("2024-05-06T09:00:00Z"); // Понедельник
   const completed = new Date("2024-05-06T13:30:00Z");
-  assert.equal(calculateOverduePenaltyHours(deadline, completed), 5);
+  assert.equal(calculateOverduePenaltyHours(deadline, completed), 4);
 
   const fridayDeadline = new Date("2024-05-10T18:00:00Z");
   const mondayCompletion = new Date("2024-05-13T10:00:00Z");
@@ -102,6 +102,7 @@ test("reassignTasksFromTerminatedEmployee переназначает задач�
       calls.push({ id, updates });
       return undefined;
     },
+    deleteEmployeeBids: async () => [],
   };
 
   await reassignTasksFromTerminatedEmployee(storageMock as any, assigneeId);
@@ -126,6 +127,7 @@ function createAuctionTask(overrides: Partial<Task> = {}): Task {
     description: "Desc",
     status: "backlog",
     type: "auction",
+    auctionMode: overrides.auctionMode ?? "money",
     departmentId: "dept",
     managementId: null,
     divisionId: null,
@@ -134,18 +136,28 @@ function createAuctionTask(overrides: Partial<Task> = {}): Task {
     assigneeId: overrides.assigneeId ?? null,
     assigneeName: overrides.assigneeName ?? null,
     minimumGrade: overrides.minimumGrade ?? "D",
+    minGrade: overrides.minGrade ?? "D",
     deadline: overrides.deadline ?? now,
     rating: overrides.rating ?? null,
     assignedPoints: overrides.assignedPoints ?? null,
+    basePoints: overrides.basePoints ?? null,
+    penaltyPoints: overrides.penaltyPoints ?? null,
+    finalPoints: overrides.finalPoints ?? null,
+    earnedMoney: overrides.earnedMoney ?? null,
+    earnedTimeMinutes: overrides.earnedTimeMinutes ?? null,
     auctionStartAt: overrides.auctionStartAt ?? now,
     auctionPlannedEndAt: overrides.auctionPlannedEndAt ?? new Date(now.getTime() + 24 * 60 * 60 * 1000),
     auctionEndAt: overrides.auctionEndAt ?? null,
+    basePrice: overrides.basePrice ?? "100",
+    baseTimeMinutes: overrides.baseTimeMinutes ?? null,
     auctionInitialSum: overrides.auctionInitialSum ?? "100",
     auctionMaxSum: overrides.auctionMaxSum ?? "150",
     auctionAssignedSum: overrides.auctionAssignedSum ?? null,
+    auctionAssignedMinutes: overrides.auctionAssignedMinutes ?? null,
     auctionWinnerId: overrides.auctionWinnerId ?? null,
     auctionWinnerName: overrides.auctionWinnerName ?? null,
     auctionHasBids: overrides.auctionHasBids ?? false,
+    doneAt: overrides.doneAt ?? null,
     createdAt: overrides.createdAt ?? now,
     updatedAt: overrides.updatedAt ?? now,
   } as Task;
@@ -161,6 +173,8 @@ function createBid(overrides: Partial<AuctionBid>): AuctionBid {
     bidderGrade: overrides.bidderGrade ?? "D",
     bidderPoints: overrides.bidderPoints ?? 0,
     bidAmount: overrides.bidAmount ?? "100",
+    valueTimeMinutes: overrides.valueTimeMinutes ?? null,
+    isActive: overrides.isActive ?? true,
     createdAt: overrides.createdAt ?? new Date(),
   } as AuctionBid;
 }

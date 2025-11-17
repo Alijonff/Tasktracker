@@ -139,7 +139,13 @@ export interface IStorage {
   // Auction management
   getActiveAuctions(filters?: { departmentId?: string }): Promise<Task[]>;
   getAuctionsToClose(): Promise<Task[]>;
-  closeAuction(taskId: string, winnerId?: string, winnerName?: string, assignedSum?: string): Promise<Task | undefined>;
+  closeAuction(
+    taskId: string,
+    winnerId?: string,
+    winnerName?: string,
+    assignedSum?: string | null,
+    assignedMinutes?: number,
+  ): Promise<Task | undefined>;
   
   // Monthly metrics
   getMonthlyMetrics(departmentId?: string): Promise<{
@@ -713,7 +719,8 @@ export class DbStorage implements IStorage {
     taskId: string,
     winnerId?: string,
     winnerName?: string,
-    assignedSum?: string
+    assignedSum?: string | null,
+    assignedMinutes?: number,
   ): Promise<Task | undefined> {
     const [task] = await db
       .update(tasks)
@@ -721,7 +728,8 @@ export class DbStorage implements IStorage {
         status: "inProgress" as const,
         assigneeId: winnerId || null,
         assigneeName: winnerName || null,
-        auctionAssignedSum: assignedSum || null,
+        auctionAssignedSum: assignedSum ?? null,
+        auctionAssignedMinutes: assignedMinutes ?? null,
         auctionEndAt: new Date(),
         updatedAt: new Date(),
       })

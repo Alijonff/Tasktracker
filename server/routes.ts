@@ -359,13 +359,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           continue;
         }
 
+        const currentValue = calculateAuctionPrice(task, now);
+
         await storage.updateTask(task.id, {
           status: "inProgress" as any,
           assigneeId: task.creatorId,
           assigneeName: task.creatorName,
           auctionWinnerId: task.creatorId,
           auctionWinnerName: task.creatorName,
-          auctionAssignedSum: task.auctionMaxSum ?? task.auctionInitialSum ?? null,
+          auctionAssignedSum: task.auctionMode === "time" ? null : currentValue ?? task.auctionMaxSum ?? task.auctionInitialSum ?? null,
+          auctionAssignedMinutes: task.auctionMode === "time" ? (currentValue ?? task.baseTimeMinutes ?? null) : null,
           auctionEndAt: now,
         });
       } else {
@@ -380,7 +383,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           assigneeName: winningBid.bidderName,
           auctionWinnerId: winningBid.bidderId,
           auctionWinnerName: winningBid.bidderName,
-          auctionAssignedSum: winningBid.bidAmount,
+          auctionAssignedSum: winningBid.valueTimeMinutes != null ? null : winningBid.bidAmount,
+          auctionAssignedMinutes: winningBid.valueTimeMinutes ?? null,
           auctionEndAt: now,
         });
       }

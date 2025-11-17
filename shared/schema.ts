@@ -27,8 +27,17 @@ export const taskStatusEnum = pgEnum("task_status", [
   "inProgress",
   "underReview",
   "completed",
+  "in_progress",
+  "under_review",
+  "done",
 ]);
-export const taskTypeEnum = pgEnum("task_type", ["auction"]);
+export const taskTypeEnum = pgEnum("task_type", [
+  "auction",
+  "individual",
+  "unit",
+  "department",
+]);
+export const auctionModeEnum = pgEnum("auction_mode", ["money", "time"]);
 export const positionTypeEnum = pgEnum("position_type", [
   "admin",
   "director",
@@ -128,6 +137,7 @@ export const tasks = pgTable("tasks", {
   description: text("description").notNull(),
   status: taskStatusEnum("status").notNull().default("backlog"),
   type: taskTypeEnum("type").notNull(),
+  auctionMode: auctionModeEnum("auction_mode"),
   departmentId: varchar("department_id")
     .notNull()
     .references(() => departments.id, { onDelete: "cascade" }),
@@ -146,12 +156,21 @@ export const tasks = pgTable("tasks", {
   }),
   assigneeName: text("assignee_name"),
   minimumGrade: gradeEnum("required_grade").notNull().default("D"),
+  minGrade: gradeEnum("min_grade").default("D"),
   deadline: timestamp("deadline").notNull(),
+  deadlineAt: timestamp("deadline_at"),
   rating: decimal("rating", { precision: 3, scale: 2 }),
   assignedPoints: integer("assigned_points"),
+  basePoints: integer("base_points"),
+  penaltyPoints: integer("penalty_points"),
+  finalPoints: integer("final_points"),
+  earnedMoney: decimal("earned_money", { precision: 10, scale: 2 }),
+  earnedTimeMinutes: integer("earned_time_minutes"),
   auctionStartAt: timestamp("auction_start_at"),
   auctionPlannedEndAt: timestamp("auction_planned_end_at"),
   auctionEndAt: timestamp("auction_end_at"),
+  basePrice: decimal("base_price", { precision: 10, scale: 2 }),
+  baseTimeMinutes: integer("base_time_minutes"),
   auctionInitialSum: decimal("auction_initial_sum", {
     precision: 10,
     scale: 2,
@@ -161,11 +180,13 @@ export const tasks = pgTable("tasks", {
     precision: 10,
     scale: 2,
   }),
+  auctionAssignedMinutes: integer("auction_assigned_minutes"),
   auctionWinnerId: varchar("auction_winner_id").references(() => users.id, {
     onDelete: "set null",
   }),
   auctionWinnerName: text("auction_winner_name"),
   auctionHasBids: boolean("auction_has_bids").notNull().default(false),
+  doneAt: timestamp("done_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => ({
@@ -189,7 +210,25 @@ export const auctionBids = pgTable("auction_bids", {
   bidderGrade: gradeEnum("bidder_grade").notNull(),
   bidderPoints: integer("bidder_points").notNull().default(0),
   bidAmount: decimal("bid_amount", { precision: 10, scale: 2 }).notNull(),
+  valueTimeMinutes: integer("value_time_minutes"),
+  isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const taskAttachments = pgTable("task_attachments", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  taskId: varchar("task_id")
+    .notNull()
+    .references(() => tasks.id, { onDelete: "cascade" }),
+  uploaderId: varchar("uploader_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  filename: text("filename").notNull(),
+  filesizeBytes: integer("filesize_bytes").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  deletedAt: timestamp("deleted_at"),
 });
 
 export const taskComments = pgTable("task_comments", {
@@ -252,6 +291,7 @@ export type AuctionBid = typeof auctionBids.$inferSelect;
 export type TaskComment = typeof taskComments.$inferSelect;
 export type TimeLog = typeof timeLogs.$inferSelect;
 export type PointTransaction = typeof pointTransactions.$inferSelect;
+export type TaskAttachment = typeof taskAttachments.$inferSelect;
 
 export type Grade = (typeof gradeEnum.enumValues)[number];
 
@@ -291,14 +331,22 @@ export const insertTaskSchema = createInsertSchema(tasks)
     id: true,
     createdAt: true,
     updatedAt: true,
+    deadlineAt: true,
   })
   .extend({
     deadline: dateTransform,
+    deadlineAt: dateTransform.optional(),
     auctionStartAt: dateTransform.optional(),
     auctionEndAt: dateTransform.optional(),
+    doneAt: dateTransform.optional(),
   });
 
 export const insertBidSchema = createInsertSchema(auctionBids).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertAttachmentSchema = createInsertSchema(taskAttachments).omit({
   id: true,
   createdAt: true,
 });
