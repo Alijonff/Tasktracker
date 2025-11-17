@@ -4,6 +4,7 @@ import UserAvatar from "./UserAvatar";
 import GradeBadge from "./GradeBadge";
 
 export type PositionType = 
+  | "admin"             // Администратор системы
   | "director"          // Директор департамента
   | "deputy"            // Заместитель директора
   | "management_head"   // Руководитель управления
@@ -25,6 +26,7 @@ interface PositionCellProps {
 }
 
 export const positionLabels: Record<PositionType, string> = {
+  admin: "Администратор",
   director: "Директор",
   deputy: "Заместитель",
   management_head: "Руководитель",

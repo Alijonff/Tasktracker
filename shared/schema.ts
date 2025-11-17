@@ -30,6 +30,7 @@ export const taskStatusEnum = pgEnum("task_status", [
 ]);
 export const taskTypeEnum = pgEnum("task_type", ["auction"]);
 export const positionTypeEnum = pgEnum("position_type", [
+  "admin",
   "director",
   "deputy",
   "management_head",

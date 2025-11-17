@@ -36,6 +36,7 @@ export function calculateGradeProgress(points: number): {
 }
 
 export type PositionType =
+  | "admin"
   | "director"
   | "deputy"
   | "management_head"
@@ -45,6 +46,7 @@ export type PositionType =
   | "employee";
 
 const gradeByPosition: Record<PositionType, Grade> = {
+  admin: "A",
   director: "A",
   deputy: "A",
   management_head: "A",
