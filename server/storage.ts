@@ -175,7 +175,7 @@ export class DbStorage implements IStorage {
       departmentId: departmentId || null,
       managementId: managementId || null,
       divisionId: divisionId || null,
-      positionType: positionType ?? "employee",
+      positionType: role === "admin" ? null : (positionType ?? "employee"),
       mustChangePassword: mustChangePassword ?? false,
     }).returning();
     return user;

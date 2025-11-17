@@ -30,7 +30,7 @@ export async function createAdminUser(storage: IStorage): Promise<User | null> {
     null,
     null,
     null,
-    null,
+    undefined,
     false
   );
   console.log("Админ создан: username=admin, password=qwerty");
