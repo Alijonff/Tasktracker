@@ -35,12 +35,15 @@ Preferred communication style: Simple, everyday language.
 **Data Access Patterns:** Hierarchical filtering, security enforced via `departmentId`, efficient relationship queries.
 
 **Background Workers:** 
-- **Auction Closer** (`server/workers/auctionCloser.ts`): Runs every 5 minutes, processes expired auctions (where `auctionPlannedEndAt` has passed), assigns to lowest bidder or department director if no bids, updates task status from `backlog` to `inProgress`.
+- **Auction Closer** (`server/workers/auctionCloser.ts`): Runs every 5 minutes, processes:
+  - Expired auctions (where `auctionPlannedEndAt` has passed): assigns to lowest bidder or department director if no bids, updates task status from `backlog` to `inProgress`.
+  - Expired reviews (where `reviewDeadline` has passed): returns tasks from `underReview` to `inProgress`, clears `reviewDeadline`.
 
-**Working Hours Utilities** (`shared/utils.ts`): 
-- `diffWorkingHours`: Calculates working hours between dates (8-hour workdays, excludes weekends).
-- `addWorkingHours`: Adds working hours to a date, used for 24-hour auction timers.
-- `calculateAuctionEnd`: Computes auction end time by adding 24 working hours to start time.
+**Working Hours Utilities** (`shared/utils.ts`, `server/routes.ts`): 
+- `diffWorkingHours`: Calculates working hours between dates (9-17 workdays, excludes weekends).
+- `addWorkingHours`: Adds working hours within 9-17 window, used for general time calculations.
+- `calculateAuctionEnd`: Computes auction end time by adding 24 real hours (excluding weekends).
+- `calculateReviewDeadline`: Computes review deadline by adding 48 real hours (excluding weekends).
 
 ### Data Storage
 
@@ -51,7 +54,8 @@ Preferred communication style: Simple, everyday language.
 - **Task Management:** `tasks` (auction-only, статусы: backlog → inProgress → underReview → completed; хранит дедлайны, исполнителей, минимальный грейд и параметры аукциона).
 - **Monetary Auction System:** All tasks use monetary auctions with linear price growth from `auctionInitialSum` to `auctionMaxSum` (initial × 1.5) over 24 working hours. Fields: `auctionInitialSum`, `auctionMaxSum`, `auctionAssignedSum`, `auctionPlannedEndAt`.
 - **Auction Bids:** `auctionBids` table tracks monetary bids (`bidAmount` in decimal), bidder grade, and rating. Auto-closure assigns to lowest bidder; if no bids, assigns to department director with max sum.
-- **Rating & Grade System:** Employees have decimal rating (0-5) and points that determine grade (D/C/B/A). Grades calculated dynamically: <45=D, 45-64=C, 65-84=B, ≥85=A. Only employees with grade ≥ task's `minimumGrade` can bid.
+- **Rating & Grade System:** Employees have decimal rating (0-5) and points that determine grade (D/C/B/A). Grades calculated dynamically: <45=D, 45-64=C, 65-84=B, ≥85=A. Only employees with grade ≥ task's `minimumGrade` can bid. **Admin users have positionType='admin', role='admin', and maintain 0 points with no point accumulation.**
+- **Review Deadline:** Tasks in `underReview` status have `reviewDeadline` field set to 48 real hours (excluding weekends) from transition time. Worker automatically returns tasks to `inProgress` after deadline expires.
 
 ### Authentication & Authorization
 
