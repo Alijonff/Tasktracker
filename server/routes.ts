@@ -5,6 +5,7 @@ import { authenticateUser, hashPassword, verifyPassword } from "./auth";
 import {
   calculateAuctionPrice,
   calculateOverduePenaltyHours,
+  compareBids,
   parseDecimal,
   selectWinningBid,
   shouldAutoAssignToCreator,
@@ -21,6 +22,7 @@ import {
   type Task,
   type Grade,
   type Department,
+  type AuctionBid,
   type User,
 } from "@shared/schema";
 import {
@@ -1591,13 +1593,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const existingBids = await storage.getTaskBids(id);
-      const currentBest = existingBids.reduce((best, bid) => {
-        const value = parseDecimal(bid.bidAmount) ?? Number.POSITIVE_INFINITY;
-        return value < best ? value : best;
-      }, Number.POSITIVE_INFINITY);
+      const currentWinningBid = selectWinningBid(existingBids);
 
-      if (currentBest !== Number.POSITIVE_INFINITY && bidAmount >= currentBest) {
-        return res.status(400).json({ error: "Есть более выгодная ставка" });
+      if (currentWinningBid) {
+        const candidateBid = {
+          id: "pending",
+          taskId: task.id,
+          bidderId: currentUser.id,
+          bidderName: currentUser.name,
+          bidderRating: (currentUser.rating as string | null) ?? "0",
+          bidderGrade: userGrade,
+          bidderPoints: Number(currentUser.points ?? 0),
+          bidAmount: decimalToString(bidAmount),
+          createdAt: new Date(),
+        } as AuctionBid;
+
+        if (compareBids(candidateBid, currentWinningBid) >= 0) {
+          return res.status(400).json({ error: "Есть более выгодная ставка" });
+        }
       }
 
       const bidRecord = await storage.createBid({

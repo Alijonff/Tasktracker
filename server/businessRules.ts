@@ -52,28 +52,29 @@ export function calculateAuctionPrice(task: Task, now: Date = new Date()): numbe
   return initial + (max - initial) * progress;
 }
 
+export function compareBids(a: AuctionBid, b: AuctionBid): number {
+  const amountDiff = (parseDecimal(a.bidAmount) ?? Number.POSITIVE_INFINITY) -
+    (parseDecimal(b.bidAmount) ?? Number.POSITIVE_INFINITY);
+  if (amountDiff !== 0) {
+    return amountDiff;
+  }
+
+  const pointsDiff = (b.bidderPoints ?? 0) - (a.bidderPoints ?? 0);
+  if (pointsDiff !== 0) {
+    return pointsDiff;
+  }
+
+  const aTime = new Date(a.createdAt ?? 0).getTime();
+  const bTime = new Date(b.createdAt ?? 0).getTime();
+  return aTime - bTime;
+}
+
 export function selectWinningBid(bids: AuctionBid[]): AuctionBid | null {
   if (bids.length === 0) {
     return null;
   }
 
-  const sorted = [...bids].sort((a, b) => {
-    const amountDiff = (parseDecimal(a.bidAmount) ?? Number.POSITIVE_INFINITY) -
-      (parseDecimal(b.bidAmount) ?? Number.POSITIVE_INFINITY);
-    if (amountDiff !== 0) {
-      return amountDiff;
-    }
-
-    const pointsDiff = (b.bidderPoints ?? 0) - (a.bidderPoints ?? 0);
-    if (pointsDiff !== 0) {
-      return pointsDiff;
-    }
-
-    const aTime = new Date(a.createdAt ?? 0).getTime();
-    const bTime = new Date(b.createdAt ?? 0).getTime();
-    return aTime - bTime;
-  });
-
+  const sorted = [...bids].sort(compareBids);
   return sorted[0];
 }
 

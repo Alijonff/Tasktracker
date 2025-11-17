@@ -23,7 +23,7 @@ import {
   type Grade,
 } from "@shared/schema";
 import { type PositionType } from "@shared/utils";
-import { eq, and, or, like, desc, inArray, gte, isNull, sql } from "drizzle-orm";
+import { eq, and, or, like, desc, asc, inArray, gte, isNull, sql } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -435,7 +435,11 @@ export class DbStorage implements IStorage {
       .select()
       .from(auctionBids)
       .where(eq(auctionBids.taskId, taskId))
-      .orderBy(auctionBids.bidAmount);
+      .orderBy(
+        asc(auctionBids.bidAmount),
+        desc(auctionBids.bidderPoints),
+        asc(auctionBids.createdAt),
+      );
   }
 
   async createBid(bidData: InsertBid): Promise<AuctionBid> {
