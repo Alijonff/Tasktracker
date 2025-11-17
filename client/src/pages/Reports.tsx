@@ -143,8 +143,12 @@ export default function Reports() {
     const backlog = tasks.filter((t) => t.status === "backlog").length;
     const total = tasks.length;
     const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
-    const totalBudget = tasks.reduce((sum, task) => sum + (task.currentPrice ?? task.startingPrice ?? 0), 0);
-    const avgBudget = total > 0 ? totalBudget / total : 0;
+    const monetaryTasks = tasks.filter((task) => task.mode !== "TIME");
+    const totalBudget = monetaryTasks.reduce(
+      (sum, task) => sum + (task.currentPrice ?? task.startingPrice ?? 0),
+      0,
+    );
+    const avgBudget = monetaryTasks.length > 0 ? totalBudget / monetaryTasks.length : 0;
 
     let employeeCount = filteredEmployees.length;
     if (drilldown.divisionId) {

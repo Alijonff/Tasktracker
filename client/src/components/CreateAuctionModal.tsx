@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { createAuctionTask, type CreateAuctionTaskPayload, type Grade } from "@/api/adapter";
 import type { Department } from "@shared/schema";
 import { SessionUser } from "@/types/session";
+import type { TaskMode, TaskType } from "@shared/taskMetadata";
 
 interface CreateAuctionModalProps {
   open: boolean;
@@ -24,6 +25,8 @@ interface FormState {
   startingPrice: string;
   deadlineDate: string;
   departmentId?: string;
+  mode: TaskMode;
+  taskType: TaskType;
 }
 
 function formatDateOnly(date: Date): string {
@@ -43,6 +46,8 @@ function createInitialFormState(): FormState {
     startingPrice: "",
     deadlineDate: formatDateOnly(defaultDeadline),
     departmentId: undefined,
+    mode: "MONEY",
+    taskType: "DEPARTMENT",
   };
 }
 
@@ -100,6 +105,17 @@ const gradeOptions: Array<{ value: Grade; label: string }> = [
   { value: "A", label: "Грейд A (85+ баллов)" },
 ];
 
+const modeOptions: Array<{ value: TaskMode; label: string; helper: string }> = [
+  { value: "MONEY", label: "Денежный", helper: "Ставки в сумах" },
+  { value: "TIME", label: "Время", helper: "Ставки в минутах" },
+];
+
+const taskTypeOptions: Array<{ value: TaskType; label: string; helper: string }> = [
+  { value: "DEPARTMENT", label: "Департамент", helper: "Стандартный аукцион" },
+  { value: "UNIT", label: "Управление", helper: "Аукцион внутри управления" },
+  { value: "INDIVIDUAL", label: "Индивидуальная", helper: "Без аукциона, сразу в работу" },
+];
+
 export default function CreateAuctionModal({ open, onOpenChange }: CreateAuctionModalProps) {
   const [formState, setFormState] = useState<FormState>(() => createInitialFormState());
   const { toast } = useToast();
@@ -127,6 +143,7 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
       return false;
     });
   }, [currentUser, departments]);
+  const isTimeMode = formState.mode === "TIME";
 
   useEffect(() => {
     if (!open) {
@@ -196,6 +213,7 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
     const trimmedDescription = formState.description.trim();
     const amount = Number(formState.startingPrice);
     const deadline = composeDeadline(formState.deadlineDate);
+    const isTimeMode = formState.mode === "TIME";
 
     if (availableDepartments.length > 1 && !formState.departmentId) {
       toast({ title: "Выберите департамент", variant: "destructive" });
@@ -213,7 +231,10 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
     }
 
     if (!Number.isFinite(amount) || amount <= 0) {
-      toast({ title: "Укажите корректную начальную сумму", variant: "destructive" });
+      toast({
+        title: isTimeMode ? "Укажите корректное время в минутах" : "Укажите корректную начальную сумму",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -229,6 +250,8 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
       startingPrice: amount,
       deadline: deadline.toISOString(),
       departmentId: formState.departmentId,
+      mode: formState.mode,
+      taskType: formState.taskType,
     });
   };
 
@@ -289,6 +312,54 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
 
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
+                <Label htmlFor="task-type">Тип задачи</Label>
+                <Select
+                  value={formState.taskType}
+                  onValueChange={(value: TaskType) => setFormState((prev) => ({ ...prev, taskType: value }))}
+                  disabled={mutation.isPending}
+                >
+                  <SelectTrigger id="task-type">
+                    <SelectValue placeholder="Выберите тип" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {taskTypeOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {taskTypeOptions.find((option) => option.value === formState.taskType)?.helper}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="task-mode">Режим ставок</Label>
+                <Select
+                  value={formState.mode}
+                  onValueChange={(value: TaskMode) => setFormState((prev) => ({ ...prev, mode: value }))}
+                  disabled={mutation.isPending}
+                >
+                  <SelectTrigger id="task-mode">
+                    <SelectValue placeholder="Выберите режим" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {modeOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {modeOptions.find((option) => option.value === formState.mode)?.helper}
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
                 <Label htmlFor="auction-minimum-grade">Минимальный грейд</Label>
                 <Select
                   value={formState.minimumGrade}
@@ -311,7 +382,9 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="auction-starting-price">Начальная сумма (сум)</Label>
+                <Label htmlFor="auction-starting-price">
+                  {isTimeMode ? "Оценка времени (минуты)" : "Начальная сумма (сум)"}
+                </Label>
                 <Input
                   id="auction-starting-price"
                   type="number"
@@ -320,10 +393,12 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
                   step={1}
                   value={formState.startingPrice}
                   onChange={(event) => setFormState((prev) => ({ ...prev, startingPrice: event.target.value }))}
-                  placeholder="0"
+                  placeholder={isTimeMode ? "Например, 45" : "0"}
                   required
                 />
-                <p className="text-xs text-muted-foreground">Укажите сумму, с которой начнутся торги</p>
+                <p className="text-xs text-muted-foreground">
+                  {isTimeMode ? "Введите ожидаемое время в минутах" : "Укажите сумму, с которой начнутся торги"}
+                </p>
               </div>
             </div>
 

@@ -11,6 +11,7 @@ const task = {
   title: "Редизайн портала",
   currentPrice: 1_800_000,
   minimumGrade: "C" as const,
+  mode: "MONEY" as const,
   bids: [
     { id: "bid-1", bidder: "Севинч", amount: 1_800_000, timestamp: "5 мин назад" },
   ],

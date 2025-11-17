@@ -110,6 +110,7 @@ export default function Auctions() {
               title={task.title}
               description={task.description}
               status={task.status}
+              mode={task.mode}
               creator={task.creatorName}
               deadline={task.deadline}
               minimumGrade={task.minimumGrade}
@@ -141,6 +142,7 @@ export default function Auctions() {
           title: selectedTask.title,
           currentPrice: selectedTask.currentPrice ?? selectedTask.startingPrice,
           minimumGrade: selectedTask.minimumGrade,
+          mode: selectedTask.mode,
           bids: [],
         } : undefined}
       />

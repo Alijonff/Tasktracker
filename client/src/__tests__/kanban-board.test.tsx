@@ -16,6 +16,8 @@ const tasks: KanbanTask[] = [
     minimumGrade: "D",
     deadline: "2024-01-01T10:00:00.000Z",
     startingPrice: 900_000,
+    mode: "MONEY",
+    taskType: "DEPARTMENT",
     bidsCount: 0,
     canBid: true,
   },

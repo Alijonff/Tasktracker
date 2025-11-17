@@ -1,3 +1,5 @@
+import type { TaskMode } from "@shared/taskMetadata";
+
 const moneyFormatter = new Intl.NumberFormat("ru-RU");
 
 export function formatMoney(value: number | null | undefined, suffix = "сум"): string {
@@ -5,6 +7,16 @@ export function formatMoney(value: number | null | undefined, suffix = "сум")
     return `0 ${suffix}`;
   }
   return `${moneyFormatter.format(Math.round(value))} ${suffix}`.trim();
+}
+
+export function formatAuctionValue(value: number | null | undefined, mode: TaskMode): string {
+  if (mode === "TIME") {
+    if (value === null || value === undefined || Number.isNaN(value)) {
+      return "0 мин";
+    }
+    return `${Math.max(0, Math.round(value))} мин`;
+  }
+  return formatMoney(value);
 }
 
 function pluralize(value: number, forms: [string, string, string]): string {
