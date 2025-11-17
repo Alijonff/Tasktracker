@@ -197,7 +197,7 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
     const amount = Number(formState.startingPrice);
     const deadline = composeDeadline(formState.deadlineDate);
 
-    if (directorDepartments.length > 1 && !formState.departmentId) {
+    if (availableDepartments.length > 1 && !formState.departmentId) {
       toast({ title: "Выберите департамент", variant: "destructive" });
       return;
     }
@@ -264,7 +264,7 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
               />
             </div>
 
-            {directorDepartments.length > 1 && (
+            {availableDepartments.length > 1 && (
               <div className="space-y-2">
                 <Label htmlFor="auction-department">Департамент *</Label>
                 <Select
@@ -276,7 +276,7 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
                     <SelectValue placeholder="Выберите департамент" />
                   </SelectTrigger>
                   <SelectContent>
-                    {directorDepartments.map((department) => (
+                    {availableDepartments.map((department) => (
                       <SelectItem key={department.id} value={department.id}>
                         {department.name}
                       </SelectItem>

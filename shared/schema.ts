@@ -100,7 +100,7 @@ export const users = pgTable("users", {
   name: text("name").notNull(),
   email: text("email").unique(),
   role: roleEnum("role").notNull().default("employee"),
-  positionType: positionTypeEnum("position_type").notNull().default("employee"),
+  positionType: positionTypeEnum("position_type"),
   divisionId: varchar("division_id").references(() => divisions.id, {
     onDelete: "set null",
   }),
