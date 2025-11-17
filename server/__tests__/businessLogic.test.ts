@@ -102,6 +102,7 @@ test("reassignTasksFromTerminatedEmployee переназначает задач�
       calls.push({ id, updates });
       return undefined;
     },
+    deleteEmployeeBids: async () => [],
   };
 
   await reassignTasksFromTerminatedEmployee(storageMock as any, assigneeId);

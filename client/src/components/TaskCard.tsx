@@ -5,10 +5,11 @@ import UserAvatar from "./UserAvatar";
 import StatusBadge from "./StatusBadge";
 import GradeBadge from "./GradeBadge";
 import { Badge } from "@/components/ui/badge";
-import { formatDateTime, formatMoney } from "@/lib/formatters";
+import { formatAuctionValue, formatDateTime } from "@/lib/formatters";
 import { UsersRound, Gavel, Timer } from "lucide-react";
 import type { Grade } from "@/api/adapter";
 import { formatTimeRemaining } from "@/lib/formatters";
+import type { TaskMode } from "@shared/taskMetadata";
 
 export interface TaskCardProps {
   id: string;
@@ -20,6 +21,7 @@ export interface TaskCardProps {
   minimumGrade: Grade;
   startingPrice: number;
   currentPrice?: number;
+  mode: TaskMode;
   bidsCount: number;
   leadingBidderName?: string;
   canBid: boolean;
@@ -38,6 +40,7 @@ export default function TaskCard({
   minimumGrade,
   startingPrice,
   currentPrice,
+  mode,
   bidsCount,
   leadingBidderName,
   canBid,
@@ -46,6 +49,7 @@ export default function TaskCard({
   onBidClick,
 }: TaskCardProps) {
   const activePrice = currentPrice ?? startingPrice;
+  const formattedPrice = formatAuctionValue(activePrice, mode);
   const timeRemaining = formatTimeRemaining(deadline);
 
   return (
@@ -85,8 +89,8 @@ export default function TaskCard({
             <span className="font-mono">{formatDateTime(deadline)}</span>
           </div>
           <div className="flex items-center justify-between">
-            <span>Текущая ставка</span>
-            <span className="font-semibold text-foreground">{formatMoney(activePrice)}</span>
+            <span>{mode === "TIME" ? "Оценка времени" : "Текущая ставка"}</span>
+            <span className="font-semibold text-foreground">{formattedPrice}</span>
           </div>
           <div className="flex items-center justify-between">
             <span className="flex items-center gap-2">

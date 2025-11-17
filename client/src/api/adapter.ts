@@ -1,5 +1,6 @@
 import { apiRequest } from "@/lib/queryClient";
 import type { Task, PointTransaction, SelectUser } from "@shared/schema";
+import type { TaskMode, TaskType } from "@shared/taskMetadata";
 import { calculateGradeProgress } from "@shared/utils";
 
 export type AuctionStatus = "backlog" | "inProgress" | "underReview" | "completed";
@@ -10,6 +11,8 @@ export interface AuctionTaskSummary {
   title: string;
   description: string;
   status: AuctionStatus;
+  mode: TaskMode;
+  taskType: TaskType;
   departmentId?: string | null;
   managementId?: string | null;
   divisionId?: string | null;
@@ -79,15 +82,29 @@ function parseNumber(value: unknown): number | undefined {
 }
 
 function transformTask(task: Task): AuctionTaskSummary {
-  const startingPrice = parseNumber(task.auctionInitialPrice) ?? parseNumber(task.estimatedHours) ?? 0;
+  const mode = ((task as any).mode as TaskMode) ?? "MONEY";
+  const taskType = ((task as any).taskType as TaskType) ?? "DEPARTMENT";
+  const startingPrice =
+    parseNumber((task as any).auctionInitialAmount) ??
+    parseNumber(task.auctionInitialSum) ??
+    parseNumber(task.auctionInitialPrice) ??
+    parseNumber(task.estimatedHours) ??
+    0;
   const currentPrice =
-    parseNumber(task.auctionAssignedPrice) ?? parseNumber(task.auctionMaxPrice) ?? undefined;
+    parseNumber((task as any).auctionCurrentAmount) ??
+    parseNumber(task.auctionAssignedSum) ??
+    parseNumber(task.auctionMaxSum) ??
+    parseNumber(task.auctionAssignedPrice) ??
+    parseNumber(task.auctionMaxPrice) ??
+    undefined;
 
   return {
     id: task.id,
     title: task.title,
     description: task.description,
     status: task.status as AuctionStatus,
+    mode,
+    taskType,
     departmentId: task.departmentId,
     managementId: task.managementId ?? undefined,
     divisionId: task.divisionId ?? undefined,
@@ -124,7 +141,8 @@ async function fetchTasksFromServer(params: ListTasksParams): Promise<AuctionTas
   const response = await apiRequest("GET", url);
   const data = (await response.json()) as TaskApiResponse;
   const list = Array.isArray(data) ? data : data.tasks;
-  return list.filter((task) => task.type === "auction").map(transformTask);
+  const transformed = list.map(transformTask);
+  return transformed;
 }
 
 function applyClientFilters(tasks: AuctionTaskSummary[], params: ListTasksParams): AuctionTaskSummary[] {
@@ -191,7 +209,8 @@ export async function listAuctions(params: ListAuctionsParams = {}): Promise<Auc
     statuses,
   };
 
-  return listTasks(baseParams);
+  const allTasks = await listTasks(baseParams);
+  return allTasks.filter((task) => task.taskType !== "INDIVIDUAL");
 }
 
 export interface CreateAuctionTaskPayload {
@@ -201,6 +220,8 @@ export interface CreateAuctionTaskPayload {
   startingPrice: number;
   deadline: string;
   departmentId?: string;
+  mode?: TaskMode;
+  taskType?: TaskType;
 }
 
 export async function createAuctionTask(payload: CreateAuctionTaskPayload): Promise<AuctionTaskSummary> {
@@ -208,6 +229,8 @@ export async function createAuctionTask(payload: CreateAuctionTaskPayload): Prom
     title: payload.title,
     description: payload.description,
     type: "auction" as const,
+    mode: payload.mode ?? "MONEY",
+    taskType: payload.taskType ?? "DEPARTMENT",
     minimumGrade: payload.minimumGrade,
     deadline: payload.deadline,
     departmentId: payload.departmentId,

@@ -16,6 +16,7 @@ const taskCardMarkup = renderToString(
     minimumGrade="B"
     startingPrice={1_800_000}
     currentPrice={1_950_000}
+    mode="MONEY"
     bidsCount={6}
     leadingBidderName="Севинч"
     canBid

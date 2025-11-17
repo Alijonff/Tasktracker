@@ -1,12 +1,13 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { formatDateTime, formatMoney } from "@/lib/formatters";
+import { formatAuctionValue, formatDateTime } from "@/lib/formatters";
 import StatusBadge from "./StatusBadge";
 import GradeBadge from "./GradeBadge";
 import { Badge } from "@/components/ui/badge";
 import { UsersRound, Gavel, CalendarDays, UserRound } from "lucide-react";
 import type { Grade } from "@/api/adapter";
+import type { TaskMode } from "@shared/taskMetadata";
 
 interface TaskDetailDialogProps {
   open: boolean;
@@ -21,6 +22,7 @@ interface TaskDetailDialogProps {
     minimumGrade: Grade;
     startingPrice: number;
     currentPrice?: number;
+    mode: TaskMode;
     bidsCount: number;
     leadingBidderName?: string;
   };
@@ -30,6 +32,7 @@ export default function TaskDetailDialog({ open, onOpenChange, task }: TaskDetai
   if (!task) return null;
 
   const price = task.currentPrice ?? task.startingPrice;
+  const formattedPrice = formatAuctionValue(price, task.mode);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -65,7 +68,7 @@ export default function TaskDetailDialog({ open, onOpenChange, task }: TaskDetai
                 <div className="flex items-center gap-2">
                   <Gavel size={16} />
                   <span>Текущая ставка:</span>
-                  <span className="font-semibold text-foreground">{formatMoney(price)}</span>
+                  <span className="font-semibold text-foreground">{formattedPrice}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <UsersRound size={16} />

@@ -7,7 +7,8 @@ import GradeBadge from "@/components/GradeBadge";
 import StatusBadge from "@/components/StatusBadge";
 import { Gavel, UsersRound } from "lucide-react";
 import type { AuctionStatus, Grade } from "@/api/adapter";
-import { formatDateTime, formatMoney } from "@/lib/formatters";
+import { formatAuctionValue, formatDateTime } from "@/lib/formatters";
+import type { TaskMode, TaskType } from "@shared/taskMetadata";
 
 export type KanbanStatus = AuctionStatus;
 
@@ -21,6 +22,8 @@ export interface KanbanTask {
   deadline: string;
   startingPrice: number;
   currentPrice?: number;
+  mode: TaskMode;
+  taskType: TaskType;
   bidsCount: number;
   leadingBidderName?: string;
   canBid: boolean;
@@ -124,7 +127,7 @@ function KanbanCard({
           </div>
           <div className="flex items-center justify-between">
             <span>Текущая ставка</span>
-            <span className="font-semibold text-foreground">{formatMoney(priceLabel)}</span>
+            <span className="font-semibold text-foreground">{formatAuctionValue(priceLabel, task.mode)}</span>
           </div>
           <div className="flex items-center justify-between">
             <span className="flex items-center gap-2">

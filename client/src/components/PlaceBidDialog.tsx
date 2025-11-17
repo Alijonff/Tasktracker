@@ -10,8 +10,9 @@ import { useEffect, useState } from "react";
 import UserAvatar from "./UserAvatar";
 import RatingDisplay from "./RatingDisplay";
 import GradeBadge from "./GradeBadge";
-import { formatMoney } from "@/lib/formatters";
+import { formatAuctionValue } from "@/lib/formatters";
 import type { Grade } from "@/api/adapter";
+import type { TaskMode } from "@shared/taskMetadata";
 
 interface Bid {
   id: string;
@@ -31,6 +32,7 @@ interface PlaceBidDialogProps {
     currentPrice: number;
     minimumGrade: Grade;
     bids: Bid[];
+    mode: TaskMode;
   };
   isSubmitting?: boolean;
 }
@@ -61,6 +63,7 @@ export default function PlaceBidDialog({
   if (!task) return null;
 
   const currentPrice = task.currentPrice ?? 0;
+  const valueLabel = formatAuctionValue(currentPrice, task.mode);
   const parsedAmount = parseBidAmount(amount);
   const isAmountEntered = parsedAmount !== null;
   const isAmountWithinLimit = parsedAmount !== null && parsedAmount <= currentPrice;
@@ -84,14 +87,16 @@ export default function PlaceBidDialog({
           <div className="p-4 rounded-md bg-primary/5 border border-primary/20 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium">Текущая ставка</span>
-              <span className="text-2xl font-bold text-primary">{formatMoney(task.currentPrice)}</span>
+              <span className="text-2xl font-bold text-primary">{valueLabel}</span>
             </div>
             <div className="flex items-center justify-between text-sm text-muted-foreground">
               <span>Минимальный грейд</span>
               <GradeBadge grade={task.minimumGrade} />
             </div>
             <p className="text-xs text-muted-foreground">
-              Введите сумму в сумах, которую готовы предложить за выполнение задачи
+              {task.mode === "TIME"
+                ? "Введите количество минут, которое потребуется на выполнение"
+                : "Введите сумму в сумах, которую готовы предложить за выполнение задачи"}
             </p>
           </div>
 
@@ -103,7 +108,7 @@ export default function PlaceBidDialog({
                 type="number"
                 min="1"
                 step="1"
-                placeholder="Введите сумму"
+                placeholder={task.mode === "TIME" ? "Введите минуты" : "Введите сумму"}
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 required
@@ -143,7 +148,9 @@ export default function PlaceBidDialog({
                       <div className="flex items-center gap-3">
                         {bid.rating !== undefined && <RatingDisplay rating={bid.rating} size="sm" />}
                         <div className="text-right">
-                          <p className="font-mono font-bold text-primary">{formatMoney(bid.amount)}</p>
+                          <p className="font-mono font-bold text-primary">
+                            {formatAuctionValue(bid.amount, task.mode)}
+                          </p>
                           {index === 0 && <p className="text-xs text-primary">Лидер</p>}
                         </div>
                       </div>

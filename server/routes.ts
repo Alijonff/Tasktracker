@@ -24,6 +24,15 @@ import {
   type User,
 } from "@shared/schema";
 import {
+  DEFAULT_TASK_METADATA,
+  TASK_MODES,
+  TASK_TYPES,
+  type TaskMetadata,
+  type TaskMode,
+  type TaskType,
+} from "@shared/taskMetadata";
+import { getTaskMetadata, setTaskMetadata } from "./taskMetadataStore";
+import {
   getInitialPointsByPosition,
   getGradeByPosition,
   calculateGradeProgress,
@@ -120,6 +129,8 @@ function getBasePointsForTask(task: Task): number {
 }
 
 const gradeSchema = z.enum(["A", "B", "C", "D"]);
+const taskModeSchema = z.enum(TASK_MODES);
+const taskTypeSchema = z.enum(TASK_TYPES);
 
 const decimalNumberSchema = z
   .union([z.number(), z.string()])
@@ -134,6 +145,41 @@ const decimalNumberSchema = z
 
 function decimalToString(value: number): string {
   return value.toFixed(2);
+}
+
+function parseTaskAmount(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  return parseDecimal(value as string);
+}
+
+function normalizeAuctionAmount(value: number, mode: TaskMode): number {
+  if (mode === "TIME") {
+    return Math.max(1, Math.round(value));
+  }
+  return value;
+}
+
+function normalizeTaskResponse(task: Task, metadata?: TaskMetadata) {
+  const resolvedMetadata = metadata ?? getTaskMetadata(task.id);
+  const base = {
+    ...task,
+    mode: resolvedMetadata.mode,
+    taskType: resolvedMetadata.taskType,
+  } as Task & TaskMetadata & {
+    auctionInitialAmount?: number | null;
+    auctionMaxAmount?: number | null;
+    auctionAssignedAmount?: number | null;
+    auctionCurrentAmount?: number | null;
+  };
+
+  return {
+    ...base,
+    auctionInitialAmount: parseTaskAmount(task.auctionInitialSum),
+    auctionMaxAmount: parseTaskAmount(task.auctionMaxSum),
+    auctionAssignedAmount: parseTaskAmount(task.auctionAssignedSum),
+    auctionCurrentAmount: parseTaskAmount((task as any).auctionCurrentPrice ?? null),
+  };
 }
 
 function isWeekend(date: Date): boolean {
@@ -210,6 +256,8 @@ const createTaskSchema = z
     title: z.string().min(1, "Введите название задачи"),
     description: z.string().min(1, "Введите описание задачи"),
     type: z.literal("auction"),
+    taskType: taskTypeSchema.default(DEFAULT_TASK_METADATA.taskType),
+    mode: taskModeSchema.default(DEFAULT_TASK_METADATA.mode),
     deadline: dateInputSchema,
     minimumGrade: gradeSchema.default("D"),
     departmentId: z.string().min(1, "Укажите департамент").optional(),
@@ -374,6 +422,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const now = new Date();
 
     for (const task of backlogAuctions) {
+      const metadata = getTaskMetadata(task.id);
+      if (metadata.taskType === "INDIVIDUAL") {
+        continue;
+      }
       if (!task.auctionPlannedEndAt) continue;
       const plannedEnd = new Date(task.auctionPlannedEndAt);
       if (Number.isNaN(plannedEnd.getTime()) || plannedEnd.getTime() > now.getTime()) {
@@ -1124,6 +1176,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const currentUser = req.session.user!;
       const parsed = createTaskSchema.parse(req.body);
+      const requestedMode = parsed.mode;
+      const requestedTaskType = parsed.taskType;
 
       const allowedScopes: Array<{ departmentId: string; managementId: string | null }> = [];
 
@@ -1169,28 +1223,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const startAt = new Date();
-      const initialSum = parsed.auctionInitialSum;
+      const normalizedInitial = normalizeAuctionAmount(parsed.auctionInitialSum, requestedMode);
       const plannedEndAt = calculateAuctionEnd(startAt);
 
       const taskData: Partial<Task> = {
         title: parsed.title,
         description: parsed.description,
         type: "auction",
-        status: "backlog",
+        status: requestedTaskType === "INDIVIDUAL" ? "inProgress" : "backlog",
         departmentId: selectedScope.departmentId,
         managementId: selectedScope.managementId,
         divisionId: null,
         creatorId: currentUser.id,
         creatorName: currentUser.name,
-        assigneeId: null,
-        assigneeName: null,
+        assigneeId: requestedTaskType === "INDIVIDUAL" ? currentUser.id : null,
+        assigneeName: requestedTaskType === "INDIVIDUAL" ? currentUser.name : null,
         minimumGrade: parsed.minimumGrade,
         deadline: parsed.deadline,
         rating: null,
-        auctionStartAt: startAt,
-        auctionPlannedEndAt: plannedEndAt,
-        auctionInitialSum: decimalToString(initialSum),
-        auctionMaxSum: decimalToString(initialSum * 1.5),
+        auctionStartAt: requestedTaskType === "INDIVIDUAL" ? null : startAt,
+        auctionPlannedEndAt: requestedTaskType === "INDIVIDUAL" ? null : plannedEndAt,
+        auctionInitialSum: decimalToString(normalizedInitial),
+        auctionMaxSum: decimalToString(normalizeAuctionAmount(normalizedInitial * 1.5, requestedMode)),
         auctionAssignedSum: null,
         auctionEndAt: null,
         auctionWinnerId: null,
@@ -1199,7 +1253,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
 
       const created = await storage.createTask(taskData as any);
-      res.status(201).json(created);
+      const metadata = setTaskMetadata(created.id, {
+        mode: requestedMode,
+        taskType: requestedTaskType,
+      });
+      res.status(201).json(normalizeTaskResponse(created, metadata));
     } catch (error: any) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: error.errors.map((e) => e.message).join(", ") });
@@ -1269,7 +1327,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const now = new Date();
       const tasksWithAuctionPrice = allTasks.map((task) => {
         const auctionPrice = calculateAuctionPrice(task, now);
-        return auctionPrice !== null ? { ...task, auctionCurrentPrice: decimalToString(auctionPrice) } : task;
+        const base = auctionPrice !== null ? { ...task, auctionCurrentPrice: decimalToString(auctionPrice) } : task;
+        return normalizeTaskResponse(base as Task);
       });
       res.json(tasksWithAuctionPrice);
     } catch (error) {
@@ -1285,7 +1344,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         assigneeId: currentUser.id,
         orderBy: "updatedAt",
       });
-      res.json(tasks);
+      res.json(tasks.map((task) => normalizeTaskResponse(task)));
     } catch (error) {
       console.error("Ошибка при получении личных задач:", error);
       res.status(500).json({ error: "Не удалось получить задачи" });
@@ -1315,7 +1374,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const now = new Date();
       const auctionsWithPrice = activeAuctions.map((task) => {
         const auctionPrice = calculateAuctionPrice(task, now);
-        return auctionPrice !== null ? { ...task, auctionCurrentPrice: decimalToString(auctionPrice) } : task;
+        const base = auctionPrice !== null ? { ...task, auctionCurrentPrice: decimalToString(auctionPrice) } : task;
+        return normalizeTaskResponse(base as Task);
       });
 
       res.json(auctionsWithPrice);
@@ -1452,7 +1512,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await storage.assignPointsForTask(task.id, basePoints, penaltyPoints);
       }
 
-      res.json(updated);
+      res.json(normalizeTaskResponse(updated));
     } catch (error) {
       console.error("Ошибка при обновлении статуса задачи:", error);
       res.status(500).json({ error: "Не удалось обновить статус задачи" });
@@ -1492,6 +1552,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Задача не найдена" });
       }
 
+      const metadata = getTaskMetadata(task.id);
+      if (metadata.taskType === "INDIVIDUAL") {
+        return res.status(400).json({ error: "Ставки недоступны для индивидуальных задач" });
+      }
+
       const currentUser = req.session.user!;
       if (
         currentUser.role !== "admin" &&
@@ -1515,12 +1580,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const parsed = placeBidSchema.parse(req.body);
+      const bidAmount = normalizeAuctionAmount(parsed.bidAmount, metadata.mode);
       const auctionPrice = calculateAuctionPrice(task);
       if (auctionPrice === null) {
         return res.status(400).json({ error: "Ставки недоступны для этой задачи" });
       }
 
-      if (parsed.bidAmount >= auctionPrice) {
+      if (bidAmount >= auctionPrice) {
         return res.status(400).json({ error: "Ставка должна быть ниже текущей цены" });
       }
 
@@ -1530,7 +1596,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return value < best ? value : best;
       }, Number.POSITIVE_INFINITY);
 
-      if (currentBest !== Number.POSITIVE_INFINITY && parsed.bidAmount >= currentBest) {
+      if (currentBest !== Number.POSITIVE_INFINITY && bidAmount >= currentBest) {
         return res.status(400).json({ error: "Есть более выгодная ставка" });
       }
 
@@ -1541,7 +1607,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         bidderRating: (currentUser.rating as string | null) ?? "0",
         bidderGrade: userGrade,
         bidderPoints: Number(currentUser.points ?? 0),
-        bidAmount: decimalToString(parsed.bidAmount),
+        bidAmount: decimalToString(bidAmount),
       });
 
       res.status(201).json(bidRecord);

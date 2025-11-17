@@ -54,6 +54,8 @@ export default function AllTasks() {
         deadline: task.deadline,
         startingPrice: task.startingPrice,
         currentPrice: task.currentPrice,
+        mode: task.mode,
+        taskType: task.taskType,
         bidsCount: task.bidsCount,
         leadingBidderName: task.leadingBidderName,
         canBid: task.canBid,
@@ -164,6 +166,7 @@ export default function AllTasks() {
           minimumGrade: selectedTask.minimumGrade,
           startingPrice: selectedTask.startingPrice,
           currentPrice: selectedTask.currentPrice,
+          mode: selectedTask.mode,
           bidsCount: selectedTask.bidsCount,
           leadingBidderName: selectedTask.leadingBidderName,
         } : undefined}
