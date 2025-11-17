@@ -27,7 +27,6 @@ import {
   getInitialPointsByPosition,
   getGradeByPosition,
   calculateGradeProgress,
-  addWorkingHours,
   type PositionType,
 } from "@shared/utils";
 
@@ -154,6 +153,31 @@ function moveToNextWeekdayStart(date: Date): Date {
 function calculateAuctionEnd(start: Date): Date {
   let current = new Date(start);
   let remaining = 24 * 60 * 60 * 1000; // 24 hours in ms
+
+  if (Number.isNaN(current.getTime())) {
+    return start;
+  }
+
+  while (remaining > 0) {
+    if (isWeekend(current)) {
+      current = moveToNextWeekdayStart(current);
+      continue;
+    }
+
+    const dayEnd = new Date(current);
+    dayEnd.setHours(24, 0, 0, 0);
+    const available = dayEnd.getTime() - current.getTime();
+    const consumed = Math.min(available, remaining);
+    current = new Date(current.getTime() + consumed);
+    remaining -= consumed;
+  }
+
+  return current;
+}
+
+function calculateReviewDeadline(start: Date): Date {
+  let current = new Date(start);
+  let remaining = 48 * 60 * 60 * 1000; // 48 hours in ms
 
   if (Number.isNaN(current.getTime())) {
     return start;
@@ -1410,7 +1434,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updateData: any = { status: targetStatus };
 
       if (targetStatus === "underReview") {
-        updateData.reviewDeadline = addWorkingHours(new Date(), 16);
+        updateData.reviewDeadline = calculateReviewDeadline(new Date());
       }
 
       const updated = await storage.updateTask(id, updateData);
