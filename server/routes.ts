@@ -27,6 +27,7 @@ import {
   getInitialPointsByPosition,
   getGradeByPosition,
   calculateGradeProgress,
+  addWorkingHours,
   type PositionType,
 } from "@shared/utils";
 
@@ -55,6 +56,7 @@ function canModifyDepartment(user: any, departmentId: string): boolean {
 }
 
 const positionTypeValues = [
+  "admin",
   "director",
   "deputy",
   "management_head",
@@ -67,6 +69,7 @@ const positionTypeValues = [
 const positionTypeSchema = z.enum(positionTypeValues);
 
 const positionRoleMap: Record<PositionType, "director" | "manager" | "senior" | "employee"> = {
+  admin: "director",
   director: "director",
   deputy: "manager",
   management_head: "manager",
@@ -94,6 +97,7 @@ const basePointsByGrade: Record<Grade, number> = {
 };
 
 const positionGradeMap: Record<PositionType, Grade> = {
+  admin: "A",
   director: "A",
   deputy: "A",
   management_head: "A",
@@ -839,6 +843,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const startingPoints = getInitialPointsByPosition(parsed.positionType);
 
       const positionLabels: Record<PositionType, string> = {
+        admin: "Администратор",
         director: "Директор",
         deputy: "Заместитель",
         management_head: "Руководитель управления",
@@ -1402,7 +1407,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const updated = await storage.updateTask(id, { status: targetStatus as any });
+      const updateData: any = { status: targetStatus };
+
+      if (targetStatus === "underReview") {
+        updateData.reviewDeadline = addWorkingHours(new Date(), 16);
+      }
+
+      const updated = await storage.updateTask(id, updateData);
       if (!updated) {
         return res.status(404).json({ error: "Задача не найдена" });
       }

@@ -147,6 +147,7 @@ export const tasks = pgTable("tasks", {
   assigneeName: text("assignee_name"),
   minimumGrade: gradeEnum("required_grade").notNull().default("D"),
   deadline: timestamp("deadline").notNull(),
+  reviewDeadline: timestamp("review_deadline"),
   rating: decimal("rating", { precision: 3, scale: 2 }),
   assignedPoints: integer("assigned_points"),
   auctionStartAt: timestamp("auction_start_at"),

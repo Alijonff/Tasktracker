@@ -68,6 +68,9 @@ export function getGradeByPosition(positionType: PositionType): Grade {
 }
 
 export function getInitialPointsByPosition(positionType: PositionType): number {
+  if (positionType === "admin") {
+    return 0;
+  }
   const grade = getGradeByPosition(positionType);
   return startingPointsByGrade[grade];
 }
@@ -147,24 +150,46 @@ export function diffWorkingHours(startDate: Date, endDate: Date): number {
 /**
  * Add working hours to a date, excluding weekends
  * @param startDate - Start date/time
- * @param hours - Number of working hours to add (assumes 8 hour workday)
+ * @param hours - Number of working hours to add (9-17 workday)
  * @returns New date/time after adding working hours
  */
 export function addWorkingHours(startDate: Date, hours: number): Date {
   const msPerHour = 1000 * 60 * 60;
-  const msPerDay = msPerHour * 24;
-  const workingHoursPerDay = 8;
+  const workdayStartHour = 9;
+  const workdayEndHour = 17;
 
   let remainingHours = hours;
   const result = new Date(startDate);
 
   while (remainingHours > 0) {
-    if (!isWeekend(result)) {
-      const hoursToAdd = Math.min(remainingHours, workingHoursPerDay);
-      result.setTime(result.getTime() + (hoursToAdd / workingHoursPerDay) * msPerDay);
-      remainingHours -= hoursToAdd;
-    } else {
+    if (isWeekend(result)) {
       result.setDate(result.getDate() + 1);
+      result.setHours(workdayStartHour, 0, 0, 0);
+      continue;
+    }
+
+    const currentHour = result.getHours() + result.getMinutes() / 60;
+
+    if (currentHour < workdayStartHour) {
+      result.setHours(workdayStartHour, 0, 0, 0);
+      continue;
+    }
+
+    if (currentHour >= workdayEndHour) {
+      result.setDate(result.getDate() + 1);
+      result.setHours(workdayStartHour, 0, 0, 0);
+      continue;
+    }
+
+    const hoursUntilEndOfDay = workdayEndHour - currentHour;
+    const hoursToAdd = Math.min(remainingHours, hoursUntilEndOfDay);
+    
+    result.setTime(result.getTime() + hoursToAdd * msPerHour);
+    remainingHours -= hoursToAdd;
+
+    if (remainingHours > 0) {
+      result.setDate(result.getDate() + 1);
+      result.setHours(workdayStartHour, 0, 0, 0);
     }
   }
 

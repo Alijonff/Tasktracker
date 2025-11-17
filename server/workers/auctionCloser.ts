@@ -1,5 +1,34 @@
 import { storage } from "../storage";
 
+export async function processExpiredReviews(): Promise<void> {
+  try {
+    const expiredReviews = await storage.getReviewsToExpire();
+    
+    if (expiredReviews.length === 0) {
+      return;
+    }
+    
+    console.log(`[ReviewCloser] Processing ${expiredReviews.length} expired reviews`);
+    
+    for (const task of expiredReviews) {
+      try {
+        await storage.updateTask(task.id, { 
+          status: "inProgress" as any,
+          reviewDeadline: null as any
+        });
+        
+        console.log(
+          `[ReviewCloser] Returned task ${task.id} (${task.title}) to inProgress after review deadline expired`
+        );
+      } catch (error) {
+        console.error(`[ReviewCloser] Error processing task ${task.id}:`, error);
+      }
+    }
+  } catch (error) {
+    console.error("[ReviewCloser] Error in processExpiredReviews:", error);
+  }
+}
+
 export async function processExpiredAuctions(): Promise<void> {
   try {
     const expiredAuctions = await storage.getAuctionsToClose();
@@ -64,8 +93,10 @@ export function startAuctionCloser(intervalMs: number = 5 * 60 * 1000): NodeJS.T
   console.log(`[AuctionCloser] Started with interval ${intervalMs / 1000} seconds`);
   
   processExpiredAuctions();
+  processExpiredReviews();
   
   return setInterval(() => {
     processExpiredAuctions();
+    processExpiredReviews();
   }, intervalMs);
 }

@@ -141,6 +141,9 @@ export interface IStorage {
   getAuctionsToClose(): Promise<Task[]>;
   closeAuction(taskId: string, winnerId?: string, winnerName?: string, assignedSum?: string): Promise<Task | undefined>;
   
+  // Review management
+  getReviewsToExpire(): Promise<Task[]>;
+  
   // Monthly metrics
   getMonthlyMetrics(departmentId?: string): Promise<{
     completedTasksCount: number;
@@ -705,6 +708,18 @@ export class DbStorage implements IStorage {
           eq(tasks.type, "auction" as const),
           eq(tasks.status, "backlog" as const),
           sql`${tasks.auctionPlannedEndAt} <= NOW()`
+        )
+      );
+  }
+
+  async getReviewsToExpire(): Promise<Task[]> {
+    return await db
+      .select()
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.status, "underReview" as const),
+          sql`${tasks.reviewDeadline} <= NOW() AND ${tasks.reviewDeadline} IS NOT NULL`
         )
       );
   }
