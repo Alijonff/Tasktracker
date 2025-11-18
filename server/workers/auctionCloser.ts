@@ -5,6 +5,7 @@ import {
   shouldAutoAssignToCreator,
 } from "../businessRules";
 import { storage } from "../storage";
+import { filterOutAdminBids, isAdminUser } from "../utils/bidFilters";
 
 export async function processExpiredReviews(): Promise<void> {
   try {
@@ -48,11 +49,11 @@ export async function processExpiredAuctions(): Promise<void> {
     for (const auction of expiredAuctions) {
       try {
         const mode = resolveAuctionMode(auction);
-        const bids = await storage.getTaskBids(auction.id);
+        const bids = await filterOutAdminBids(await storage.getTaskBids(auction.id));
         const now = new Date();
 
         if (bids.length === 0) {
-          if (!shouldAutoAssignToCreator(auction, now)) {
+          if (!shouldAutoAssignToCreator(auction, now) || (await isAdminUser(auction.creatorId))) {
             continue;
           }
 
@@ -71,7 +72,7 @@ export async function processExpiredAuctions(): Promise<void> {
           );
         } else {
           const winningBid = selectWinningBid(bids, mode);
-          if (!winningBid) {
+          if (!winningBid || (await isAdminUser(winningBid.bidderId))) {
             continue;
           }
 
