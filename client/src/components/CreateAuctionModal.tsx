@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { createAuctionTask, type CreateAuctionTaskPayload, type Grade } from "@/api/adapter";
-import type { Department } from "@shared/schema";
+import type { Department, Management } from "@shared/schema";
 import { SessionUser } from "@/types/session";
 import type { TaskMode, TaskType } from "@shared/taskMetadata";
 
@@ -25,6 +25,7 @@ interface FormState {
   startingPrice: string;
   deadlineDate: string;
   departmentId?: string;
+  managementId?: string;
   mode: TaskMode;
   taskType: TaskType;
 }
@@ -46,6 +47,7 @@ function createInitialFormState(): FormState {
     startingPrice: "",
     deadlineDate: formatDateOnly(defaultDeadline),
     departmentId: undefined,
+    managementId: undefined,
     mode: "MONEY",
     taskType: "DEPARTMENT",
   };
@@ -131,6 +133,21 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
     enabled: shouldLoadDepartments,
   });
 
+  const managementQueryParams = useMemo(() => {
+    const departmentId = formState.departmentId ?? currentUser?.departmentId;
+    if (!departmentId) return null;
+    return { departmentId };
+  }, [formState.departmentId, currentUser?.departmentId]);
+
+  const shouldLoadManagements =
+    open && formState.taskType === "UNIT" && Boolean(managementQueryParams?.departmentId);
+  const { data: managements = [] } = useQuery<Management[]>({
+    queryKey: managementQueryParams
+      ? ["/api/managements", managementQueryParams]
+      : ["/api/managements", { departmentId: undefined }],
+    enabled: shouldLoadManagements,
+  });
+
   const availableDepartments = useMemo(() => {
     if (!currentUser) return [] as Department[];
     return (departments ?? []).filter((department) => {
@@ -143,7 +160,24 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
       return false;
     });
   }, [currentUser, departments]);
+  const availableManagements = useMemo(() => {
+    if (!currentUser) return managements ?? [];
+
+    if (
+      currentUser.managementId &&
+      (currentUser.positionType === "management_head" || currentUser.positionType === "management_deputy")
+    ) {
+      return (managements ?? []).filter((mgmt) => mgmt.id === currentUser.managementId);
+    }
+
+    if ((currentUser.role === "director" || currentUser.positionType === "deputy") && currentUser.departmentId) {
+      return (managements ?? []).filter((mgmt) => mgmt.departmentId === currentUser.departmentId);
+    }
+
+    return managements ?? [];
+  }, [currentUser, managements]);
   const isTimeMode = formState.mode === "TIME";
+  const isUnitTask = formState.taskType === "UNIT";
 
   useEffect(() => {
     if (!open) {
@@ -161,6 +195,43 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
       }
     }
   }, [open, availableDepartments, currentUser?.departmentId, formState.departmentId]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    if (!isUnitTask) {
+      if (formState.managementId) {
+        setFormState((prev) => ({ ...prev, managementId: undefined }));
+      }
+      return;
+    }
+
+    const allowedManagementIds = availableManagements.map((mgmt) => mgmt.id);
+
+    if (formState.managementId && !allowedManagementIds.includes(formState.managementId)) {
+      setFormState((prev) => ({ ...prev, managementId: undefined }));
+      return;
+    }
+
+    if (!formState.managementId) {
+      const preferredId =
+        currentUser?.managementId && allowedManagementIds.includes(currentUser.managementId)
+          ? currentUser.managementId
+          : allowedManagementIds.length === 1
+            ? allowedManagementIds[0]
+            : undefined;
+
+      if (preferredId) {
+        setFormState((prev) => ({ ...prev, managementId: preferredId }));
+      }
+    }
+  }, [
+    open,
+    isUnitTask,
+    availableManagements,
+    formState.managementId,
+    currentUser?.managementId,
+  ]);
 
   const minDate = useMemo(() => formatDateOnly(new Date()), []);
 
@@ -220,6 +291,11 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
       return;
     }
 
+    if (isUnitTask && !formState.managementId) {
+      toast({ title: "Выберите управление", variant: "destructive" });
+      return;
+    }
+
     if (!trimmedTitle) {
       toast({ title: "Введите название", variant: "destructive" });
       return;
@@ -250,6 +326,7 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
       startingPrice: amount,
       deadline: deadline.toISOString(),
       departmentId: formState.departmentId,
+      managementId: isUnitTask ? formState.managementId : undefined,
       mode: formState.mode,
       taskType: formState.taskType,
     });
@@ -307,6 +384,34 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">Выберите департамент, от имени которого создаёте аукцион</p>
+              </div>
+            )}
+
+            {isUnitTask && (
+              <div className="space-y-2">
+                <Label htmlFor="auction-management">Управление *</Label>
+                <Select
+                  value={formState.managementId ?? ""}
+                  onValueChange={(value) => setFormState((prev) => ({ ...prev, managementId: value }))}
+                  disabled={mutation.isPending || availableManagements.length === 0}
+                >
+                  <SelectTrigger id="auction-management">
+                    <SelectValue placeholder="Выберите управление" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableManagements.map((management) => (
+                      <SelectItem key={management.id} value={management.id}>
+                        {management.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Выберите управление, в котором будет проводиться аукцион
+                </p>
+                {availableManagements.length === 0 && (
+                  <p className="text-xs text-destructive">Нет доступных управлений для выбранного департамента</p>
+                )}
               </div>
             )}
 

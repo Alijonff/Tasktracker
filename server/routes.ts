@@ -294,6 +294,7 @@ const createTaskSchema = z
     deadline: dateInputSchema,
     minimumGrade: gradeSchema.default("D"),
     departmentId: z.string().min(1, "Укажите департамент").optional(),
+    managementId: z.string().min(1, "Укажите управление").optional(),
     auctionInitialSum: decimalNumberSchema,
   });
 
@@ -453,8 +454,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       user.managementId &&
       (user.positionType === "management_head" || user.positionType === "management_deputy")
     ) {
-      const management = await storage.getManagement(user.managementId);
-      canCreateAuctions = Boolean(management?.isAutonomous);
+      canCreateAuctions = true;
     }
 
     return { ...user, canCreateAuctions };
@@ -1258,47 +1258,90 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const requestedMode = parsed.mode;
       const requestedTaskType = parsed.taskType ?? parsed.type;
 
-      const allowedScopes: Array<{ departmentId: string; managementId: string | null }> = [];
+      let departmentId = parsed.departmentId?.trim() ?? null;
+      let managementId = parsed.managementId?.trim() ?? null;
 
-      if (currentUser.role === "director" && currentUser.departmentId) {
-        allowedScopes.push({ departmentId: currentUser.departmentId, managementId: null });
+      if (requestedTaskType === "UNIT" && !managementId) {
+        return res.status(400).json({ error: "Выберите управление для задачи уровня управления" });
       }
 
-      if (currentUser.positionType === "deputy" && currentUser.departmentId) {
-        allowedScopes.push({ departmentId: currentUser.departmentId, managementId: null });
-      }
-
-      if (
-        currentUser.managementId &&
-        (currentUser.positionType === "management_head" || currentUser.positionType === "management_deputy")
-      ) {
-        const management = await storage.getManagement(currentUser.managementId);
-        if (management && management.isAutonomous) {
-          allowedScopes.push({ departmentId: management.departmentId, managementId: management.id });
+      let management: Awaited<ReturnType<typeof storage.getManagement>> | null = null;
+      if (managementId) {
+        management = await storage.getManagement(managementId);
+        if (!management) {
+          return res.status(404).json({ error: "Управление не найдено" });
         }
+
+        if (departmentId && management.departmentId !== departmentId) {
+          return res
+            .status(400)
+            .json({ error: "Выбранное управление не относится к выбранному департаменту" });
+        }
+
+        departmentId = departmentId ?? management.departmentId;
       }
 
-      if (allowedScopes.length === 0) {
+      const isDirector = currentUser.role === "director";
+      const isDeputy = currentUser.positionType === "deputy";
+      const isManagementLead =
+        currentUser.positionType === "management_head" || currentUser.positionType === "management_deputy";
+
+      if (currentUser.role === "admin") {
+        if (!departmentId) {
+          return res.status(400).json({ error: "Укажите департамент для аукциона" });
+        }
+
+        if (requestedTaskType !== "UNIT") {
+          managementId = null;
+        }
+      } else if ((isDirector || isDeputy) && currentUser.departmentId) {
+        if (departmentId && departmentId !== currentUser.departmentId) {
+          return res.status(403).json({ error: "Нет доступа к выбранному департаменту" });
+        }
+
+        departmentId = currentUser.departmentId;
+
+        if (requestedTaskType === "UNIT") {
+          if (!management) {
+            return res.status(404).json({ error: "Управление не найдено" });
+          }
+
+          if (management.departmentId !== currentUser.departmentId) {
+            return res.status(403).json({ error: "Нет доступа к выбранному управлению" });
+          }
+        } else {
+          managementId = null;
+        }
+      } else if (isManagementLead && currentUser.managementId) {
+        const ownManagement = await storage.getManagement(currentUser.managementId);
+        if (!ownManagement) {
+          return res.status(403).json({ error: "У вас нет прав для создания аукционов" });
+        }
+
+        const allowedDepartmentId = ownManagement.departmentId;
+        departmentId = departmentId ?? allowedDepartmentId;
+
+        if (departmentId !== allowedDepartmentId) {
+          return res.status(403).json({ error: "Нет доступа к выбранному департаменту" });
+        }
+
+        if (requestedTaskType === "UNIT") {
+          managementId = managementId ?? ownManagement.id;
+
+          if (managementId !== ownManagement.id) {
+            return res.status(403).json({ error: "Можно создавать задачи только в своём управлении" });
+          }
+
+          management = management ?? ownManagement;
+        } else {
+          managementId = null;
+        }
+      } else {
         return res.status(403).json({ error: "У вас нет прав для создания аукционов" });
       }
 
-      let selectedScope: { departmentId: string; managementId: string | null } | undefined;
-
-      if (parsed.departmentId) {
-        selectedScope = allowedScopes.find((scope) => scope.departmentId === parsed.departmentId);
-        if (!selectedScope) {
-          return res.status(403).json({ error: "Нет доступа к выбранному департаменту" });
-        }
-      } else {
-        const uniqueDepartments = Array.from(new Set(allowedScopes.map((scope) => scope.departmentId)));
-        if (uniqueDepartments.length > 1) {
-          return res.status(400).json({ error: "Укажите департамент для аукциона" });
-        }
-        selectedScope = allowedScopes[0];
-      }
-
-      if (!selectedScope) {
-        return res.status(500).json({ error: "Не удалось определить департамент" });
+      if (!departmentId) {
+        return res.status(400).json({ error: "Укажите департамент для аукциона" });
       }
 
       const startAt = new Date();
@@ -1313,8 +1356,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         type: parsed.type,
         status: requestedTaskType === "INDIVIDUAL" ? "IN_PROGRESS" : "BACKLOG",
         auctionMode: requestedTaskType === "INDIVIDUAL" ? null : requestedMode,
-        departmentId: selectedScope.departmentId,
-        managementId: selectedScope.managementId,
+        departmentId,
+        managementId,
         divisionId: null,
         creatorId: currentUser.id,
         creatorName: currentUser.name,
