@@ -48,10 +48,10 @@ export default function TaskFilters({ onFilterChange }: TaskFiltersProps) {
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">Все статусы</SelectItem>
-          <SelectItem value="backlog">Бэклог</SelectItem>
-          <SelectItem value="inProgress">В работе</SelectItem>
-          <SelectItem value="underReview">На проверке</SelectItem>
-          <SelectItem value="completed">Выполнена</SelectItem>
+          <SelectItem value="BACKLOG">Бэклог</SelectItem>
+          <SelectItem value="IN_PROGRESS">В работе</SelectItem>
+          <SelectItem value="UNDER_REVIEW">На проверке</SelectItem>
+          <SelectItem value="DONE">Выполнена</SelectItem>
         </SelectContent>
       </Select>
 
@@ -61,8 +61,9 @@ export default function TaskFilters({ onFilterChange }: TaskFiltersProps) {
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">Все типы</SelectItem>
-          <SelectItem value="individual">Индивидуальная</SelectItem>
-          <SelectItem value="auction">Аукцион</SelectItem>
+          <SelectItem value="INDIVIDUAL">Индивидуальная</SelectItem>
+          <SelectItem value="UNIT">Командная</SelectItem>
+          <SelectItem value="DEPARTMENT">Департамент</SelectItem>
         </SelectContent>
       </Select>
 

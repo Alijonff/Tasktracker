@@ -13,11 +13,11 @@ export function canPlaceBidOnTask(user: User, task: Task): {
     return { canBid: false, reason: "Task not found" };
   }
 
-  if (task.type !== "auction") {
-    return { canBid: false, reason: "Task is not an auction" };
+  if (task.type === "INDIVIDUAL") {
+    return { canBid: false, reason: "Individual tasks are not auctioned" };
   }
 
-  if (task.status !== "backlog") {
+  if (task.status !== "BACKLOG") {
     return { canBid: false, reason: "Auction is no longer accepting bids" };
   }
 

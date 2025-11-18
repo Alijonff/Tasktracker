@@ -95,7 +95,7 @@ test("reassignTasksFromTerminatedEmployee переназначает задач�
 
   const storageMock = {
     getAllTasks: async (filters: any) => {
-      assert.deepEqual(filters, { assigneeId, statuses: ["inProgress", "underReview"] });
+      assert.deepEqual(filters, { assigneeId, statuses: ["IN_PROGRESS", "UNDER_REVIEW"] });
       return tasks;
     },
     updateTask: async (id: string, updates: Partial<Task>) => {
@@ -125,8 +125,8 @@ function createAuctionTask(overrides: Partial<Task> = {}): Task {
     id: overrides.id ?? "task-id",
     title: "Task",
     description: "Desc",
-    status: "backlog",
-    type: "auction",
+    status: "BACKLOG",
+    type: "DEPARTMENT",
     departmentId: "dept",
     managementId: null,
     divisionId: null,

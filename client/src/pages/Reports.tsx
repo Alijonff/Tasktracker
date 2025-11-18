@@ -48,17 +48,17 @@ interface ChartItem {
 }
 
 const statusLabels: Record<AuctionStatus, string> = {
-  backlog: "В ожидании",
-  inProgress: "В работе",
-  underReview: "На проверке",
-  completed: "Завершено",
+  BACKLOG: "В ожидании",
+  IN_PROGRESS: "В работе",
+  UNDER_REVIEW: "На проверке",
+  DONE: "Завершено",
 };
 
 const statusBadgeVariants: Record<AuctionStatus, "default" | "secondary" | "outline"> = {
-  completed: "default",
-  inProgress: "secondary",
-  underReview: "secondary",
-  backlog: "outline",
+  DONE: "default",
+  IN_PROGRESS: "secondary",
+  UNDER_REVIEW: "secondary",
+  BACKLOG: "outline",
 };
 
 function parseUserRating(value: UserModel["rating"]): number | undefined {
@@ -138,9 +138,9 @@ export default function Reports() {
     return employees.filter((emp) => emp.departmentId === selectedDepartmentId);
   }, [employees, selectedDepartmentId]);
   const stats = useMemo(() => {
-    const completed = tasks.filter((t) => t.status === "completed").length;
-    const inProgress = tasks.filter((t) => t.status === "inProgress").length;
-    const backlog = tasks.filter((t) => t.status === "backlog").length;
+    const completed = tasks.filter((t) => t.status === "DONE").length;
+    const inProgress = tasks.filter((t) => t.status === "IN_PROGRESS").length;
+    const backlog = tasks.filter((t) => t.status === "BACKLOG").length;
     const total = tasks.length;
     const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
     const monetaryTasks = tasks.filter((task) => task.mode !== "TIME");
@@ -175,9 +175,9 @@ export default function Reports() {
           return {
             id: department.id,
             name: department.name,
-            completed: deptTasks.filter((task) => task.status === "completed").length,
-            inProgress: deptTasks.filter((task) => task.status === "inProgress").length,
-            backlog: deptTasks.filter((task) => task.status === "backlog").length,
+            completed: deptTasks.filter((task) => task.status === "DONE").length,
+            inProgress: deptTasks.filter((task) => task.status === "IN_PROGRESS").length,
+            backlog: deptTasks.filter((task) => task.status === "BACKLOG").length,
             total: deptTasks.length,
             entityType: "department",
             divisions: managements.filter((mgmt) => mgmt.departmentId === department.id).length,
@@ -192,9 +192,9 @@ export default function Reports() {
         return {
           id: management.id,
           name: management.name,
-          completed: managementTasks.filter((task) => task.status === "completed").length,
-          inProgress: managementTasks.filter((task) => task.status === "inProgress").length,
-          backlog: managementTasks.filter((task) => task.status === "backlog").length,
+          completed: managementTasks.filter((task) => task.status === "DONE").length,
+          inProgress: managementTasks.filter((task) => task.status === "IN_PROGRESS").length,
+          backlog: managementTasks.filter((task) => task.status === "BACKLOG").length,
           total: managementTasks.length,
           entityType: "management",
           divisions: managementDivisions.length,
@@ -212,9 +212,9 @@ export default function Reports() {
         return {
           id: division.id,
           name: division.name,
-          completed: divisionTasks.filter((task) => task.status === "completed").length,
-          inProgress: divisionTasks.filter((task) => task.status === "inProgress").length,
-          backlog: divisionTasks.filter((task) => task.status === "backlog").length,
+          completed: divisionTasks.filter((task) => task.status === "DONE").length,
+          inProgress: divisionTasks.filter((task) => task.status === "IN_PROGRESS").length,
+          backlog: divisionTasks.filter((task) => task.status === "BACKLOG").length,
           total: divisionTasks.length,
           entityType: "division",
           employees: divisionEmployees.length,
@@ -233,9 +233,9 @@ export default function Reports() {
         return {
           id: employee.id,
           name: employee.name ?? employee.username ?? "Сотрудник",
-          completed: employeeTasks.filter((task) => task.status === "completed").length,
-          inProgress: employeeTasks.filter((task) => task.status === "inProgress").length,
-          backlog: employeeTasks.filter((task) => task.status === "backlog").length,
+          completed: employeeTasks.filter((task) => task.status === "DONE").length,
+          inProgress: employeeTasks.filter((task) => task.status === "IN_PROGRESS").length,
+          backlog: employeeTasks.filter((task) => task.status === "BACKLOG").length,
           total: employeeTasks.length,
           entityType: "employee",
           rating: parseUserRating(employee.rating),

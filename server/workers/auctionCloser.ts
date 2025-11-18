@@ -13,13 +13,13 @@ export async function processExpiredReviews(): Promise<void> {
     
     for (const task of expiredReviews) {
       try {
-        await storage.updateTask(task.id, { 
-          status: "inProgress" as any,
+        await storage.updateTask(task.id, {
+          status: "IN_PROGRESS" as any,
           reviewDeadline: null as any
         });
-        
+
         console.log(
-          `[ReviewCloser] Returned task ${task.id} (${task.title}) to inProgress after review deadline expired`
+          `[ReviewCloser] Returned task ${task.id} (${task.title}) to IN_PROGRESS after review deadline expired`
         );
       } catch (error) {
         console.error(`[ReviewCloser] Error processing task ${task.id}:`, error);

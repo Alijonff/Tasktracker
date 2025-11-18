@@ -512,15 +512,15 @@ export class DbStorage implements IStorage {
     const [completedRow] = await db
       .select({ value: sql<number>`count(*)` })
       .from(tasks)
-      .where(withPeriodConditions(eq(tasks.status, "completed" as const)));
+      .where(withPeriodConditions(eq(tasks.status, "DONE" as const)));
 
     const activeAuctionConditions: any[] = [];
     if (filters.departmentId) {
       activeAuctionConditions.push(eq(tasks.departmentId, filters.departmentId));
     }
-    activeAuctionConditions.push(eq(tasks.type, "auction" as const));
+    activeAuctionConditions.push(inArray(tasks.type, ["UNIT", "DEPARTMENT"] as any));
     activeAuctionConditions.push(
-      inArray(tasks.status, ["backlog", "inProgress", "underReview"] as any)
+      inArray(tasks.status, ["BACKLOG", "IN_PROGRESS", "UNDER_REVIEW"] as any)
     );
 
     const [activeAuctionsRow] = await db
@@ -532,7 +532,7 @@ export class DbStorage implements IStorage {
     if (filters.departmentId) {
       backlogConditions.push(eq(tasks.departmentId, filters.departmentId));
     }
-    backlogConditions.push(eq(tasks.status, "backlog" as const));
+    backlogConditions.push(eq(tasks.status, "BACKLOG" as const));
 
     const [backlogRow] = await db
       .select({ value: sql<number>`count(*)` })
@@ -566,8 +566,8 @@ export class DbStorage implements IStorage {
 
     conditions.push(
       or(
-        inArray(tasks.status, ["inProgress", "underReview"] as any),
-        and(eq(tasks.status, "backlog" as const), gte(tasks.updatedAt, recentThreshold))
+        inArray(tasks.status, ["IN_PROGRESS", "UNDER_REVIEW"] as any),
+        and(eq(tasks.status, "BACKLOG" as const), gte(tasks.updatedAt, recentThreshold))
       )
     );
 
@@ -691,8 +691,8 @@ export class DbStorage implements IStorage {
   // Auction management
   async getActiveAuctions(filters?: { departmentId?: string }): Promise<Task[]> {
     const conditions: any[] = [
-      eq(tasks.type, "auction" as const),
-      eq(tasks.status, "backlog" as const),
+      inArray(tasks.type, ["UNIT", "DEPARTMENT"] as any),
+      eq(tasks.status, "BACKLOG" as const),
     ];
 
     if (filters?.departmentId) {
@@ -712,8 +712,8 @@ export class DbStorage implements IStorage {
       .from(tasks)
       .where(
         and(
-          eq(tasks.type, "auction" as const),
-          eq(tasks.status, "backlog" as const),
+          inArray(tasks.type, ["UNIT", "DEPARTMENT"] as any),
+          eq(tasks.status, "BACKLOG" as const),
           sql`${tasks.auctionPlannedEndAt} <= NOW()`
         )
       );
@@ -725,7 +725,7 @@ export class DbStorage implements IStorage {
       .from(tasks)
       .where(
         and(
-          eq(tasks.status, "underReview" as const),
+          eq(tasks.status, "UNDER_REVIEW" as const),
           sql`${tasks.reviewDeadline} <= NOW() AND ${tasks.reviewDeadline} IS NOT NULL`
         )
       );
@@ -739,7 +739,7 @@ export class DbStorage implements IStorage {
     const [task] = await db
       .update(tasks)
       .set({
-        status: "inProgress" as const,
+        status: "IN_PROGRESS" as const,
         assigneeId: winnerId || null,
         assigneeName: winnerName || null,
         auctionAssignedSum: assignedSum || null,
@@ -751,8 +751,8 @@ export class DbStorage implements IStorage {
       .where(
         and(
           eq(tasks.id, taskId),
-          eq(tasks.type, "auction" as const),
-          eq(tasks.status, "backlog" as const)
+          inArray(tasks.type, ["UNIT", "DEPARTMENT"] as any),
+          eq(tasks.status, "BACKLOG" as const)
         )
       )
       .returning();
@@ -776,24 +776,24 @@ export class DbStorage implements IStorage {
     const [completedRow] = await db
       .select({ value: sql<number>`count(*)` })
       .from(tasks)
-      .where(and(...baseConditions, eq(tasks.status, "completed" as const)));
+      .where(and(...baseConditions, eq(tasks.status, "DONE" as const)));
 
     const [sumRow] = await db
-      .select({ 
-        value: sql<string>`coalesce(sum(${tasks.auctionAssignedSum}), '0')` 
+      .select({
+        value: sql<string>`coalesce(sum(${tasks.auctionAssignedSum}), '0')`
       })
       .from(tasks)
       .where(
         and(
           ...baseConditions,
-          eq(tasks.status, "completed" as const),
+          eq(tasks.status, "DONE" as const),
           isNull(tasks.auctionAssignedSum)
         )
       );
 
     const activeConditions: any[] = [
-      eq(tasks.type, "auction" as const),
-      inArray(tasks.status, ["backlog", "inProgress", "underReview"] as any)
+      inArray(tasks.type, ["UNIT", "DEPARTMENT"] as any),
+      inArray(tasks.status, ["BACKLOG", "IN_PROGRESS", "UNDER_REVIEW"] as any)
     ];
     if (departmentId) {
       activeConditions.push(eq(tasks.departmentId, departmentId));
@@ -804,7 +804,7 @@ export class DbStorage implements IStorage {
       .from(tasks)
       .where(and(...activeConditions));
 
-    const backlogConditions: any[] = [eq(tasks.status, "backlog" as const)];
+    const backlogConditions: any[] = [eq(tasks.status, "BACKLOG" as const)];
     if (departmentId) {
       backlogConditions.push(eq(tasks.departmentId, departmentId));
     }

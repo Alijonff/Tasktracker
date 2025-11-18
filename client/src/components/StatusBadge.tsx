@@ -1,17 +1,27 @@
 import React from "react";
 import { Badge } from "@/components/ui/badge";
+import type { Task } from "@shared/schema";
 
-export type TaskStatus = "backlog" | "inProgress" | "underReview" | "completed";
+export type TaskStatus = Task["status"];
 
 interface StatusBadgeProps {
   status: TaskStatus;
 }
 
-const statusConfig = {
-  backlog: { label: "Бэклог", className: "bg-status-backlog/20 text-status-backlog border-status-backlog/30" },
-  inProgress: { label: "В работе", className: "bg-status-inProgress/20 text-status-inProgress border-status-inProgress/30" },
-  underReview: { label: "На проверке", className: "bg-status-underReview/20 text-status-underReview border-status-underReview/30" },
-  completed: { label: "Выполнена", className: "bg-status-completed/20 text-status-completed border-status-completed/30" },
+const statusConfig: Record<
+  TaskStatus,
+  { label: string; className: string }
+> = {
+  BACKLOG: { label: "Бэклог", className: "bg-status-backlog/20 text-status-backlog border-status-backlog/30" },
+  IN_PROGRESS: {
+    label: "В работе",
+    className: "bg-status-inProgress/20 text-status-inProgress border-status-inProgress/30",
+  },
+  UNDER_REVIEW: {
+    label: "На проверке",
+    className: "bg-status-underReview/20 text-status-underReview border-status-underReview/30",
+  },
+  DONE: { label: "Выполнена", className: "bg-status-completed/20 text-status-completed border-status-completed/30" },
 };
 
 export default function StatusBadge({ status }: StatusBadgeProps) {

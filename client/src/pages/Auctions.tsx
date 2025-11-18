@@ -93,8 +93,8 @@ export default function Auctions() {
   }, [currentUser]);
 
   const { data: tasks = [], isLoading } = useQuery<AuctionTaskSummary[]>({
-    queryKey: ["auctions", "backlog"],
-    queryFn: () => listAuctions({ scope: "all", status: "backlog" }),
+    queryKey: ["auctions", "BACKLOG"],
+    queryFn: () => listAuctions({ scope: "all", status: "BACKLOG" }),
   });
 
   const canCreateAuction = Boolean(currentUser?.canCreateAuctions);
@@ -114,7 +114,7 @@ export default function Auctions() {
   const selectedTask = selectedTaskId ? tasks.find((task) => task.id === selectedTaskId) : undefined;
 
   const backlogAuctions = useMemo(() => {
-    const backlogTasks = tasks.filter((task) => task.status === "backlog");
+    const backlogTasks = tasks.filter((task) => task.status === "BACKLOG");
     return backlogTasks.map((task) => {
       const { canBid, reason } = getBidAvailability(task, currentUser, userGrade);
       return {
@@ -134,7 +134,7 @@ export default function Auctions() {
           </div>
           <div>
             <h1 className="text-3xl font-bold">Аукционы в бэклоге</h1>
-            <p className="text-muted-foreground">Только задачи со статусом «backlog» доступны для торгов</p>
+            <p className="text-muted-foreground">Только задачи со статусом «BACKLOG» доступны для торгов</p>
           </div>
         </div>
         {canCreateAuction && (

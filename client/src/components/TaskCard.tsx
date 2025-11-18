@@ -10,12 +10,13 @@ import { UsersRound, Gavel, Timer } from "lucide-react";
 import type { Grade } from "@/api/adapter";
 import { formatTimeRemaining } from "@/lib/formatters";
 import type { TaskMode } from "@shared/taskMetadata";
+import type { Task } from "@shared/schema";
 
 export interface TaskCardProps {
   id: string;
   title: string;
   description: string;
-  status: "backlog" | "inProgress" | "underReview" | "completed";
+  status: Task["status"];
   creator: string;
   deadline: string;
   minimumGrade: Grade;

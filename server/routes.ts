@@ -164,10 +164,12 @@ function normalizeAuctionAmount(value: number, mode: TaskMode): number {
 
 function normalizeTaskResponse(task: Task, metadata?: TaskMetadata) {
   const resolvedMetadata = metadata ?? getTaskMetadata(task.id);
+  const resolvedTaskType = resolvedMetadata.taskType ?? (task.type as TaskType);
+  const resolvedMode = resolvedMetadata.mode ?? DEFAULT_TASK_METADATA.mode;
   const base = {
     ...task,
-    mode: resolvedMetadata.mode,
-    taskType: resolvedMetadata.taskType,
+    mode: resolvedMode,
+    taskType: resolvedTaskType ?? DEFAULT_TASK_METADATA.taskType,
   } as Task & TaskMetadata & {
     auctionInitialAmount?: number | null;
     auctionMaxAmount?: number | null;
@@ -257,7 +259,7 @@ const createTaskSchema = z
   .object({
     title: z.string().min(1, "Введите название задачи"),
     description: z.string().min(1, "Введите описание задачи"),
-    type: z.literal("auction"),
+    type: taskTypeSchema.default(DEFAULT_TASK_METADATA.taskType),
     taskType: taskTypeSchema.default(DEFAULT_TASK_METADATA.taskType),
     mode: taskModeSchema.default(DEFAULT_TASK_METADATA.mode),
     deadline: dateInputSchema,
@@ -442,7 +444,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         await storage.updateTask(task.id, {
-          status: "inProgress" as any,
+          status: "IN_PROGRESS" as any,
           assigneeId: task.creatorId,
           assigneeName: task.creatorName,
           auctionWinnerId: task.creatorId,
@@ -457,7 +459,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         await storage.updateTask(task.id, {
-          status: "inProgress" as any,
+          status: "IN_PROGRESS" as any,
           assigneeId: winningBid.bidderId,
           assigneeName: winningBid.bidderName,
           auctionWinnerId: winningBid.bidderId,
@@ -1179,7 +1181,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const currentUser = req.session.user!;
       const parsed = createTaskSchema.parse(req.body);
       const requestedMode = parsed.mode;
-      const requestedTaskType = parsed.taskType;
+      const requestedTaskType = parsed.taskType ?? parsed.type;
 
       const allowedScopes: Array<{ departmentId: string; managementId: string | null }> = [];
 
@@ -1231,8 +1233,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const taskData: Partial<Task> = {
         title: parsed.title,
         description: parsed.description,
-        type: "auction",
-        status: requestedTaskType === "INDIVIDUAL" ? "inProgress" : "backlog",
+        type: parsed.type,
+        status: requestedTaskType === "INDIVIDUAL" ? "IN_PROGRESS" : "BACKLOG",
         departmentId: selectedScope.departmentId,
         managementId: selectedScope.managementId,
         divisionId: null,
@@ -1418,7 +1420,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const { status, comment } = req.body as { status?: string; comment?: string };
-      const allowedStatuses = ["backlog", "inProgress", "underReview", "completed"] as const;
+      const allowedStatuses = ["BACKLOG", "IN_PROGRESS", "UNDER_REVIEW", "DONE"] as const;
 
       if (!status || !allowedStatuses.includes(status as (typeof allowedStatuses)[number])) {
         return res.status(400).json({ error: "Некорректный статус задачи" });
@@ -1438,11 +1440,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json(task);
       }
 
-      const transitions: Record<string, Task["status"][]> = {
-        backlog: ["inProgress"],
-        inProgress: ["underReview"],
-        underReview: ["completed", "inProgress"],
-        completed: [],
+      const transitions: Record<Task["status"], Task["status"][]> = {
+        BACKLOG: ["IN_PROGRESS"],
+        IN_PROGRESS: ["UNDER_REVIEW"],
+        UNDER_REVIEW: ["DONE", "IN_PROGRESS"],
+        DONE: [],
       };
 
       const available = transitions[currentStatus] ?? [];
@@ -1454,15 +1456,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const isDirector = currentUser.role === "director" && currentUser.departmentId === task.departmentId;
       const isAssignee = task.assigneeId === currentUser.id;
 
-      if (targetStatus === "inProgress") {
-        if (currentStatus === "backlog") {
+      if (targetStatus === "IN_PROGRESS") {
+        if (currentStatus === "BACKLOG") {
           if (!task.assigneeId) {
             return res.status(400).json({ error: "Задача должна иметь исполнителя" });
           }
           if (!(isAssignee || isDirector || isAdmin)) {
             return res.status(403).json({ error: "Только исполнитель или директор могут начать задачу" });
           }
-        } else if (currentStatus === "underReview") {
+        } else if (currentStatus === "UNDER_REVIEW") {
           if (!(isDirector || isAdmin)) {
             return res.status(403).json({ error: "Только директор может вернуть задачу на доработку" });
           }
@@ -1472,17 +1474,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      if (targetStatus === "underReview" && !isAssignee && !isAdmin) {
+      if (targetStatus === "UNDER_REVIEW" && !isAssignee && !isAdmin) {
         return res.status(403).json({ error: "Только исполнитель может отправить задачу на проверку" });
       }
 
-      if (targetStatus === "completed" && !(isDirector || isAdmin)) {
+      if (targetStatus === "DONE" && !(isDirector || isAdmin)) {
         return res.status(403).json({ error: "Только директор департамента может завершить задачу" });
       }
 
       if (
-        currentStatus === "underReview" &&
-        targetStatus === "inProgress" &&
+        currentStatus === "UNDER_REVIEW" &&
+        targetStatus === "IN_PROGRESS" &&
         commentText
       ) {
         await storage.addTaskComment({
@@ -1495,7 +1497,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const updateData: any = { status: targetStatus };
 
-      if (targetStatus === "underReview") {
+      if (targetStatus === "UNDER_REVIEW") {
         updateData.reviewDeadline = calculateReviewDeadline(new Date());
       }
 
@@ -1504,7 +1506,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Задача не найдена" });
       }
 
-      if (targetStatus === "completed" && task.assigneeId && task.assignedPoints == null) {
+      if (targetStatus === "DONE" && task.assigneeId && task.assignedPoints == null) {
         const basePoints = getBasePointsForTask(task);
         let penaltyPoints = 0;
         if (task.deadline) {
@@ -1593,7 +1595,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       await finalizeExpiredAuctions(task.departmentId);
       const refreshedTask = await storage.getTask(id);
-      if (!refreshedTask || refreshedTask.status !== "backlog" || refreshedTask.type !== "auction") {
+      if (
+        !refreshedTask ||
+        refreshedTask.status !== "BACKLOG" ||
+        refreshedTask.type === "INDIVIDUAL"
+      ) {
         return res.status(400).json({ error: "Аукцион уже завершён" });
       }
 
@@ -1892,7 +1898,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const completed_tasks_count = allTasks.filter(
         (task) =>
-          task.status === "completed" &&
+          task.status === "DONE" &&
           task.updatedAt &&
           new Date(task.updatedAt) >= startOfMonth &&
           new Date(task.updatedAt) <= endOfMonth
@@ -1900,8 +1906,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const closedAuctionsThisMonth = allTasks.filter(
         (task) =>
-          task.type === "auction" &&
-          task.status !== "backlog" &&
+          task.type !== "INDIVIDUAL" &&
+          task.status !== "BACKLOG" &&
           task.auctionAssignedSum &&
           task.updatedAt &&
           new Date(task.updatedAt) >= startOfMonth &&
@@ -1914,10 +1920,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }, 0);
 
       const active_auctions_count = allTasks.filter(
-        (task) => task.type === "auction" && task.status === "backlog"
+        (task) => task.type !== "INDIVIDUAL" && task.status === "BACKLOG"
       ).length;
 
-      const backlog_count = allTasks.filter((task) => task.status === "backlog").length;
+      const backlog_count = allTasks.filter((task) => task.status === "BACKLOG").length;
 
       res.json({
         completed_tasks_count,
