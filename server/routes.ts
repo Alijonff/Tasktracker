@@ -1145,6 +1145,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Сотрудник не найден" });
       }
 
+      // Deactivate bids when employee is transferred (v2.1 §6)
+      const departmentChanged = updates.departmentId !== undefined && employee.departmentId && updates.departmentId !== employee.departmentId;
+      const divisionChanged = updates.divisionId !== undefined && employee.divisionId && updates.divisionId !== employee.divisionId;
+
+      if (departmentChanged) {
+        // Transfer to different department: deactivate all bids from old department (including all divisions)
+        await storage.deactivateBidsForEmployee(id, { departmentId: employee.departmentId });
+      }
+
+      if (divisionChanged && !departmentChanged) {
+        // Transfer within same department to different division: deactivate bids from old division only
+        await storage.deactivateBidsForEmployee(id, { divisionId: employee.divisionId });
+      }
+
       if (parsed.positionType === "management_deputy" && updates.managementId) {
         await storage.updateManagement(updates.managementId, { deputyId: id });
       }
@@ -1186,6 +1200,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       await reassignTasksFromTerminatedEmployee(storage, id);
+
+      // Deactivate all bids from terminated employee (v2.1 §6)
+      await storage.deactivateBidsForEmployee(id);
 
       await clearManagementDeputyAssignment(id);
       await storage.deleteUser(id);
