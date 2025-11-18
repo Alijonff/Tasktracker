@@ -40,9 +40,6 @@ function getBidAvailability(
       if (task.divisionId && user.divisionId !== task.divisionId) {
         return { canBid: false, reason: "Только для отдела задачи" };
       }
-      if (task.managementId && user.managementId !== task.managementId) {
-        return { canBid: false, reason: "Только для управления задачи" };
-      }
     }
   }
 

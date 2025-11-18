@@ -228,6 +228,7 @@ export interface CreateAuctionTaskPayload {
   deadline: string;
   departmentId?: string;
   managementId?: string;
+  divisionId?: string;
   mode?: TaskMode;
   taskType?: TaskType;
 }
@@ -243,6 +244,7 @@ export async function createAuctionTask(payload: CreateAuctionTaskPayload): Prom
     deadline: payload.deadline,
     departmentId: payload.departmentId,
     managementId: payload.managementId,
+    divisionId: payload.divisionId,
     auctionInitialSum: payload.startingPrice,
   });
   const data = (await response.json()) as Task;
