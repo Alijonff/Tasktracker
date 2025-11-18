@@ -169,6 +169,10 @@ export function shouldAutoAssignToCreator(task: Task, now: Date = new Date()): b
   if (Number.isNaN(plannedEnd.getTime())) {
     return false;
   }
+  if (task.auctionHasBids) {
+    return now.getTime() >= plannedEnd.getTime();
+  }
+
   const graceEndsAt = plannedEnd.getTime() + NO_BID_GRACE_HOURS * 60 * 60 * 1000;
   return now.getTime() >= graceEndsAt;
 }
