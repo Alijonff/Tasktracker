@@ -17,8 +17,8 @@ test("calculateAuctionPrice плавно увеличивает стоимост
   const task = createAuctionTask({
     auctionStartAt: start,
     auctionPlannedEndAt: plannedEnd,
-    auctionInitialSum: "100",
-    auctionMaxSum: "150",
+    basePrice: "100",
+    auctionMode: "MONEY",
     auctionHasBids: false,
   });
 
@@ -36,8 +36,8 @@ test("calculateAuctionPrice возвращает стартовую цену е�
   const task = createAuctionTask({
     auctionStartAt: start,
     auctionPlannedEndAt: plannedEnd,
-    auctionInitialSum: "200",
-    auctionMaxSum: "300",
+    basePrice: "200",
+    auctionMode: "MONEY",
     auctionHasBids: true,
   });
 
@@ -141,9 +141,11 @@ function createAuctionTask(overrides: Partial<Task> = {}): Task {
     auctionStartAt: overrides.auctionStartAt ?? now,
     auctionPlannedEndAt: overrides.auctionPlannedEndAt ?? new Date(now.getTime() + 24 * 60 * 60 * 1000),
     auctionEndAt: overrides.auctionEndAt ?? null,
-    auctionInitialSum: overrides.auctionInitialSum ?? "100",
-    auctionMaxSum: overrides.auctionMaxSum ?? "150",
-    auctionAssignedSum: overrides.auctionAssignedSum ?? null,
+    basePrice: overrides.basePrice ?? "100",
+    baseTimeMinutes: overrides.baseTimeMinutes ?? null,
+    earnedMoney: overrides.earnedMoney ?? null,
+    earnedTimeMinutes: overrides.earnedTimeMinutes ?? null,
+    auctionMode: overrides.auctionMode ?? "MONEY",
     auctionWinnerId: overrides.auctionWinnerId ?? null,
     auctionWinnerName: overrides.auctionWinnerName ?? null,
     auctionHasBids: overrides.auctionHasBids ?? false,

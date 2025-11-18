@@ -3,11 +3,15 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { authenticateUser, hashPassword, verifyPassword } from "./auth";
 import {
+  AUCTION_RANGE_MULTIPLIER,
   calculateAuctionPrice,
   calculateOverduePenaltyHours,
   compareBids,
+  getAuctionBaseValue,
+  getAuctionMaxValue,
   getBidValue,
   parseDecimal,
+  resolveAuctionMode,
   selectWinningBid,
   shouldAutoAssignToCreator,
 } from "./businessRules";
@@ -30,6 +34,8 @@ import {
   DEFAULT_TASK_METADATA,
   TASK_MODES,
   TASK_TYPES,
+  normalizeTaskMode,
+  normalizeTaskType,
   type TaskMetadata,
   type TaskMode,
   type TaskType,
@@ -150,12 +156,6 @@ function decimalToString(value: number): string {
   return value.toFixed(2);
 }
 
-function parseTaskAmount(value: unknown): number | null {
-  if (value === null || value === undefined) return null;
-  if (typeof value === "number") return Number.isFinite(value) ? value : null;
-  return parseDecimal(value as string);
-}
-
 function normalizeAuctionAmount(value: number, mode: TaskMode): number {
   if (mode === "TIME") {
     return Math.max(1, Math.round(value));
@@ -163,27 +163,52 @@ function normalizeAuctionAmount(value: number, mode: TaskMode): number {
   return value;
 }
 
+function resolveTaskMetadata(task: Task, fallback?: TaskMetadata): TaskMetadata {
+  const stored = fallback ?? getTaskMetadata(task.id);
+  return {
+    mode: normalizeTaskMode((task as any).auctionMode ?? stored.mode ?? DEFAULT_TASK_METADATA.mode),
+    taskType: normalizeTaskType(
+      ((task as any).taskType ?? task.type ?? stored.taskType ?? DEFAULT_TASK_METADATA.taskType) as TaskType,
+    ),
+  };
+}
+
+function parseTaskAmount(value: unknown, mode: TaskMode): number | null {
+  if (value === null || value === undefined) return null;
+  if (mode === "TIME") {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+    const parsed = Number.parseInt(String(value), 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  return parseDecimal(value as string);
+}
+
 function normalizeTaskResponse(task: Task, metadata?: TaskMetadata) {
-  const resolvedMetadata = metadata ?? getTaskMetadata(task.id);
-  const resolvedTaskType = resolvedMetadata.taskType ?? (task.type as TaskType);
-  const resolvedMode = resolvedMetadata.mode ?? DEFAULT_TASK_METADATA.mode;
-  const base = {
+  const resolvedMetadata = resolveTaskMetadata(task, metadata);
+  const initial = getAuctionBaseValue(task, resolvedMetadata.mode);
+  const max = getAuctionMaxValue(task, resolvedMetadata.mode);
+  const assigned = parseTaskAmount(
+    resolvedMetadata.mode === "TIME" ? task.earnedTimeMinutes : task.earnedMoney,
+    resolvedMetadata.mode,
+  );
+  const currentAmount = calculateAuctionPrice(task, new Date(), resolvedMetadata.mode);
+
+  return {
     ...task,
-    mode: resolvedMode,
-    taskType: resolvedTaskType ?? DEFAULT_TASK_METADATA.taskType,
+    mode: resolvedMetadata.mode,
+    taskType: resolvedMetadata.taskType,
+    auctionInitialAmount: initial,
+    auctionMaxAmount: max,
+    auctionAssignedAmount: assigned,
+    auctionCurrentAmount: currentAmount,
   } as Task & TaskMetadata & {
     auctionInitialAmount?: number | null;
     auctionMaxAmount?: number | null;
     auctionAssignedAmount?: number | null;
     auctionCurrentAmount?: number | null;
-  };
-
-  return {
-    ...base,
-    auctionInitialAmount: parseTaskAmount(task.auctionInitialSum),
-    auctionMaxAmount: parseTaskAmount(task.auctionMaxSum),
-    auctionAssignedAmount: parseTaskAmount(task.auctionAssignedSum),
-    auctionCurrentAmount: parseTaskAmount((task as any).auctionCurrentPrice ?? null),
   };
 }
 
@@ -439,7 +464,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const now = new Date();
 
     for (const task of backlogAuctions) {
-      const metadata = getTaskMetadata(task.id);
+      const metadata = resolveTaskMetadata(task);
       if (metadata.taskType === "INDIVIDUAL") {
         continue;
       }
@@ -462,7 +487,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           executorName: task.creatorName,
           auctionWinnerId: task.creatorId,
           auctionWinnerName: task.creatorName,
-          auctionAssignedSum: task.auctionMaxSum ?? task.auctionInitialSum ?? null,
+          earnedMoney: metadata.mode === "MONEY" ? decimalToString(getAuctionMaxValue(task, metadata.mode) ?? 0) : null,
+          earnedTimeMinutes:
+            metadata.mode === "TIME"
+              ? getAuctionMaxValue(task, metadata.mode) ?? task.baseTimeMinutes ?? null
+              : null,
           auctionEndAt: now,
         });
       } else {
@@ -472,13 +501,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         const assignedValue = getBidValue(winningBid, metadata.mode);
-
-        const assignedSum =
-          assignedValue !== null
-            ? metadata.mode === "TIME"
-              ? assignedValue.toString()
-              : decimalToString(assignedValue)
-            : task.auctionMaxSum ?? null;
+        const assignedSum = assignedValue ?? getAuctionMaxValue(task, metadata.mode);
 
         await storage.updateTask(task.id, {
           status: "IN_PROGRESS" as any,
@@ -486,7 +509,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           executorName: winningBid.bidderName,
           auctionWinnerId: winningBid.bidderId,
           auctionWinnerName: winningBid.bidderName,
-          auctionAssignedSum: assignedSum,
+          earnedMoney:
+            metadata.mode === "MONEY" && assignedSum !== null && assignedSum !== undefined
+              ? decimalToString(assignedSum)
+              : null,
+          earnedTimeMinutes:
+            metadata.mode === "TIME" && assignedSum !== null ? Math.round(assignedSum) : null,
           auctionEndAt: now,
         });
       }
@@ -1251,12 +1279,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const startAt = new Date();
       const normalizedInitial = normalizeAuctionAmount(parsed.auctionInitialSum, requestedMode);
       const plannedEndAt = calculateAuctionEnd(startAt);
+      const basePrice = requestedMode === "MONEY" ? decimalToString(normalizedInitial) : null;
+      const baseTime = requestedMode === "TIME" ? Math.round(normalizedInitial) : null;
 
       const taskData: Partial<Task> = {
         title: parsed.title,
         description: parsed.description,
         type: parsed.type,
         status: requestedTaskType === "INDIVIDUAL" ? "IN_PROGRESS" : "BACKLOG",
+        auctionMode: requestedMode,
         departmentId: selectedScope.departmentId,
         managementId: selectedScope.managementId,
         divisionId: null,
@@ -1269,9 +1300,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         rating: null,
         auctionStartAt: requestedTaskType === "INDIVIDUAL" ? null : startAt,
         auctionPlannedEndAt: requestedTaskType === "INDIVIDUAL" ? null : plannedEndAt,
-        auctionInitialSum: decimalToString(normalizedInitial),
-        auctionMaxSum: decimalToString(normalizeAuctionAmount(normalizedInitial * 1.5, requestedMode)),
-        auctionAssignedSum: null,
+        basePrice: basePrice,
+        baseTimeMinutes: baseTime,
+        earnedMoney: null,
+        earnedTimeMinutes: null,
         auctionEndAt: null,
         auctionWinnerId: null,
         auctionWinnerName: null,
@@ -1350,12 +1382,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const allTasks = await storage.getAllTasks(filters);
-      const now = new Date();
-      const tasksWithAuctionPrice = allTasks.map((task) => {
-        const auctionPrice = calculateAuctionPrice(task, now);
-        const base = auctionPrice !== null ? { ...task, auctionCurrentPrice: decimalToString(auctionPrice) } : task;
-        return normalizeTaskResponse(base as Task);
-      });
+      const tasksWithAuctionPrice = allTasks.map((task) => normalizeTaskResponse(task));
       res.json(tasksWithAuctionPrice);
     } catch (error) {
       console.error("Ошибка при получении задач:", error);
@@ -1397,12 +1424,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const activeAuctions = await storage.getActiveAuctions(
         scope.departmentId ? { departmentId: scope.departmentId } : undefined,
       );
-      const now = new Date();
-      const auctionsWithPrice = activeAuctions.map((task) => {
-        const auctionPrice = calculateAuctionPrice(task, now);
-        const base = auctionPrice !== null ? { ...task, auctionCurrentPrice: decimalToString(auctionPrice) } : task;
-        return normalizeTaskResponse(base as Task);
-      });
+      const auctionsWithPrice = activeAuctions.map((task) => normalizeTaskResponse(task));
 
       res.json(auctionsWithPrice);
     } catch (error) {
@@ -1429,10 +1451,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Недостаточно прав для просмотра задачи" });
       }
 
-      const price = calculateAuctionPrice(task);
-      const response = price !== null ? { ...task, auctionCurrentPrice: decimalToString(price) } : task;
-
-      res.json(response);
+      res.json(normalizeTaskResponse(task));
     } catch (error) {
       res.status(500).json({ error: "Не удалось получить задачу" });
     }
@@ -1454,6 +1473,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const currentUser = req.session.user!;
+      const metadata = resolveTaskMetadata(task);
       const targetStatus = status as Task["status"];
       const currentStatus = task.status as Task["status"];
       const commentText = typeof comment === "string" ? comment.trim() : "";
@@ -1525,6 +1545,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (targetStatus === "DONE") {
         updateData.doneAt = new Date();
+        if (metadata.mode === "TIME") {
+          const reward = task.earnedTimeMinutes ?? getAuctionBaseValue(task, metadata.mode);
+          if (reward !== null && reward !== undefined) {
+            updateData.earnedTimeMinutes = normalizeAuctionAmount(reward, "TIME");
+          }
+        } else {
+          const reward = parseDecimal(task.earnedMoney as any) ?? getAuctionBaseValue(task, metadata.mode);
+          if (reward !== null && reward !== undefined) {
+            updateData.earnedMoney = decimalToString(reward);
+          }
+        }
       }
 
       const updated = await storage.updateTask(id, updateData);
@@ -1582,7 +1613,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Задача не найдена" });
       }
 
-      const metadata = getTaskMetadata(task.id);
+      const metadata = resolveTaskMetadata(task);
       if (metadata.taskType === "INDIVIDUAL") {
         return res.status(400).json({ error: "Ставки недоступны для индивидуальных задач" });
       }
@@ -1653,7 +1684,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const bidAmount = normalizeAuctionAmount(rawBidValue, metadata.mode);
-      const auctionPrice = calculateAuctionPrice(task);
+      const auctionPrice = calculateAuctionPrice(task, new Date(), metadata.mode);
       if (auctionPrice === null) {
         return res.status(400).json({ error: "Ставки недоступны для этой задачи" });
       }
@@ -1945,14 +1976,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         (task) =>
           task.type !== "INDIVIDUAL" &&
           task.status !== "BACKLOG" &&
-          task.auctionAssignedSum &&
+          task.auctionMode === "MONEY" &&
+          task.earnedMoney &&
           task.updatedAt &&
           new Date(task.updatedAt) >= startOfMonth &&
           new Date(task.updatedAt) <= endOfMonth
       );
 
       const closed_auctions_sum = closedAuctionsThisMonth.reduce((sum, task) => {
-        const amount = parseDecimal(task.auctionAssignedSum);
+        const amount = parseDecimal(task.earnedMoney as any);
         return sum + (amount || 0);
       }, 0);
 

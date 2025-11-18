@@ -22,6 +22,7 @@ import {
   type InsertDivision,
   type Grade,
 } from "@shared/schema";
+import { type TaskMode } from "@shared/taskMetadata";
 import { type PositionType } from "@shared/utils";
 import { eq, and, or, like, desc, asc, inArray, gte, isNull, sql } from "drizzle-orm";
 
@@ -141,7 +142,7 @@ export interface IStorage {
   getAuctionsToClose(): Promise<Task[]>;
   closeAuction(
     taskId: string,
-    options: { winnerId?: string; winnerName?: string; assignedSum?: string; endAt?: Date }
+    options: { winnerId?: string; winnerName?: string; assignedValue?: number | null; mode: TaskMode; endAt?: Date }
   ): Promise<Task | undefined>;
   
   // Review management
@@ -734,21 +735,32 @@ export class DbStorage implements IStorage {
 
   async closeAuction(
     taskId: string,
-    options: { winnerId?: string; winnerName?: string; assignedSum?: string; endAt?: Date }
+    options: { winnerId?: string; winnerName?: string; assignedValue?: number | null; mode: TaskMode; endAt?: Date }
   ): Promise<Task | undefined> {
-    const { winnerId, winnerName, assignedSum, endAt } = options;
+    const { winnerId, winnerName, assignedValue, endAt, mode } = options;
+    const updates: Partial<InsertTask> = {
+      status: "IN_PROGRESS" as const,
+      executorId: winnerId || null,
+      executorName: winnerName || null,
+      auctionWinnerId: winnerId || null,
+      auctionWinnerName: winnerName || null,
+      auctionEndAt: endAt ?? new Date(),
+      updatedAt: new Date(),
+    };
+
+    if (assignedValue !== undefined && assignedValue !== null) {
+      if (mode === "TIME") {
+        updates.earnedTimeMinutes = Math.round(assignedValue);
+        updates.earnedMoney = null;
+      } else {
+        updates.earnedMoney = assignedValue.toFixed(2);
+        updates.earnedTimeMinutes = null;
+      }
+    }
+
     const [task] = await db
       .update(tasks)
-      .set({
-        status: "IN_PROGRESS" as const,
-        executorId: winnerId || null,
-        executorName: winnerName || null,
-        auctionAssignedSum: assignedSum || null,
-        auctionWinnerId: winnerId || null,
-        auctionWinnerName: winnerName || null,
-        auctionEndAt: endAt ?? new Date(),
-        updatedAt: new Date(),
-      })
+      .set(updates as any)
       .where(
         and(
           eq(tasks.id, taskId),
@@ -781,16 +793,10 @@ export class DbStorage implements IStorage {
 
     const [sumRow] = await db
       .select({
-        value: sql<string>`coalesce(sum(${tasks.auctionAssignedSum}), '0')`
+        value: sql<string>`coalesce(sum(CASE WHEN ${tasks.auctionMode} = 'MONEY' THEN ${tasks.earnedMoney} ELSE 0 END), '0')`
       })
       .from(tasks)
-      .where(
-        and(
-          ...baseConditions,
-          eq(tasks.status, "DONE" as const),
-          isNull(tasks.auctionAssignedSum)
-        )
-      );
+      .where(and(...baseConditions, eq(tasks.status, "DONE" as const)));
 
     const activeConditions: any[] = [
       inArray(tasks.type, ["UNIT", "DEPARTMENT"] as any),

@@ -1,8 +1,9 @@
 import type { AuctionBid, Task } from "@shared/schema";
-import type { TaskMode } from "@shared/taskMetadata";
+import { normalizeTaskMode, type TaskMode } from "@shared/taskMetadata";
 import { diffWorkingHours } from "@shared/utils";
 
 export const NO_BID_GRACE_HOURS = 3;
+export const AUCTION_RANGE_MULTIPLIER = 1.5;
 
 export function parseDecimal(value: string | number | null | undefined): number | null {
   if (value === null || value === undefined) {
@@ -15,15 +16,38 @@ export function parseDecimal(value: string | number | null | undefined): number 
   return numeric;
 }
 
-export function calculateAuctionPrice(task: Task, now: Date = new Date()): number | null {
-  if (!task.auctionInitialSum || !task.auctionMaxSum || !task.auctionStartAt || !task.auctionPlannedEndAt) {
+export function resolveAuctionMode(task: Task): TaskMode {
+  return normalizeTaskMode((task as any).auctionMode ?? (task as any).mode);
+}
+
+export function getAuctionBaseValue(task: Task, mode: TaskMode): number | null {
+  if (mode === "TIME") {
+    return typeof task.baseTimeMinutes === "number" && Number.isFinite(task.baseTimeMinutes)
+      ? task.baseTimeMinutes
+      : null;
+  }
+  return parseDecimal(task.basePrice as any);
+}
+
+export function getAuctionMaxValue(task: Task, mode: TaskMode): number | null {
+  const base = getAuctionBaseValue(task, mode);
+  if (base === null) return null;
+  if (mode === "TIME") {
+    return Math.max(1, Math.round(base * AUCTION_RANGE_MULTIPLIER));
+  }
+  return base * AUCTION_RANGE_MULTIPLIER;
+}
+
+export function calculateAuctionPrice(task: Task, now: Date = new Date(), mode?: TaskMode): number | null {
+  if (!task.auctionStartAt || !task.auctionPlannedEndAt) {
     return null;
   }
 
+  const resolvedMode = mode ?? resolveAuctionMode(task);
+  const initial = getAuctionBaseValue(task, resolvedMode);
+  const max = getAuctionMaxValue(task, resolvedMode);
   const start = new Date(task.auctionStartAt);
   const plannedEnd = new Date(task.auctionPlannedEndAt);
-  const initial = parseDecimal(task.auctionInitialSum);
-  const max = parseDecimal(task.auctionMaxSum);
 
   if (
     initial === null ||
