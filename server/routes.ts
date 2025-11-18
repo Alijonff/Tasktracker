@@ -15,6 +15,7 @@ import {
   selectWinningBid,
   shouldAutoAssignToCreator,
 } from "./businessRules";
+import { filterOutAdminBids, isAdminUser } from "./utils/bidFilters";
 import { reassignTasksFromTerminatedEmployee } from "./services/employeeLifecycle";
 import { z } from "zod";
 import {
@@ -481,10 +482,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         continue;
       }
 
-      const bids = await storage.getTaskBids(task.id);
+      const bids = await filterOutAdminBids(await storage.getTaskBids(task.id));
 
       if (bids.length === 0) {
-        if (!shouldAutoAssignToCreator(task, now)) {
+        if (!shouldAutoAssignToCreator(task, now) || (await isAdminUser(task.creatorId))) {
           continue;
         }
 
@@ -503,7 +504,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       } else {
         const winningBid = selectWinningBid(bids, metadata.mode);
-        if (!winningBid) {
+        if (!winningBid || (await isAdminUser(winningBid.bidderId))) {
           continue;
         }
 
@@ -1648,6 +1649,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Пользователь не найден или деактивирован" });
       }
 
+      if (activeUser.role === "admin") {
+        return res.status(403).json({ error: "Администраторы не могут делать ставки" });
+      }
+
       if (activeUser.id === task.creatorId) {
         return res.status(400).json({ error: "Создатель задачи не может делать ставки" });
       }
@@ -1717,7 +1722,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Ставка должна быть ниже текущей цены" });
       }
 
-      const existingBids = await storage.getTaskBids(id);
+      const existingBids = await filterOutAdminBids(await storage.getTaskBids(id));
       const currentWinningBid = selectWinningBid(existingBids, metadata.mode);
 
       if (currentWinningBid) {
