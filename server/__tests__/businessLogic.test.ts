@@ -33,7 +33,7 @@ test("calculateAuctionPrice плавно увеличивает стоимост
   assert.equal(calculateAuctionPrice(task, afterEnd), 150);
 });
 
-test("calculateAuctionPrice возвращает стартовую цену если есть ставки", () => {
+test("calculateAuctionPrice возвращает сохранённую цену если есть ставки", () => {
   const start = new Date("2024-01-01T09:00:00Z");
   const plannedEnd = new Date(start.getTime() + 24 * 60 * 60 * 1000);
   const task = createAuctionTask({
@@ -42,6 +42,23 @@ test("calculateAuctionPrice возвращает стартовую цену е�
     basePrice: "200",
     auctionMode: "MONEY",
     auctionHasBids: true,
+    currentPrice: "230",
+  });
+
+  const later = new Date(start.getTime() + 20 * 60 * 60 * 1000);
+  assert.equal(calculateAuctionPrice(task, later), 230);
+});
+
+test("calculateAuctionPrice использует базовую цену если сохранённое значение отсутствует", () => {
+  const start = new Date("2024-01-01T09:00:00Z");
+  const plannedEnd = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+  const task = createAuctionTask({
+    auctionStartAt: start,
+    auctionPlannedEndAt: plannedEnd,
+    basePrice: "200",
+    auctionMode: "MONEY",
+    auctionHasBids: true,
+    currentPrice: null,
   });
 
   const later = new Date(start.getTime() + 20 * 60 * 60 * 1000);
@@ -145,6 +162,7 @@ function createAuctionTask(overrides: Partial<Task> = {}): Task {
     auctionPlannedEndAt: overrides.auctionPlannedEndAt ?? new Date(now.getTime() + 24 * 60 * 60 * 1000),
     auctionEndAt: overrides.auctionEndAt ?? null,
     basePrice: overrides.basePrice ?? "100",
+    currentPrice: overrides.currentPrice ?? null,
     baseTimeMinutes: overrides.baseTimeMinutes ?? null,
     earnedMoney: overrides.earnedMoney ?? null,
     earnedTimeMinutes: overrides.earnedTimeMinutes ?? null,

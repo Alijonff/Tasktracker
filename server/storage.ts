@@ -104,7 +104,7 @@ export interface IStorage {
 
   // Auction Bids
   getTaskBids(taskId: string): Promise<AuctionBid[]>;
-  createBid(bid: InsertBid): Promise<AuctionBid>;
+  createBid(bid: InsertBid, options?: { currentAuctionAmount?: number | null }): Promise<AuctionBid>;
   deleteEmployeeBids(employeeId: string): Promise<string[]>;
   deactivateBidsForTask(taskId: string): Promise<void>;
   deactivateBidsForEmployee(employeeId: string, filters?: { departmentId?: string; divisionId?: string }): Promise<void>;
@@ -454,13 +454,16 @@ export class DbStorage implements IStorage {
       );
   }
 
-  async createBid(bidData: InsertBid): Promise<AuctionBid> {
+  async createBid(bidData: InsertBid, options?: { currentAuctionAmount?: number | null }): Promise<AuctionBid> {
     return await db.transaction(async (tx) => {
       const [bid] = await tx.insert(auctionBids).values(bidData as any).returning();
-      await tx
-        .update(tasks)
-        .set({ auctionHasBids: true })
-        .where(eq(tasks.id, bidData.taskId));
+      const updates: Partial<InsertTask> = { auctionHasBids: true, updatedAt: new Date() };
+
+      if (options?.currentAuctionAmount !== undefined && options?.currentAuctionAmount !== null) {
+        updates.currentPrice = options.currentAuctionAmount as any;
+      }
+
+      await tx.update(tasks).set(updates as any).where(eq(tasks.id, bidData.taskId));
       return bid;
     });
   }
