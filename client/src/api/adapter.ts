@@ -28,6 +28,11 @@ export interface AuctionTaskSummary {
   leadingBidderId?: string;
   leadingBidderName?: string;
   canBid: boolean;
+  earnedMoney?: string | number | null;
+  earnedTimeMinutes?: number | null;
+  assignedPoints?: number | null;
+  updatedAt?: string | null;
+  doneAt?: string | null;
 }
 
 export interface ListTasksParams {
@@ -123,6 +128,11 @@ function transformTask(task: Task): AuctionTaskSummary {
     deadline: new Date(task.deadline).toISOString(),
     startingPrice,
     currentPrice,
+    earnedMoney: task.earnedMoney ?? undefined,
+    earnedTimeMinutes: task.earnedTimeMinutes ?? undefined,
+    assignedPoints: task.assignedPoints ?? undefined,
+    updatedAt: task.updatedAt ? new Date(task.updatedAt).toISOString() : undefined,
+    doneAt: task.doneAt ? new Date(task.doneAt).toISOString() : undefined,
     bidsCount: 0,
     leadingBidderId: task.auctionWinnerId ?? undefined,
     leadingBidderName: task.auctionWinnerName ?? undefined,
