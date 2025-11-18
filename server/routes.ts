@@ -241,28 +241,16 @@ function moveToNextWeekdayStart(date: Date): Date {
 }
 
 function calculateAuctionEnd(start: Date): Date {
-  let current = new Date(start);
-  let remaining = 24 * 60 * 60 * 1000; // 24 hours in ms
+  const deadline = new Date(start);
 
-  if (Number.isNaN(current.getTime())) {
+  if (Number.isNaN(deadline.getTime())) {
     return start;
   }
 
-  while (remaining > 0) {
-    if (isWeekend(current)) {
-      current = moveToNextWeekdayStart(current);
-      continue;
-    }
+  deadline.setDate(deadline.getDate() + 1);
+  deadline.setHours(18, 0, 0, 0);
 
-    const dayEnd = new Date(current);
-    dayEnd.setHours(24, 0, 0, 0);
-    const available = dayEnd.getTime() - current.getTime();
-    const consumed = Math.min(available, remaining);
-    current = new Date(current.getTime() + consumed);
-    remaining -= consumed;
-  }
-
-  return current;
+  return deadline;
 }
 
 function calculateReviewDeadline(start: Date): Date {
@@ -484,7 +472,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       if (!task.auctionPlannedEndAt) continue;
       const plannedEnd = new Date(task.auctionPlannedEndAt);
-      if (Number.isNaN(plannedEnd.getTime()) || plannedEnd.getTime() > now.getTime()) {
+      if (Number.isNaN(plannedEnd.getTime())) {
+        continue;
+      }
+
+      const closingTime = plannedEnd.getTime() + NO_BID_GRACE_HOURS * 60 * 60 * 1000;
+      if (closingTime > now.getTime()) {
         continue;
       }
 
