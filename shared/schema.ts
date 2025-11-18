@@ -152,11 +152,12 @@ export const tasks = pgTable("tasks", {
   doneAt: timestamp("done_at"),
   rating: decimal("rating", { precision: 3, scale: 2 }),
   assignedPoints: integer("assigned_points"),
-  auctionMode: auctionModeEnum("auction_mode").notNull().default("MONEY"),
+  auctionMode: auctionModeEnum("auction_mode"),
   auctionStartAt: timestamp("auction_start_at"),
   auctionPlannedEndAt: timestamp("auction_planned_end_at"),
   auctionEndAt: timestamp("auction_end_at"),
   basePrice: decimal("base_price", { precision: 10, scale: 2 }),
+  currentPrice: decimal("current_price", { precision: 10, scale: 2 }),
   baseTimeMinutes: integer("base_time_minutes"),
   earnedMoney: decimal("earned_money", { precision: 10, scale: 2 }),
   earnedTimeMinutes: integer("earned_time_minutes"),
@@ -243,6 +244,24 @@ export const pointTransactions = pgTable("point_transactions", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const taskAttachments = pgTable("task_attachments", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  taskId: varchar("task_id")
+    .notNull()
+    .references(() => tasks.id, { onDelete: "cascade" }),
+  uploaderId: varchar("uploader_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  uploaderName: text("uploader_name").notNull(),
+  filename: text("filename").notNull(),
+  filesizeBytes: integer("filesize_bytes").notNull(),
+  storagePath: text("storage_path").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  deletedAt: timestamp("deleted_at"),
+});
+
 // TypeScript types from tables
 export type Department = typeof departments.$inferSelect;
 export type Management = typeof managements.$inferSelect;
@@ -253,6 +272,7 @@ export type AuctionBid = typeof auctionBids.$inferSelect;
 export type TaskComment = typeof taskComments.$inferSelect;
 export type TimeLog = typeof timeLogs.$inferSelect;
 export type PointTransaction = typeof pointTransactions.$inferSelect;
+export type TaskAttachment = typeof taskAttachments.$inferSelect;
 
 export type Grade = (typeof gradeEnum.enumValues)[number];
 
@@ -327,6 +347,14 @@ export const insertPointTransactionSchema = createInsertSchema(
   createdAt: true,
 });
 
+export const insertTaskAttachmentSchema = createInsertSchema(
+  taskAttachments,
+).omit({
+  id: true,
+  createdAt: true,
+  deletedAt: true,
+});
+
 export const insertUserSchema = createInsertSchema(users)
   .omit({
     id: true,
@@ -371,6 +399,7 @@ export type InsertTask = z.infer<typeof insertTaskSchema>;
 export type InsertBid = z.infer<typeof insertBidSchema>;
 export type InsertComment = z.infer<typeof insertCommentSchema>;
 export type InsertTimeLog = z.infer<typeof insertTimeLogSchema>;
+export type InsertTaskAttachment = z.infer<typeof insertTaskAttachmentSchema>;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type Login = z.infer<typeof loginSchema>;
 

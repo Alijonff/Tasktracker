@@ -8,6 +8,7 @@ import {
   users,
   pointTransactions,
   taskComments,
+  taskAttachments,
   type Department,
   type Management,
   type Division,
@@ -15,11 +16,13 @@ import {
   type AuctionBid,
   type User,
   type PointTransaction,
+  type TaskAttachment,
   type InsertTask,
   type InsertBid,
   type InsertDepartment,
   type InsertManagement,
   type InsertDivision,
+  type InsertTaskAttachment,
   type Grade,
 } from "@shared/schema";
 import { type TaskMode } from "@shared/taskMetadata";
@@ -103,6 +106,8 @@ export interface IStorage {
   getTaskBids(taskId: string): Promise<AuctionBid[]>;
   createBid(bid: InsertBid): Promise<AuctionBid>;
   deleteEmployeeBids(employeeId: string): Promise<string[]>;
+  deactivateBidsForTask(taskId: string): Promise<void>;
+  deactivateBidsForEmployee(employeeId: string, filters?: { departmentId?: string; divisionId?: string }): Promise<void>;
 
   addTaskComment(comment: {
     taskId: string;
@@ -155,6 +160,12 @@ export interface IStorage {
     activeAuctionsCount: number;
     backlogCount: number;
   }>;
+
+  // Task Attachments
+  getTaskAttachments(taskId: string): Promise<TaskAttachment[]>;
+  createTaskAttachment(data: InsertTaskAttachment): Promise<TaskAttachment>;
+  deleteTaskAttachment(id: string): Promise<void>;
+  getAttachmentCount(taskId: string): Promise<number>;
 }
 
 export class DbStorage implements IStorage {
@@ -482,6 +493,41 @@ export class DbStorage implements IStorage {
     });
   }
 
+  async deactivateBidsForTask(taskId: string): Promise<void> {
+    await db
+      .update(auctionBids)
+      .set({ isActive: false })
+      .where(eq(auctionBids.taskId, taskId));
+  }
+
+  async deactivateBidsForEmployee(
+    employeeId: string,
+    filters?: { departmentId?: string; divisionId?: string }
+  ): Promise<void> {
+    const conditions: any[] = [eq(auctionBids.bidderId, employeeId)];
+
+    if (filters?.departmentId || filters?.divisionId) {
+      const tasksSubquery = db
+        .select({ id: tasks.id })
+        .from(tasks)
+        .where(
+          and(
+            filters.departmentId ? eq(tasks.departmentId, filters.departmentId) : undefined,
+            filters.divisionId ? eq(tasks.divisionId, filters.divisionId) : undefined
+          )
+        );
+
+      conditions.push(
+        sql`${auctionBids.taskId} IN (${tasksSubquery})`
+      );
+    }
+
+    await db
+      .update(auctionBids)
+      .set({ isActive: false })
+      .where(and(...conditions));
+  }
+
   async addTaskComment(comment: {
     taskId: string;
     authorId: string;
@@ -745,7 +791,6 @@ export class DbStorage implements IStorage {
       auctionWinnerId: winnerId || null,
       auctionWinnerName: winnerName || null,
       auctionEndAt: endAt ?? new Date(),
-      updatedAt: new Date(),
     };
 
     if (assignedValue !== undefined && assignedValue !== null) {
@@ -827,6 +872,38 @@ export class DbStorage implements IStorage {
       activeAuctionsCount: Number(activeRow?.value ?? 0),
       backlogCount: Number(backlogRow?.value ?? 0),
     };
+  }
+
+  // Task Attachments
+  async getTaskAttachments(taskId: string): Promise<TaskAttachment[]> {
+    return await db
+      .select()
+      .from(taskAttachments)
+      .where(and(eq(taskAttachments.taskId, taskId), isNull(taskAttachments.deletedAt)))
+      .orderBy(desc(taskAttachments.createdAt));
+  }
+
+  async createTaskAttachment(data: InsertTaskAttachment): Promise<TaskAttachment> {
+    const [attachment] = await db
+      .insert(taskAttachments)
+      .values(data as any)
+      .returning();
+    return attachment;
+  }
+
+  async deleteTaskAttachment(id: string): Promise<void> {
+    await db
+      .update(taskAttachments)
+      .set({ deletedAt: new Date() })
+      .where(eq(taskAttachments.id, id));
+  }
+
+  async getAttachmentCount(taskId: string): Promise<number> {
+    const [result] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(taskAttachments)
+      .where(and(eq(taskAttachments.taskId, taskId), isNull(taskAttachments.deletedAt)));
+    return Number(result?.count ?? 0);
   }
 }
 
