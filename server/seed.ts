@@ -25,7 +25,6 @@ async function seed() {
     name: "Департамент разработки продуктов",
     leaderId: "emp-1",
     leaderName: "Александр Петров",
-    rating: "4.7",
     employeeCount: 18,
   }).returning();
 
@@ -38,7 +37,6 @@ async function seed() {
     departmentId: dept.id,
     leaderId: "emp-2",
     leaderName: "Мария Иванова",
-    rating: "4.8",
     employeeCount: 10,
   }).returning();
 
@@ -48,7 +46,6 @@ async function seed() {
     departmentId: dept.id,
     leaderId: "emp-3",
     leaderName: "Дмитрий Смирнов",
-    rating: "4.6",
     employeeCount: 8,
   }).returning();
 
@@ -62,7 +59,6 @@ async function seed() {
     departmentId: dept.id,
     leaderId: "emp-4",
     leaderName: "Елена Соколова",
-    rating: "4.9",
     employeeCount: 5,
   }).returning();
 
@@ -73,7 +69,6 @@ async function seed() {
     departmentId: dept.id,
     leaderId: "emp-5",
     leaderName: "Игорь Васильев",
-    rating: "4.7",
     employeeCount: 5,
   }).returning();
 
@@ -84,7 +79,6 @@ async function seed() {
     departmentId: dept.id,
     leaderId: "emp-6",
     leaderName: "Ольга Новикова",
-    rating: "4.8",
     employeeCount: 4,
   }).returning();
 
@@ -95,7 +89,6 @@ async function seed() {
     departmentId: dept.id,
     leaderId: "emp-7",
     leaderName: "Сергей Морозов",
-    rating: "4.5",
     employeeCount: 4,
   }).returning();
 
@@ -104,32 +97,32 @@ async function seed() {
   // Create employees
   const employeesData = [
     // Leaders
-    { id: "emp-1", name: "Александр Петров", email: "a.petrov@company.com", divisionId: div1[0].id, managementId: mgmt1[0].id, departmentId: dept.id, role: "director" as const, rating: "4.9", completedTasks: 145, totalHours: "2340" },
-    { id: "emp-2", name: "Мария Иванова", email: "m.ivanova@company.com", divisionId: div1[0].id, managementId: mgmt1[0].id, departmentId: dept.id, role: "manager" as const, rating: "4.8", completedTasks: 132, totalHours: "2120" },
-    { id: "emp-3", name: "Дмитрий Смирнов", email: "d.smirnov@company.com", divisionId: div3[0].id, managementId: mgmt2[0].id, departmentId: dept.id, role: "manager" as const, rating: "4.7", completedTasks: 128, totalHours: "2050" },
-    { id: "emp-4", name: "Елена Соколова", email: "e.sokolova@company.com", divisionId: div1[0].id, managementId: mgmt1[0].id, departmentId: dept.id, role: "senior" as const, rating: "4.9", completedTasks: 156, totalHours: "2480" },
-    { id: "emp-5", name: "Игорь Васильев", email: "i.vasiliev@company.com", divisionId: div2[0].id, managementId: mgmt1[0].id, departmentId: dept.id, role: "senior" as const, rating: "4.7", completedTasks: 142, totalHours: "2280" },
-    { id: "emp-6", name: "Ольга Новикова", email: "o.novikova@company.com", divisionId: div3[0].id, managementId: mgmt2[0].id, departmentId: dept.id, role: "senior" as const, rating: "4.8", completedTasks: 138, totalHours: "2200" },
-    { id: "emp-7", name: "Сергей Морозов", email: "s.morozov@company.com", divisionId: div4[0].id, managementId: mgmt2[0].id, departmentId: dept.id, role: "senior" as const, rating: "4.6", completedTasks: 125, totalHours: "2000" },
+    { id: "emp-1", name: "Александр Петров", email: "a.petrov@company.com", divisionId: div1[0].id, managementId: mgmt1[0].id, departmentId: dept.id, role: "director" as const, positionType: "director" as const },
+    { id: "emp-2", name: "Мария Иванова", email: "m.ivanova@company.com", divisionId: div1[0].id, managementId: mgmt1[0].id, departmentId: dept.id, role: "manager" as const, positionType: "management_head" as const },
+    { id: "emp-3", name: "Дмитрий Смирнов", email: "d.smirnov@company.com", divisionId: div3[0].id, managementId: mgmt2[0].id, departmentId: dept.id, role: "manager" as const, positionType: "management_head" as const },
+    { id: "emp-4", name: "Елена Соколова", email: "e.sokolova@company.com", divisionId: div1[0].id, managementId: mgmt1[0].id, departmentId: dept.id, role: "manager" as const, positionType: "division_head" as const },
+    { id: "emp-5", name: "Игорь Васильев", email: "i.vasiliev@company.com", divisionId: div2[0].id, managementId: mgmt1[0].id, departmentId: dept.id, role: "manager" as const, positionType: "division_head" as const },
+    { id: "emp-6", name: "Ольга Новикова", email: "o.novikova@company.com", divisionId: div3[0].id, managementId: mgmt2[0].id, departmentId: dept.id, role: "manager" as const, positionType: "division_head" as const },
+    { id: "emp-7", name: "Сергей Морозов", email: "s.morozov@company.com", divisionId: div4[0].id, managementId: mgmt2[0].id, departmentId: dept.id, role: "manager" as const, positionType: "division_head" as const },
     
     // Backend team
-    { id: "emp-8", name: "Анна Козлова", email: "a.kozlova@company.com", divisionId: div1[0].id, managementId: mgmt1[0].id, departmentId: dept.id, role: "senior" as const, rating: "4.8", completedTasks: 98, totalHours: "1680" },
-    { id: "emp-9", name: "Павел Орлов", email: "p.orlov@company.com", divisionId: div1[0].id, managementId: mgmt1[0].id, departmentId: dept.id, role: "employee" as const, rating: "4.5", completedTasks: 76, totalHours: "1420" },
-    { id: "emp-10", name: "Татьяна Волкова", email: "t.volkova@company.com", divisionId: div1[0].id, managementId: mgmt1[0].id, departmentId: dept.id, role: "employee" as const, rating: "4.6", completedTasks: 82, totalHours: "1540" },
+    { id: "emp-8", name: "Анна Козлова", email: "a.kozlova@company.com", divisionId: div1[0].id, managementId: mgmt1[0].id, departmentId: dept.id, role: "senior" as const, positionType: "senior" as const },
+    { id: "emp-9", name: "Павел Орлов", email: "p.orlov@company.com", divisionId: div1[0].id, managementId: mgmt1[0].id, departmentId: dept.id, role: "employee" as const, positionType: "employee" as const },
+    { id: "emp-10", name: "Татьяна Волкова", email: "t.volkova@company.com", divisionId: div1[0].id, managementId: mgmt1[0].id, departmentId: dept.id, role: "employee" as const, positionType: "employee" as const },
     
     // Frontend team
-    { id: "emp-11", name: "Михаил Лебедев", email: "m.lebedev@company.com", divisionId: div2[0].id, managementId: mgmt1[0].id, departmentId: dept.id, role: "senior" as const, rating: "4.7", completedTasks: 92, totalHours: "1720" },
-    { id: "emp-12", name: "Наталья Егорова", email: "n.egorova@company.com", divisionId: div2[0].id, managementId: mgmt1[0].id, departmentId: dept.id, role: "employee" as const, rating: "4.4", completedTasks: 68, totalHours: "1320" },
-    { id: "emp-13", name: "Владимир Киселёв", email: "v.kiselev@company.com", divisionId: div2[0].id, managementId: mgmt1[0].id, departmentId: dept.id, role: "employee" as const, rating: "4.5", completedTasks: 72, totalHours: "1380" },
+    { id: "emp-11", name: "Михаил Лебедев", email: "m.lebedev@company.com", divisionId: div2[0].id, managementId: mgmt1[0].id, departmentId: dept.id, role: "senior" as const, positionType: "senior" as const },
+    { id: "emp-12", name: "Наталья Егорова", email: "n.egorova@company.com", divisionId: div2[0].id, managementId: mgmt1[0].id, departmentId: dept.id, role: "employee" as const, positionType: "employee" as const },
+    { id: "emp-13", name: "Владимир Киселёв", email: "v.kiselev@company.com", divisionId: div2[0].id, managementId: mgmt1[0].id, departmentId: dept.id, role: "employee" as const, positionType: "employee" as const },
     
     // QA team
-    { id: "emp-14", name: "Екатерина Павлова", email: "e.pavlova@company.com", divisionId: div3[0].id, managementId: mgmt2[0].id, departmentId: dept.id, role: "senior" as const, rating: "4.7", completedTasks: 104, totalHours: "1820" },
-    { id: "emp-15", name: "Андрей Федоров", email: "a.fedorov@company.com", divisionId: div3[0].id, managementId: mgmt2[0].id, departmentId: dept.id, role: "employee" as const, rating: "4.3", completedTasks: 64, totalHours: "1240" },
-    { id: "emp-16", name: "Юлия Романова", email: "y.romanova@company.com", divisionId: div3[0].id, managementId: mgmt2[0].id, departmentId: dept.id, role: "employee" as const, rating: "4.4", completedTasks: 71, totalHours: "1360" },
+    { id: "emp-14", name: "Екатерина Павлова", email: "e.pavlova@company.com", divisionId: div3[0].id, managementId: mgmt2[0].id, departmentId: dept.id, role: "senior" as const, positionType: "senior" as const },
+    { id: "emp-15", name: "Андрей Федоров", email: "a.fedorov@company.com", divisionId: div3[0].id, managementId: mgmt2[0].id, departmentId: dept.id, role: "employee" as const, positionType: "employee" as const },
+    { id: "emp-16", name: "Юлия Романова", email: "y.romanova@company.com", divisionId: div3[0].id, managementId: mgmt2[0].id, departmentId: dept.id, role: "employee" as const, positionType: "employee" as const },
     
     // DevOps team
-    { id: "emp-17", name: "Денис Семёнов", email: "d.semenov@company.com", divisionId: div4[0].id, managementId: mgmt2[0].id, departmentId: dept.id, role: "senior" as const, rating: "4.6", completedTasks: 87, totalHours: "1640" },
-    { id: "emp-18", name: "Светлана Захарова", email: "s.zakharova@company.com", divisionId: div4[0].id, managementId: mgmt2[0].id, departmentId: dept.id, role: "employee" as const, rating: "4.2", completedTasks: 58, totalHours: "1180" },
+    { id: "emp-17", name: "Денис Семёнов", email: "d.semenov@company.com", divisionId: div4[0].id, managementId: mgmt2[0].id, departmentId: dept.id, role: "senior" as const, positionType: "senior" as const },
+    { id: "emp-18", name: "Светлана Захарова", email: "s.zakharova@company.com", divisionId: div4[0].id, managementId: mgmt2[0].id, departmentId: dept.id, role: "employee" as const, positionType: "employee" as const },
   ];
 
   const usersData = employeesData.map((employee) => ({
@@ -159,9 +152,6 @@ async function seed() {
       executorName: "Анна Козлова",
       minimumGrade: "C" as const,
       deadline: new Date("2024-12-20"),
-      estimatedHours: "24",
-      actualHours: "12",
-      rating: "4.8",
     },
     {
       id: "task-2",
@@ -178,9 +168,6 @@ async function seed() {
       executorName: "Павел Орлов",
       minimumGrade: "D" as const,
       deadline: new Date("2024-12-18"),
-      estimatedHours: "16",
-      actualHours: "15",
-      rating: "4.7",
     },
     {
       id: "task-3",
@@ -195,12 +182,28 @@ async function seed() {
       creatorName: "Александр Петров",
       minimumGrade: "C" as const,
       deadline: new Date("2024-12-25"),
-      estimatedHours: "32",
-      rating: "4.9",
       auctionStartAt: new Date("2024-12-16T09:00:00Z"),
       auctionPlannedEndAt: new Date("2024-12-17T09:00:00Z"),
       auctionMode: "TIME" as const,
       baseTimeMinutes: 32 * 60,
+    },
+    {
+      id: "task-3b",
+      title: "Рефакторинг модуля аутентификации",
+      description: "Провести рефакторинг кода аутентификации для повышения безопасности",
+      status: "BACKLOG" as const,
+      type: "UNIT" as const,
+      departmentId: dept.id,
+      managementId: mgmt1[0].id,
+      divisionId: div1[0].id,
+      creatorId: "emp-2",
+      creatorName: "Мария Иванова",
+      minimumGrade: "C" as const,
+      deadline: new Date("2024-12-26"),
+      auctionStartAt: new Date("2024-12-16T10:00:00Z"),
+      auctionPlannedEndAt: new Date("2024-12-17T10:00:00Z"),
+      auctionMode: "MONEY" as const,
+      basePrice: "5000.00",
     },
     {
       id: "task-4",
@@ -217,9 +220,6 @@ async function seed() {
       executorName: "Михаил Лебедев",
       minimumGrade: "C" as const,
       deadline: new Date("2024-12-22"),
-      estimatedHours: "28",
-      actualHours: "16",
-      rating: "4.6",
     },
     {
       id: "task-5",
@@ -234,7 +234,6 @@ async function seed() {
       creatorName: "Мария Иванова",
       minimumGrade: "C" as const,
       deadline: new Date("2024-12-30"),
-      estimatedHours: "24",
       auctionStartAt: new Date("2024-12-17T09:00:00Z"),
       auctionPlannedEndAt: new Date("2024-12-18T09:00:00Z"),
       auctionMode: "TIME" as const,
@@ -255,9 +254,6 @@ async function seed() {
       executorName: "Наталья Егорова",
       minimumGrade: "D" as const,
       deadline: new Date("2024-12-15"),
-      estimatedHours: "20",
-      actualHours: "18",
-      rating: "4.5",
       doneAt: new Date("2024-12-15T18:00:00Z"),
     },
     {
@@ -275,9 +271,6 @@ async function seed() {
       executorName: "Екатерина Павлова",
       minimumGrade: "C" as const,
       deadline: new Date("2024-12-21"),
-      estimatedHours: "30",
-      actualHours: "20",
-      rating: "4.7",
     },
     {
       id: "task-8",
@@ -294,7 +287,6 @@ async function seed() {
       executorName: "Андрей Федоров",
       minimumGrade: "D" as const,
       deadline: new Date("2024-12-28"),
-      estimatedHours: "16",
     },
     {
       id: "task-9",
@@ -311,9 +303,6 @@ async function seed() {
       executorName: "Денис Семёнов",
       minimumGrade: "C" as const,
       deadline: new Date("2024-12-19"),
-      estimatedHours: "22",
-      actualHours: "21",
-      rating: "4.6",
     },
     {
       id: "task-10",
@@ -328,7 +317,6 @@ async function seed() {
       creatorName: "Александр Петров",
       minimumGrade: "C" as const,
       deadline: new Date("2024-12-27"),
-      estimatedHours: "26",
       auctionStartAt: new Date("2024-12-18T09:00:00Z"),
       auctionPlannedEndAt: new Date("2024-12-19T09:00:00Z"),
       auctionMode: "TIME" as const,
@@ -337,7 +325,7 @@ async function seed() {
   ];
 
   await db.insert(tasks).values(tasksData);
-  console.log("✓ Created 10 tasks");
+  console.log("✓ Created 11 tasks");
 
   // Create auction bids
   const bidsData = [
@@ -346,7 +334,9 @@ async function seed() {
       taskId: "task-3",
       bidderId: "emp-8",
       bidderName: "Анна Козлова",
+      bidderGrade: "C" as const,
       bidderRating: "4.8",
+      bidderPoints: 98,
       valueTimeMinutes: 28 * 60,
     },
     {
@@ -354,7 +344,9 @@ async function seed() {
       taskId: "task-3",
       bidderId: "emp-10",
       bidderName: "Татьяна Волкова",
+      bidderGrade: "D" as const,
       bidderRating: "4.6",
+      bidderPoints: 82,
       valueTimeMinutes: 30 * 60,
     },
     {
@@ -362,7 +354,9 @@ async function seed() {
       taskId: "task-5",
       bidderId: "emp-11",
       bidderName: "Михаил Лебедев",
+      bidderGrade: "C" as const,
       bidderRating: "4.7",
+      bidderPoints: 92,
       valueTimeMinutes: 22 * 60,
     },
     {
@@ -370,7 +364,9 @@ async function seed() {
       taskId: "task-5",
       bidderId: "emp-13",
       bidderName: "Владимир Киселёв",
+      bidderGrade: "D" as const,
       bidderRating: "4.5",
+      bidderPoints: 72,
       valueTimeMinutes: 23 * 60,
     },
     {
@@ -378,13 +374,35 @@ async function seed() {
       taskId: "task-10",
       bidderId: "emp-17",
       bidderName: "Денис Семёнов",
+      bidderGrade: "C" as const,
       bidderRating: "4.6",
+      bidderPoints: 87,
       valueTimeMinutes: 24 * 60,
+    },
+    {
+      id: "bid-6",
+      taskId: "task-3b",
+      bidderId: "emp-8",
+      bidderName: "Анна Козлова",
+      bidderGrade: "C" as const,
+      bidderRating: "4.8",
+      bidderPoints: 98,
+      valueMoney: "4500.00",
+    },
+    {
+      id: "bid-7",
+      taskId: "task-3b",
+      bidderId: "emp-9",
+      bidderName: "Павел Орлов",
+      bidderGrade: "D" as const,
+      bidderRating: "4.5",
+      bidderPoints: 76,
+      valueMoney: "4700.00",
     },
   ];
 
   await db.insert(auctionBids).values(bidsData);
-  console.log("✓ Created 5 auction bids");
+  console.log("✓ Created 7 auction bids");
 
   console.log("✅ Database seeded successfully!");
 }
