@@ -57,7 +57,7 @@ export async function processExpiredAuctions(): Promise<void> {
             continue;
           }
 
-          const assignedValue = calculateEarnedValue(auction, null, mode);
+          const assignedValue = calculateEarnedValue(auction, null, mode, now);
 
           await storage.closeAuction(auction.id, {
             winnerId: auction.creatorId,
@@ -76,7 +76,7 @@ export async function processExpiredAuctions(): Promise<void> {
             continue;
           }
 
-          const assignedValue = calculateEarnedValue(auction, winningBid, mode);
+          const assignedValue = calculateEarnedValue(auction, winningBid, mode, now);
 
           await storage.closeAuction(auction.id, {
             winnerId: winningBid.bidderId,

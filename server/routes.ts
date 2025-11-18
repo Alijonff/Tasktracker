@@ -5,6 +5,7 @@ import { authenticateUser, hashPassword, verifyPassword } from "./auth";
 import {
   AUCTION_RANGE_MULTIPLIER,
   calculateAuctionPrice,
+  calculateEarnedValue,
   calculateOverduePenaltyHours,
   compareBids,
   getAuctionBaseValue,
@@ -481,32 +482,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const bids = await filterOutAdminBids(await storage.getTaskBids(task.id));
 
-      if (bids.length === 0) {
-        if (!shouldAutoAssignToCreator(task, now) || (await isAdminUser(task.creatorId))) {
-          continue;
-        }
+        if (bids.length === 0) {
+          if (!shouldAutoAssignToCreator(task, now) || (await isAdminUser(task.creatorId))) {
+            continue;
+          }
 
-        await storage.updateTask(task.id, {
-          status: "IN_PROGRESS" as any,
-          executorId: task.creatorId,
-          executorName: task.creatorName,
-          auctionWinnerId: task.creatorId,
-          auctionWinnerName: task.creatorName,
-          earnedMoney: metadata.mode === "MONEY" ? decimalToString(getAuctionMaxValue(task, metadata.mode) ?? 0) : null,
-          earnedTimeMinutes:
-            metadata.mode === "TIME"
-              ? getAuctionMaxValue(task, metadata.mode) ?? task.baseTimeMinutes ?? null
-              : null,
-          auctionEndAt: now,
-        });
-      } else {
-        const winningBid = selectWinningBid(bids, metadata.mode);
-        if (!winningBid || (await isAdminUser(winningBid.bidderId))) {
-          continue;
-        }
+          const assignedValue = calculateEarnedValue(task, null, metadata.mode, now);
 
-        const assignedValue = getBidValue(winningBid, metadata.mode);
-        const assignedSum = assignedValue ?? getAuctionMaxValue(task, metadata.mode);
+          await storage.updateTask(task.id, {
+            status: "IN_PROGRESS" as any,
+            executorId: task.creatorId,
+            executorName: task.creatorName,
+            auctionWinnerId: task.creatorId,
+            auctionWinnerName: task.creatorName,
+            earnedMoney:
+              metadata.mode === "MONEY" && assignedValue !== null && assignedValue !== undefined
+                ? decimalToString(assignedValue)
+                : null,
+            earnedTimeMinutes:
+              metadata.mode === "TIME" && assignedValue !== null ? Math.round(assignedValue) : null,
+            auctionEndAt: now,
+          });
+        } else {
+          const winningBid = selectWinningBid(bids, metadata.mode);
+          if (!winningBid || (await isAdminUser(winningBid.bidderId))) {
+            continue;
+          }
+
+          const assignedValue = calculateEarnedValue(task, winningBid, metadata.mode, now);
+          const assignedSum = assignedValue ?? getAuctionMaxValue(task, metadata.mode);
 
         await storage.updateTask(task.id, {
           status: "IN_PROGRESS" as any,

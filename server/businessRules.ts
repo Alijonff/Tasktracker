@@ -180,21 +180,17 @@ export function calculateOverduePenaltyHours(deadline: Date, completedAt: Date):
 export function calculateEarnedValue(
   task: Task,
   winningBid: AuctionBid | null,
-  mode: TaskMode
+  mode: TaskMode,
+  now: Date = new Date(),
 ): number | null {
-  if (mode === "TIME") {
-    if (winningBid) {
-      return getBidValue(winningBid, mode);
-    }
-    return getAuctionMaxValue(task, mode);
+  if (winningBid) {
+    return getBidValue(winningBid, mode);
   }
 
-  if (mode === "MONEY") {
-    if (winningBid) {
-      return getBidValue(winningBid, mode);
-    }
-    return getAuctionMaxValue(task, mode);
+  const currentValue = calculateAuctionPrice(task, now, mode);
+  if (currentValue !== null) {
+    return currentValue;
   }
 
-  return null;
+  return getAuctionMaxValue(task, mode);
 }
