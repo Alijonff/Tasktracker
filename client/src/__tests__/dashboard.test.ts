@@ -5,7 +5,7 @@ import { canCreateAuctionsForRole } from "@/pages/Dashboard";
 
 const cases: Array<[Parameters<typeof canCreateAuctionsForRole>[0], boolean]> = [
   [{ role: "director", canCreateAuctions: true } as any, true],
-  [{ role: "admin", canCreateAuctions: true } as any, true],
+  [{ role: "admin", canCreateAuctions: false } as any, false],
   [{ role: "employee", canCreateAuctions: false } as any, false],
   [null, false],
 ];
