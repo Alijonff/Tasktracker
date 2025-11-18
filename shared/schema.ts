@@ -29,6 +29,7 @@ export const taskStatusEnum = pgEnum("task_status", [
   "DONE",
 ]);
 export const taskTypeEnum = pgEnum("task_type", ["INDIVIDUAL", "UNIT", "DEPARTMENT"]);
+export const auctionModeEnum = pgEnum("auction_mode", ["MONEY", "TIME"]);
 export const positionTypeEnum = pgEnum("position_type", [
   "admin",
   "director",
@@ -151,18 +152,14 @@ export const tasks = pgTable("tasks", {
   doneAt: timestamp("done_at"),
   rating: decimal("rating", { precision: 3, scale: 2 }),
   assignedPoints: integer("assigned_points"),
+  auctionMode: auctionModeEnum("auction_mode").notNull().default("MONEY"),
   auctionStartAt: timestamp("auction_start_at"),
   auctionPlannedEndAt: timestamp("auction_planned_end_at"),
   auctionEndAt: timestamp("auction_end_at"),
-  auctionInitialSum: decimal("auction_initial_sum", {
-    precision: 10,
-    scale: 2,
-  }),
-  auctionMaxSum: decimal("auction_max_sum", { precision: 10, scale: 2 }),
-  auctionAssignedSum: decimal("auction_assigned_sum", {
-    precision: 10,
-    scale: 2,
-  }),
+  basePrice: decimal("base_price", { precision: 10, scale: 2 }),
+  baseTimeMinutes: integer("base_time_minutes"),
+  earnedMoney: decimal("earned_money", { precision: 10, scale: 2 }),
+  earnedTimeMinutes: integer("earned_time_minutes"),
   auctionWinnerId: varchar("auction_winner_id").references(() => users.id, {
     onDelete: "set null",
   }),

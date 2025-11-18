@@ -198,9 +198,9 @@ async function seed() {
       estimatedHours: "32",
       rating: "4.9",
       auctionStartAt: new Date("2024-12-16T09:00:00Z"),
-      auctionEndAt: new Date("2024-12-17T09:00:00Z"),
-      auctionInitialPrice: "32.00",
-      auctionMaxPrice: "48.00",
+      auctionPlannedEndAt: new Date("2024-12-17T09:00:00Z"),
+      auctionMode: "TIME" as const,
+      baseTimeMinutes: 32 * 60,
     },
     {
       id: "task-4",
@@ -236,9 +236,9 @@ async function seed() {
       deadline: new Date("2024-12-30"),
       estimatedHours: "24",
       auctionStartAt: new Date("2024-12-17T09:00:00Z"),
-      auctionEndAt: new Date("2024-12-18T09:00:00Z"),
-      auctionInitialPrice: "24.00",
-      auctionMaxPrice: "36.00",
+      auctionPlannedEndAt: new Date("2024-12-18T09:00:00Z"),
+      auctionMode: "TIME" as const,
+      baseTimeMinutes: 24 * 60,
     },
     {
       id: "task-6",
@@ -330,9 +330,9 @@ async function seed() {
       deadline: new Date("2024-12-27"),
       estimatedHours: "26",
       auctionStartAt: new Date("2024-12-18T09:00:00Z"),
-      auctionEndAt: new Date("2024-12-19T09:00:00Z"),
-      auctionInitialPrice: "26.00",
-      auctionMaxPrice: "39.00",
+      auctionPlannedEndAt: new Date("2024-12-19T09:00:00Z"),
+      auctionMode: "TIME" as const,
+      baseTimeMinutes: 26 * 60,
     },
   ];
 
@@ -341,11 +341,46 @@ async function seed() {
 
   // Create auction bids
   const bidsData = [
-    { id: "bid-1", taskId: "task-3", bidderId: "emp-8", bidderName: "Анна Козлова", bidderRating: "4.8", hours: "28" },
-    { id: "bid-2", taskId: "task-3", bidderId: "emp-10", bidderName: "Татьяна Волкова", bidderRating: "4.6", hours: "30" },
-    { id: "bid-3", taskId: "task-5", bidderId: "emp-11", bidderName: "Михаил Лебедев", bidderRating: "4.7", hours: "22" },
-    { id: "bid-4", taskId: "task-5", bidderId: "emp-13", bidderName: "Владимир Киселёв", bidderRating: "4.5", hours: "23" },
-    { id: "bid-5", taskId: "task-10", bidderId: "emp-17", bidderName: "Денис Семёнов", bidderRating: "4.6", hours: "24" },
+    {
+      id: "bid-1",
+      taskId: "task-3",
+      bidderId: "emp-8",
+      bidderName: "Анна Козлова",
+      bidderRating: "4.8",
+      valueTimeMinutes: 28 * 60,
+    },
+    {
+      id: "bid-2",
+      taskId: "task-3",
+      bidderId: "emp-10",
+      bidderName: "Татьяна Волкова",
+      bidderRating: "4.6",
+      valueTimeMinutes: 30 * 60,
+    },
+    {
+      id: "bid-3",
+      taskId: "task-5",
+      bidderId: "emp-11",
+      bidderName: "Михаил Лебедев",
+      bidderRating: "4.7",
+      valueTimeMinutes: 22 * 60,
+    },
+    {
+      id: "bid-4",
+      taskId: "task-5",
+      bidderId: "emp-13",
+      bidderName: "Владимир Киселёв",
+      bidderRating: "4.5",
+      valueTimeMinutes: 23 * 60,
+    },
+    {
+      id: "bid-5",
+      taskId: "task-10",
+      bidderId: "emp-17",
+      bidderName: "Денис Семёнов",
+      bidderRating: "4.6",
+      valueTimeMinutes: 24 * 60,
+    },
   ];
 
   await db.insert(auctionBids).values(bidsData);

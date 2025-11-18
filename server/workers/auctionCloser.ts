@@ -1,6 +1,13 @@
-import { calculateAuctionPrice, getBidValue, selectWinningBid, shouldAutoAssignToCreator } from "../businessRules";
+import {
+  calculateAuctionPrice,
+  getAuctionBaseValue,
+  getAuctionMaxValue,
+  getBidValue,
+  resolveAuctionMode,
+  selectWinningBid,
+  shouldAutoAssignToCreator,
+} from "../businessRules";
 import { storage } from "../storage";
-import { getTaskMetadata } from "../taskMetadataStore";
 
 export async function processExpiredReviews(): Promise<void> {
   try {
@@ -31,16 +38,6 @@ export async function processExpiredReviews(): Promise<void> {
   }
 }
 
-function formatAssignedSum(value: number | null, fallback: string | null, mode: string = "MONEY"): string | null {
-  if (value === null || Number.isNaN(value)) {
-    return fallback;
-  }
-  if (mode === "TIME") {
-    return Math.round(value).toString();
-  }
-  return value.toFixed(2);
-}
-
 export async function processExpiredAuctions(): Promise<void> {
   try {
     const expiredAuctions = await storage.getAuctionsToClose();
@@ -53,7 +50,7 @@ export async function processExpiredAuctions(): Promise<void> {
 
     for (const auction of expiredAuctions) {
       try {
-        const metadata = getTaskMetadata(auction.id);
+        const mode = resolveAuctionMode(auction);
         const bids = await storage.getTaskBids(auction.id);
         const now = new Date();
 
@@ -62,17 +59,15 @@ export async function processExpiredAuctions(): Promise<void> {
             continue;
           }
 
-          const calculatedPrice = calculateAuctionPrice(auction, now);
-          const assignedSum = formatAssignedSum(
-            calculatedPrice,
-            auction.auctionMaxSum ?? auction.auctionInitialSum ?? null,
-            metadata.mode,
-          );
+          const calculatedPrice = calculateAuctionPrice(auction, now, mode);
+          const assignedValue =
+            calculatedPrice ?? getAuctionMaxValue(auction, mode) ?? getAuctionBaseValue(auction, mode) ?? null;
 
           await storage.closeAuction(auction.id, {
             winnerId: auction.creatorId,
             winnerName: auction.creatorName,
-            assignedSum: assignedSum ?? undefined,
+            assignedValue: assignedValue ?? null,
+            mode,
             endAt: now,
           });
 
@@ -80,17 +75,18 @@ export async function processExpiredAuctions(): Promise<void> {
             `[AuctionCloser] Closed auction ${auction.id} without bids, assigned to creator ${auction.creatorName}`
           );
         } else {
-          const winningBid = selectWinningBid(bids, metadata.mode);
+          const winningBid = selectWinningBid(bids, mode);
           if (!winningBid) {
             continue;
           }
 
-          const assignedValue = getBidValue(winningBid, metadata.mode);
+          const assignedValue = getBidValue(winningBid, mode) ?? getAuctionMaxValue(auction, mode);
 
           await storage.closeAuction(auction.id, {
             winnerId: winningBid.bidderId,
             winnerName: winningBid.bidderName,
-            assignedSum: formatAssignedSum(assignedValue, auction.auctionMaxSum ?? null, metadata.mode) ?? undefined,
+            assignedValue: assignedValue ?? null,
+            mode,
             endAt: now,
           });
 

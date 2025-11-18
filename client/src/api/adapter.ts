@@ -82,21 +82,28 @@ function parseNumber(value: unknown): number | undefined {
 }
 
 function transformTask(task: Task): AuctionTaskSummary {
-  const mode = ((task as any).mode as TaskMode) ?? "MONEY";
+  const mode = ((task as any).auctionMode as TaskMode) ?? ((task as any).mode as TaskMode) ?? "MONEY";
   const taskType = ((task as any).taskType as TaskType) ?? (task.type as TaskType) ?? "DEPARTMENT";
   const startingPrice =
-    parseNumber((task as any).auctionInitialAmount) ??
-    parseNumber(task.auctionInitialSum) ??
-    parseNumber(task.auctionInitialPrice) ??
-    parseNumber(task.estimatedHours) ??
-    0;
+    mode === "TIME"
+      ? parseNumber((task as any).auctionInitialAmount) ?? parseNumber(task.baseTimeMinutes) ?? 0
+      : parseNumber((task as any).auctionInitialAmount) ??
+        parseNumber(task.basePrice) ??
+        parseNumber((task as any).auctionInitialPrice) ??
+        parseNumber(task.estimatedHours) ??
+        0;
   const currentPrice =
-    parseNumber((task as any).auctionCurrentAmount) ??
-    parseNumber(task.auctionAssignedSum) ??
-    parseNumber(task.auctionMaxSum) ??
-    parseNumber(task.auctionAssignedPrice) ??
-    parseNumber(task.auctionMaxPrice) ??
-    undefined;
+    mode === "TIME"
+      ? parseNumber((task as any).auctionCurrentAmount) ??
+        parseNumber(task.earnedTimeMinutes) ??
+        parseNumber(task.baseTimeMinutes)
+      : parseNumber((task as any).auctionCurrentAmount) ??
+        parseNumber(task.earnedMoney) ??
+        parseNumber(task.basePrice) ??
+        parseNumber((task as any).auctionMaxPrice) ??
+        parseNumber(task.auctionAssignedPrice) ??
+        parseNumber(task.auctionMaxPrice) ??
+        undefined;
 
   return {
     id: task.id,
