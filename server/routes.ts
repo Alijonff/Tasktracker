@@ -294,6 +294,7 @@ const createTaskSchema = z
     deadline: dateInputSchema,
     minimumGrade: gradeSchema.default("D"),
     departmentId: z.string().min(1, "Укажите департамент").optional(),
+    executorId: z.string().min(1, "Укажите исполнителя").optional(),
     auctionInitialSum: decimalNumberSchema,
   });
 
@@ -1268,16 +1269,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         allowedScopes.push({ departmentId: currentUser.departmentId, managementId: null });
       }
 
-      if (
-        currentUser.managementId &&
-        (currentUser.positionType === "management_head" || currentUser.positionType === "management_deputy")
-      ) {
-        const management = await storage.getManagement(currentUser.managementId);
-        if (management && management.isAutonomous) {
-          allowedScopes.push({ departmentId: management.departmentId, managementId: management.id });
-        }
-      }
-
       if (allowedScopes.length === 0) {
         return res.status(403).json({ error: "У вас нет прав для создания аукционов" });
       }
@@ -1307,6 +1298,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const basePrice = requestedMode === "MONEY" ? decimalToString(normalizedInitial) : null;
       const baseTime = requestedMode === "TIME" ? Math.round(normalizedInitial) : null;
 
+      let individualExecutor: User | null = null;
+
+      if (requestedTaskType === "INDIVIDUAL") {
+        if (!parsed.executorId) {
+          return res.status(400).json({ error: "Выберите исполнителя для задачи" });
+        }
+
+        const executor = await storage.getUserById(parsed.executorId);
+
+        if (!executor) {
+          return res.status(404).json({ error: "Исполнитель не найден" });
+        }
+
+        if ((executor as any).isActive === false) {
+          return res.status(400).json({ error: "Исполнитель недоступен" });
+        }
+
+        if (executor.role === "admin") {
+          return res.status(400).json({ error: "Нельзя назначить администратора" });
+        }
+
+        if (executor.departmentId !== selectedScope.departmentId) {
+          return res.status(400).json({ error: "Исполнитель должен принадлежать выбранному департаменту" });
+        }
+
+        if (executor.id === currentUser.id) {
+          return res.status(400).json({ error: "Нельзя назначить себя исполнителем" });
+        }
+
+        individualExecutor = executor;
+      }
+
       const taskData: Partial<Task> = {
         title: parsed.title,
         description: parsed.description,
@@ -1318,8 +1341,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         divisionId: null,
         creatorId: currentUser.id,
         creatorName: currentUser.name,
-        executorId: requestedTaskType === "INDIVIDUAL" ? currentUser.id : null,
-        executorName: requestedTaskType === "INDIVIDUAL" ? currentUser.name : null,
+        executorId: requestedTaskType === "INDIVIDUAL" ? individualExecutor!.id : null,
+        executorName: requestedTaskType === "INDIVIDUAL" ? individualExecutor!.name : null,
         minimumGrade: parsed.minimumGrade,
         deadline: parsed.deadline,
         rating: null,
