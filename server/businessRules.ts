@@ -38,6 +38,19 @@ export function getAuctionMaxValue(task: Task, mode: TaskMode): number | null {
   return base * AUCTION_RANGE_MULTIPLIER;
 }
 
+export function getAuctionCurrentValue(task: Task, mode: TaskMode): number | null {
+  if (mode === "TIME") {
+    if (typeof task.currentPrice === "number" && Number.isFinite(task.currentPrice)) {
+      return task.currentPrice;
+    }
+
+    const parsed = parseDecimal((task as any).currentPrice);
+    return parsed;
+  }
+
+  return parseDecimal((task as any).currentPrice);
+}
+
 export function calculateAuctionPrice(task: Task, now: Date = new Date(), mode?: TaskMode): number | null {
   if (!task.auctionStartAt || !task.auctionPlannedEndAt) {
     return null;
@@ -46,6 +59,7 @@ export function calculateAuctionPrice(task: Task, now: Date = new Date(), mode?:
   const resolvedMode = mode ?? resolveAuctionMode(task);
   const initial = getAuctionBaseValue(task, resolvedMode);
   const max = getAuctionMaxValue(task, resolvedMode);
+  const storedCurrent = getAuctionCurrentValue(task, resolvedMode);
   const start = new Date(task.auctionStartAt);
   const plannedEnd = new Date(task.auctionPlannedEndAt);
 
@@ -60,7 +74,7 @@ export function calculateAuctionPrice(task: Task, now: Date = new Date(), mode?:
   }
 
   if (task.auctionHasBids) {
-    return initial;
+    return storedCurrent ?? initial;
   }
 
   if (now <= start) {

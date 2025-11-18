@@ -1787,16 +1787,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      const bidRecord = await storage.createBid({
-        taskId: task.id,
-        bidderId: activeUser.id,
-        bidderName: activeUser.name,
-        bidderRating: (activeUser.rating as string | null) ?? "0",
-        bidderGrade: userGrade,
-        bidderPoints: Number(activeUser.points ?? 0),
-        valueMoney: metadata.mode === "MONEY" ? decimalToString(bidAmount) : null,
-        valueTimeMinutes: metadata.mode === "TIME" ? bidAmount : null,
-      });
+      const bidRecord = await storage.createBid(
+        {
+          taskId: task.id,
+          bidderId: activeUser.id,
+          bidderName: activeUser.name,
+          bidderRating: (activeUser.rating as string | null) ?? "0",
+          bidderGrade: userGrade,
+          bidderPoints: Number(activeUser.points ?? 0),
+          valueMoney: metadata.mode === "MONEY" ? decimalToString(bidAmount) : null,
+          valueTimeMinutes: metadata.mode === "TIME" ? bidAmount : null,
+        },
+        { currentAuctionAmount: auctionPrice },
+      );
 
       res.status(201).json(bidRecord);
     } catch (error) {
