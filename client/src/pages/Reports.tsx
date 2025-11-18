@@ -228,7 +228,7 @@ export default function Reports() {
       const divisionEmployees = filteredEmployees.filter((emp) => emp.divisionId === drilldown.divisionId);
       return divisionEmployees.map((employee) => {
         const employeeTasks = tasks.filter(
-          (task) => task.assigneeId === employee.id || task.leadingBidderId === employee.id,
+          (task) => task.executorId === employee.id || task.leadingBidderId === employee.id,
         );
         return {
           id: employee.id,
@@ -250,7 +250,7 @@ export default function Reports() {
   const employeeTasks = useMemo(() => {
     if (drilldown.level !== "employee" || !drilldown.employeeId) return [];
     return tasks
-      .filter((task) => task.assigneeId === drilldown.employeeId || task.leadingBidderId === drilldown.employeeId)
+      .filter((task) => task.executorId === drilldown.employeeId || task.leadingBidderId === drilldown.employeeId)
       .slice(0, 5);
   }, [tasks, drilldown]);
 

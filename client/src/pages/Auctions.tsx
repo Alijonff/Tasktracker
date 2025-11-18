@@ -9,6 +9,7 @@ import { Gavel, PlusCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SessionUser } from "@/types/session";
 import { calculateGrade } from "@shared/utils";
+import type { TaskMode } from "@shared/taskMetadata";
 
 const gradeWeights: Record<Grade, number> = {
   D: 0,
@@ -100,7 +101,8 @@ export default function Auctions() {
   const canCreateAuction = Boolean(currentUser?.canCreateAuctions);
 
   const bidMutation = useMutation({
-    mutationFn: ({ taskId, amount }: { taskId: string; amount: number }) => placeBid(taskId, amount),
+    mutationFn: ({ taskId, amount, mode }: { taskId: string; amount: number; mode: TaskMode }) =>
+      placeBid(taskId, amount, mode),
     onSuccess: () => {
       toast({ title: "Ставка принята" });
       queryClient.invalidateQueries({ queryKey: ["auctions"], exact: false });
@@ -186,8 +188,8 @@ export default function Auctions() {
         onOpenChange={setBidDialogOpen}
         isSubmitting={bidMutation.isPending}
         onSubmit={(amount) => {
-          if (!selectedTaskId) return;
-          bidMutation.mutate({ taskId: selectedTaskId, amount });
+          if (!selectedTaskId || !selectedTask) return;
+          bidMutation.mutate({ taskId: selectedTaskId, amount, mode: selectedTask.mode });
         }}
         task={selectedTask ? {
           id: selectedTask.id,

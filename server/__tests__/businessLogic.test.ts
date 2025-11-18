@@ -47,13 +47,13 @@ test("calculateAuctionPrice возвращает стартовую цену е�
 
 test("selectWinningBid учитывает сумму, затем баллы и время ставки", () => {
   const bids: AuctionBid[] = [
-    createBid({ id: "1", bidAmount: "90", bidderPoints: 120, createdAt: new Date("2024-01-02T09:00:00Z") }),
-    createBid({ id: "2", bidAmount: "85", bidderPoints: 80, createdAt: new Date("2024-01-02T09:10:00Z") }),
-    createBid({ id: "3", bidAmount: "85", bidderPoints: 95, createdAt: new Date("2024-01-02T09:05:00Z") }),
-    createBid({ id: "4", bidAmount: "85", bidderPoints: 95, createdAt: new Date("2024-01-02T09:02:00Z") }),
+    createBid({ id: "1", valueMoney: "90", bidderPoints: 120, createdAt: new Date("2024-01-02T09:00:00Z") }),
+    createBid({ id: "2", valueMoney: "85", bidderPoints: 80, createdAt: new Date("2024-01-02T09:10:00Z") }),
+    createBid({ id: "3", valueMoney: "85", bidderPoints: 95, createdAt: new Date("2024-01-02T09:05:00Z") }),
+    createBid({ id: "4", valueMoney: "85", bidderPoints: 95, createdAt: new Date("2024-01-02T09:02:00Z") }),
   ];
 
-  const winner = selectWinningBid(bids);
+  const winner = selectWinningBid(bids, "MONEY");
   assert.equal(winner?.id, "4", "Побеждает ставка с минимальной суммой, затем по баллам и времени");
 });
 
@@ -87,7 +87,7 @@ test("calculateOverduePenaltyHours считает только рабочие ч
 
 test("reassignTasksFromTerminatedEmployee переназначает задачи создателю", async () => {
   const calls: Array<{ id: string; updates: Partial<Task> }> = [];
-  const assigneeId = "employee-123";
+  const executorId = "employee-123";
   const tasks: Task[] = [
     createAuctionTask({ id: "task-1", creatorId: "creator-1", creatorName: "Director" }),
     createAuctionTask({ id: "task-2", creatorId: "creator-2", creatorName: "Manager" }),
@@ -95,7 +95,7 @@ test("reassignTasksFromTerminatedEmployee переназначает задач�
 
   const storageMock = {
     getAllTasks: async (filters: any) => {
-      assert.deepEqual(filters, { assigneeId, statuses: ["IN_PROGRESS", "UNDER_REVIEW"] });
+      assert.deepEqual(filters, { executorId, statuses: ["IN_PROGRESS", "UNDER_REVIEW"] });
       return tasks;
     },
     updateTask: async (id: string, updates: Partial<Task>) => {
@@ -105,14 +105,14 @@ test("reassignTasksFromTerminatedEmployee переназначает задач�
     deleteEmployeeBids: async () => [],
   };
 
-  await reassignTasksFromTerminatedEmployee(storageMock as any, assigneeId);
+  await reassignTasksFromTerminatedEmployee(storageMock as any, executorId);
 
   assert.equal(calls.length, 2);
   assert.deepEqual(calls[0], {
     id: "task-1",
     updates: {
-      assigneeId: "creator-1",
-      assigneeName: "Director",
+      executorId: "creator-1",
+      executorName: "Director",
       auctionWinnerId: "creator-1",
       auctionWinnerName: "Director",
     },
@@ -132,8 +132,8 @@ function createAuctionTask(overrides: Partial<Task> = {}): Task {
     divisionId: null,
     creatorId: overrides.creatorId ?? "creator",
     creatorName: overrides.creatorName ?? "Creator",
-    assigneeId: overrides.assigneeId ?? null,
-    assigneeName: overrides.assigneeName ?? null,
+    executorId: overrides.executorId ?? null,
+    executorName: overrides.executorName ?? null,
     minimumGrade: overrides.minimumGrade ?? "D",
     deadline: overrides.deadline ?? now,
     rating: overrides.rating ?? null,
@@ -161,7 +161,8 @@ function createBid(overrides: Partial<AuctionBid>): AuctionBid {
     bidderRating: overrides.bidderRating ?? "0",
     bidderGrade: overrides.bidderGrade ?? "D",
     bidderPoints: overrides.bidderPoints ?? 0,
-    bidAmount: overrides.bidAmount ?? "100",
+    valueMoney: overrides.valueMoney ?? "100",
+    valueTimeMinutes: overrides.valueTimeMinutes ?? null,
     createdAt: overrides.createdAt ?? new Date(),
   } as AuctionBid;
 }

@@ -64,7 +64,7 @@ This is a complex enterprise application with information-dense interfaces (task
 - Border: Subtle border with primary color
 - Content hierarchy:
   - Title (text-lg font-semibold)
-  - Metadata row: Status badge, assignee avatar, deadline (text-sm)
+  - Metadata row: Status badge, executor avatar, deadline (text-sm)
   - Description preview (text-sm, 2-line truncation)
   - Footer: Time estimate, rating indicator, action buttons
 - Hover state: Slight elevation increase

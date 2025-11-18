@@ -1,5 +1,6 @@
-import { calculateAuctionPrice, selectWinningBid, shouldAutoAssignToCreator } from "../businessRules";
+import { calculateAuctionPrice, getBidValue, selectWinningBid, shouldAutoAssignToCreator } from "../businessRules";
 import { storage } from "../storage";
+import { getTaskMetadata } from "../taskMetadataStore";
 
 export async function processExpiredReviews(): Promise<void> {
   try {
@@ -30,9 +31,12 @@ export async function processExpiredReviews(): Promise<void> {
   }
 }
 
-function formatAssignedSum(value: number | null, fallback: string | null): string | null {
+function formatAssignedSum(value: number | null, fallback: string | null, mode: string = "MONEY"): string | null {
   if (value === null || Number.isNaN(value)) {
     return fallback;
+  }
+  if (mode === "TIME") {
+    return Math.round(value).toString();
   }
   return value.toFixed(2);
 }
@@ -46,9 +50,10 @@ export async function processExpiredAuctions(): Promise<void> {
     }
     
     console.log(`[AuctionCloser] Processing ${expiredAuctions.length} expired auctions`);
-    
+
     for (const auction of expiredAuctions) {
       try {
+        const metadata = getTaskMetadata(auction.id);
         const bids = await storage.getTaskBids(auction.id);
         const now = new Date();
 
@@ -60,7 +65,8 @@ export async function processExpiredAuctions(): Promise<void> {
           const calculatedPrice = calculateAuctionPrice(auction, now);
           const assignedSum = formatAssignedSum(
             calculatedPrice,
-            auction.auctionMaxSum ?? auction.auctionInitialSum ?? null
+            auction.auctionMaxSum ?? auction.auctionInitialSum ?? null,
+            metadata.mode,
           );
 
           await storage.closeAuction(auction.id, {
@@ -74,20 +80,22 @@ export async function processExpiredAuctions(): Promise<void> {
             `[AuctionCloser] Closed auction ${auction.id} without bids, assigned to creator ${auction.creatorName}`
           );
         } else {
-          const winningBid = selectWinningBid(bids);
+          const winningBid = selectWinningBid(bids, metadata.mode);
           if (!winningBid) {
             continue;
           }
 
+          const assignedValue = getBidValue(winningBid, metadata.mode);
+
           await storage.closeAuction(auction.id, {
             winnerId: winningBid.bidderId,
             winnerName: winningBid.bidderName,
-            assignedSum: winningBid.bidAmount,
+            assignedSum: formatAssignedSum(assignedValue, auction.auctionMaxSum ?? null, metadata.mode) ?? undefined,
             endAt: now,
           });
 
           console.log(
-            `[AuctionCloser] Closed auction ${auction.id}, winner: ${winningBid.bidderName} with bid ${winningBid.bidAmount}`
+            `[AuctionCloser] Closed auction ${auction.id}, winner: ${winningBid.bidderName} with bid ${assignedValue}`
           );
         }
       } catch (error) {

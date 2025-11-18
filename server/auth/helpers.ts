@@ -21,7 +21,7 @@ export function canPlaceBidOnTask(user: User, task: Task): {
     return { canBid: false, reason: "Auction is no longer accepting bids" };
   }
 
-  if (task.assigneeId) {
+  if (task.executorId) {
     return { canBid: false, reason: "Auction already has a winner" };
   }
 

@@ -6,15 +6,15 @@ export async function reassignTasksFromTerminatedEmployee(
   employeeId: string,
 ): Promise<void> {
   const activeTasks = await storage.getAllTasks({
-    assigneeId: employeeId,
+    executorId: employeeId,
     statuses: ["IN_PROGRESS", "UNDER_REVIEW"],
   });
 
   await Promise.all(
     activeTasks.map((task) =>
       storage.updateTask(task.id, {
-        assigneeId: task.creatorId,
-        assigneeName: task.creatorName,
+        executorId: task.creatorId,
+        executorName: task.creatorName,
         auctionWinnerId: task.creatorId,
         auctionWinnerName: task.creatorName,
       } as Partial<Task>),
