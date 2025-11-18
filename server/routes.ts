@@ -475,7 +475,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         continue;
       }
 
-      const closingTime = plannedEnd.getTime() + NO_BID_GRACE_HOURS * 60 * 60 * 1000;
+      const closingTime = task.auctionHasBids
+        ? plannedEnd.getTime()
+        : plannedEnd.getTime() + NO_BID_GRACE_HOURS * 60 * 60 * 1000;
       if (closingTime > now.getTime()) {
         continue;
       }
