@@ -1559,12 +1559,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Ставки недоступны для индивидуальных задач" });
       }
 
-      const currentUser = req.session.user!;
-      if (
-        currentUser.role !== "admin" &&
-        (!currentUser.departmentId || currentUser.departmentId !== task.departmentId)
-      ) {
-        return res.status(403).json({ error: "Недостаточно прав для участия в аукционе" });
+      const sessionUser = req.session.user!;
+      const activeUser = await storage.getUserById(sessionUser.id);
+      if (!activeUser) {
+        return res.status(403).json({ error: "Пользователь не найден или деактивирован" });
+      }
+
+      if (activeUser.id === task.creatorId) {
+        return res.status(400).json({ error: "Создатель задачи не может делать ставки" });
+      }
+
+      if (activeUser.role !== "admin") {
+        if (!activeUser.departmentId || activeUser.departmentId !== task.departmentId) {
+          return res
+            .status(403)
+            .json({ error: "Ставки доступны только сотрудникам департамента задачи" });
+        }
+
+        if (metadata.taskType === "UNIT") {
+          if (task.divisionId && activeUser.divisionId !== task.divisionId) {
+            return res
+              .status(403)
+              .json({ error: "Ставки доступны только сотрудникам отдела задачи" });
+          }
+
+          if (task.managementId && activeUser.managementId !== task.managementId) {
+            return res
+              .status(403)
+              .json({ error: "Ставки доступны только сотрудникам управления задачи" });
+          }
+        }
       }
 
       await finalizeExpiredAuctions(task.departmentId);
@@ -1575,10 +1599,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       task = refreshedTask;
 
-      const userGrade: Grade = currentUser.grade ?? getRoleGrade(currentUser.role);
+      const roleForGrade = (roleGradeMap[activeUser.role as keyof typeof roleGradeMap]
+        ? activeUser.role
+        : "employee") as keyof typeof roleGradeMap;
+      const userGrade: Grade = (activeUser.grade as Grade) ?? getRoleGrade(roleForGrade);
       const minimumGrade = task.minimumGrade as Grade;
       if (!hasGradeAccess(userGrade, minimumGrade)) {
-        return res.status(403).json({ error: "Ваш грейд не допускает участие в этом аукционе" });
+        return res
+          .status(403)
+          .json({ error: `Ставки доступны с грейда ${minimumGrade}, ваш грейд: ${userGrade}` });
       }
 
       const parsed = placeBidSchema.parse(req.body);
@@ -1593,35 +1622,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const existingBids = await storage.getTaskBids(id);
-      const currentWinningBid = selectWinningBid(existingBids);
+        const currentWinningBid = selectWinningBid(existingBids);
 
-      if (currentWinningBid) {
-        const candidateBid = {
-          id: "pending",
-          taskId: task.id,
-          bidderId: currentUser.id,
-          bidderName: currentUser.name,
-          bidderRating: (currentUser.rating as string | null) ?? "0",
-          bidderGrade: userGrade,
-          bidderPoints: Number(currentUser.points ?? 0),
-          bidAmount: decimalToString(bidAmount),
-          createdAt: new Date(),
-        } as AuctionBid;
+        if (currentWinningBid) {
+          const candidateBid = {
+            id: "pending",
+            taskId: task.id,
+            bidderId: activeUser.id,
+            bidderName: activeUser.name,
+            bidderRating: (activeUser.rating as string | null) ?? "0",
+            bidderGrade: userGrade,
+            bidderPoints: Number(activeUser.points ?? 0),
+            bidAmount: decimalToString(bidAmount),
+            createdAt: new Date(),
+          } as AuctionBid;
 
-        if (compareBids(candidateBid, currentWinningBid) >= 0) {
-          return res.status(400).json({ error: "Есть более выгодная ставка" });
+          if (compareBids(candidateBid, currentWinningBid) >= 0) {
+            return res.status(400).json({ error: "Есть более выгодная ставка" });
+          }
         }
-      }
 
-      const bidRecord = await storage.createBid({
-        taskId: task.id,
-        bidderId: currentUser.id,
-        bidderName: currentUser.name,
-        bidderRating: (currentUser.rating as string | null) ?? "0",
-        bidderGrade: userGrade,
-        bidderPoints: Number(currentUser.points ?? 0),
-        bidAmount: decimalToString(bidAmount),
-      });
+        const bidRecord = await storage.createBid({
+          taskId: task.id,
+          bidderId: activeUser.id,
+          bidderName: activeUser.name,
+          bidderRating: (activeUser.rating as string | null) ?? "0",
+          bidderGrade: userGrade,
+          bidderPoints: Number(activeUser.points ?? 0),
+          bidAmount: decimalToString(bidAmount),
+        });
 
       res.status(201).json(bidRecord);
     } catch (error) {
