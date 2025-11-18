@@ -13,7 +13,7 @@ import { reassignTasksFromTerminatedEmployee } from "../services/employeeLifecyc
 
 test("calculateAuctionPrice плавно увеличивает стоимость при отсутствии ставок", () => {
   const start = new Date("2024-01-01T09:00:00Z");
-  const plannedEnd = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+  const plannedEnd = new Date("2024-01-02T18:00:00Z");
   const task = createAuctionTask({
     auctionStartAt: start,
     auctionPlannedEndAt: plannedEnd,
@@ -23,9 +23,12 @@ test("calculateAuctionPrice плавно увеличивает стоимост
   });
 
   assert.equal(calculateAuctionPrice(task, start), 100);
-  const midPoint = new Date(start.getTime() + 12 * 60 * 60 * 1000);
-  const midPrice = calculateAuctionPrice(task, midPoint);
-  assert.ok(midPrice !== null && Math.abs(midPrice - 125) < 0.01);
+  const firstStep = new Date("2024-01-01T21:00:00Z");
+  const firstStepPrice = calculateAuctionPrice(task, firstStep);
+  assert.ok(firstStepPrice !== null && Math.abs(firstStepPrice - 106.25) < 0.01);
+  const laterStep = new Date("2024-01-02T12:00:00Z");
+  const laterStepPrice = calculateAuctionPrice(task, laterStep);
+  assert.ok(laterStepPrice !== null && Math.abs(laterStepPrice - 137.5) < 0.01);
   const afterEnd = new Date(plannedEnd.getTime() + 60 * 60 * 1000);
   assert.equal(calculateAuctionPrice(task, afterEnd), 150);
 });
@@ -59,7 +62,7 @@ test("selectWinningBid учитывает сумму, затем баллы и �
 
 test("shouldAutoAssignToCreator срабатывает только после истечения grace-периода", () => {
   const start = new Date("2024-03-01T09:00:00Z");
-  const plannedEnd = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+  const plannedEnd = new Date("2024-03-02T18:00:00Z");
   const task = createAuctionTask({
     auctionStartAt: start,
     auctionPlannedEndAt: plannedEnd,

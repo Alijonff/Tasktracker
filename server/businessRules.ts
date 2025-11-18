@@ -67,14 +67,37 @@ export function calculateAuctionPrice(task: Task, now: Date = new Date(), mode?:
     return initial;
   }
 
-  if (now >= plannedEnd) {
-    return max;
+  const effectiveNow = now.getTime() > plannedEnd.getTime() ? plannedEnd : now;
+
+  const startDayEvening = new Date(start);
+  startDayEvening.setHours(18, 0, 0, 0);
+
+  const finalCheckpoint = new Date(startDayEvening);
+  finalCheckpoint.setDate(finalCheckpoint.getDate() + 1);
+
+  const checkpoints: Date[] = [];
+  for (
+    let point = startDayEvening;
+    point.getTime() <= finalCheckpoint.getTime();
+    point = new Date(point.getTime() + 3 * 60 * 60 * 1000)
+  ) {
+    if (point.getTime() >= start.getTime()) {
+      checkpoints.push(new Date(point));
+    }
   }
 
-  const total = plannedEnd.getTime() - start.getTime();
-  const elapsed = now.getTime() - start.getTime();
-  const progress = Math.min(Math.max(elapsed / total, 0), 1);
-  return initial + (max - initial) * progress;
+  if (checkpoints.length === 0) {
+    return initial;
+  }
+
+  const intervals = checkpoints.length - 1;
+  const step = intervals > 0 ? (AUCTION_RANGE_MULTIPLIER - 1) / intervals : 0;
+  const reached = checkpoints.filter((checkpoint) => checkpoint.getTime() <= effectiveNow.getTime()).length;
+  const stageIndex = Math.min(Math.max(reached - 1, 0), checkpoints.length - 1);
+  const multiplier = 1 + step * stageIndex;
+
+  const scaled = initial + (max - initial) * ((multiplier - 1) / (AUCTION_RANGE_MULTIPLIER - 1));
+  return Math.min(Math.max(scaled, initial), max);
 }
 
 export function getBidValue(bid: AuctionBid, mode: TaskMode): number | null {
