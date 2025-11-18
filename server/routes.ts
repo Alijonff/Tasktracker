@@ -447,9 +447,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   async function enhanceUserCapabilities(user: Omit<User, "passwordHash">) {
     let canCreateAuctions = false;
 
-    if (user.role === "admin") {
-      canCreateAuctions = true;
-    } else if (user.role === "director" && user.departmentId) {
+    if (user.role === "director" && user.departmentId) {
       canCreateAuctions = true;
     } else if (user.positionType === "deputy" && user.departmentId) {
       canCreateAuctions = true;
