@@ -5,6 +5,7 @@ import test from "node:test";
 import type { AuctionBid, Task } from "@shared/schema";
 import {
   calculateAuctionPrice,
+  calculateEarnedValue,
   calculateOverduePenaltyHours,
   selectWinningBid,
   shouldAutoAssignToCreator,
@@ -63,6 +64,24 @@ test("calculateAuctionPrice использует базовую цену есл�
 
   const later = new Date(start.getTime() + 20 * 60 * 60 * 1000);
   assert.equal(calculateAuctionPrice(task, later), 200);
+});
+
+test("calculateEarnedValue использует текущую цену без ставок", () => {
+  const start = new Date("2024-01-01T09:00:00Z");
+  const plannedEnd = new Date("2024-01-02T18:00:00Z");
+  const currentMoment = new Date("2024-01-02T12:00:00Z");
+  const task = createAuctionTask({
+    auctionStartAt: start,
+    auctionPlannedEndAt: plannedEnd,
+    basePrice: "120",
+    auctionMode: "MONEY",
+    auctionHasBids: false,
+  });
+
+  const expected = calculateAuctionPrice(task, currentMoment);
+  const earned = calculateEarnedValue(task, null, "MONEY", currentMoment);
+
+  assert.equal(earned, expected);
 });
 
 test("selectWinningBid учитывает сумму, затем баллы и время ставки", () => {
