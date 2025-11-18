@@ -1831,9 +1831,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Вложение не найдено" });
       }
 
-      // Only the uploader can delete their files
-      if (attachment.uploaderId !== currentUser.id && currentUser.role !== "admin") {
-        return res.status(403).json({ error: "Только автор вложения может удалить его" });
+      // Authorization per v2.1 §9: creator can delete any file, executor can delete their own files, uploader can delete their files, admin can delete any
+      const isCreator = task.creatorId === currentUser.id;
+      const isExecutor = task.executorId === currentUser.id;
+      const isUploader = attachment.uploaderId === currentUser.id;
+      const isAdmin = currentUser.role === "admin";
+      
+      const canDelete = 
+        isAdmin ||
+        isCreator || // creator can delete any attachment
+        isUploader || // uploader can delete their attachment
+        (isExecutor && isUploader); // executor can delete their own uploaded files
+
+      if (!canDelete) {
+        return res.status(403).json({ error: "Недостаточно прав для удаления вложения" });
       }
 
       // Delete from Object Storage
