@@ -47,6 +47,8 @@ import {
   calculateGradeProgress,
   type PositionType,
 } from "@shared/utils";
+import multer from "multer";
+import { Client } from "@replit/object-storage";
 
 // Authentication middleware
 function requireAuth(req: Request, res: Response, next: NextFunction) {
@@ -71,6 +73,18 @@ function canModifyDepartment(user: any, departmentId: string): boolean {
   if (user.positionType === "deputy" && user.departmentId === departmentId) return true;
   return false;
 }
+
+// Multer configuration for file uploads (memory storage)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 25 * 1024 * 1024, // 25MB max file size
+    files: 1, // Only one file per request
+  },
+});
+
+// Object Storage client for file storage
+const objectStorageClient = new Client();
 
 const positionTypeValues = [
   "admin",
@@ -1287,7 +1301,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: parsed.description,
         type: parsed.type,
         status: requestedTaskType === "INDIVIDUAL" ? "IN_PROGRESS" : "BACKLOG",
-        auctionMode: requestedMode,
+        auctionMode: requestedTaskType === "INDIVIDUAL" ? null : requestedMode,
         departmentId: selectedScope.departmentId,
         managementId: selectedScope.managementId,
         divisionId: null,
@@ -1300,8 +1314,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         rating: null,
         auctionStartAt: requestedTaskType === "INDIVIDUAL" ? null : startAt,
         auctionPlannedEndAt: requestedTaskType === "INDIVIDUAL" ? null : plannedEndAt,
-        basePrice: basePrice,
-        baseTimeMinutes: baseTime,
+        basePrice: requestedTaskType === "INDIVIDUAL" ? null : basePrice,
+        baseTimeMinutes: requestedTaskType === "INDIVIDUAL" ? null : baseTime,
         earnedMoney: null,
         earnedTimeMinutes: null,
         auctionEndAt: null,
@@ -1733,6 +1747,110 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       console.error("Ошибка при создании ставки:", error);
       res.status(500).json({ error: "Не удалось разместить ставку" });
+    }
+  });
+
+  // Task Attachments API
+  app.get("/api/tasks/:id/attachments", requireAuth, async (req, res) => {
+    try {
+      const { id: taskId } = req.params;
+      const task = await storage.getTask(taskId);
+      
+      if (!task) {
+        return res.status(404).json({ error: "Задача не найдена" });
+      }
+
+      const attachments = await storage.getTaskAttachments(taskId);
+      res.json(attachments);
+    } catch (error) {
+      console.error("Ошибка при получении вложений:", error);
+      res.status(500).json({ error: "Не удалось получить вложения" });
+    }
+  });
+
+  app.post("/api/tasks/:id/attachments", requireAuth, upload.single("file"), async (req, res) => {
+    try {
+      const { id: taskId } = req.params;
+      const currentUser = req.session.user!;
+      const file = req.file;
+
+      if (!file) {
+        return res.status(400).json({ error: "Файл не предоставлен" });
+      }
+
+      const task = await storage.getTask(taskId);
+      if (!task) {
+        return res.status(404).json({ error: "Задача не найдена" });
+      }
+
+      // Check attachment count limit (max 10 files)
+      const existingCount = await storage.getAttachmentCount(taskId);
+      if (existingCount >= 10) {
+        return res.status(400).json({ error: "Превышен лимит вложений (максимум 10 файлов)" });
+      }
+
+      // Generate unique storage path
+      const timestamp = Date.now();
+      const sanitizedFilename = file.originalname.replace(/[^a-zA-Z0-9.-]/g, "_");
+      const storagePath = `tasks/${taskId}/${timestamp}_${sanitizedFilename}`;
+
+      // Upload to Object Storage (.private directory)
+      await objectStorageClient.uploadFromBytes(storagePath, file.buffer);
+
+      // Save attachment metadata to database
+      const attachment = await storage.createTaskAttachment({
+        taskId,
+        uploaderId: currentUser.id,
+        uploaderName: currentUser.name,
+        filename: file.originalname,
+        filesizeBytes: file.size,
+        storagePath,
+      });
+
+      res.status(201).json(attachment);
+    } catch (error) {
+      console.error("Ошибка при загрузке файла:", error);
+      res.status(500).json({ error: "Не удалось загрузить файл" });
+    }
+  });
+
+  app.delete("/api/tasks/:taskId/attachments/:attachmentId", requireAuth, async (req, res) => {
+    try {
+      const { taskId, attachmentId } = req.params;
+      const currentUser = req.session.user!;
+
+      const task = await storage.getTask(taskId);
+      if (!task) {
+        return res.status(404).json({ error: "Задача не найдена" });
+      }
+
+      const attachments = await storage.getTaskAttachments(taskId);
+      const attachment = attachments.find((a) => a.id === attachmentId);
+
+      if (!attachment) {
+        return res.status(404).json({ error: "Вложение не найдено" });
+      }
+
+      // Only the uploader can delete their files
+      if (attachment.uploaderId !== currentUser.id && currentUser.role !== "admin") {
+        return res.status(403).json({ error: "Только автор вложения может удалить его" });
+      }
+
+      // Delete from Object Storage
+      try {
+        await objectStorageClient.delete(attachment.storagePath);
+      } catch (storageError) {
+        console.error("Ошибка при удалении из Object Storage:", storageError);
+        // Continue with database deletion even if storage deletion fails
+      }
+
+      // Delete from database (soft delete via deleted_at)
+      await storage.deleteTaskAttachment(attachmentId);
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Ошибка при удалении вложения:", error);
+      res.status(500).json({ error: "Не удалось удалить вложение" });
     }
   });
 
