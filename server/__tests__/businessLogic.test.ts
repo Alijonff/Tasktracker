@@ -96,18 +96,30 @@ test("selectWinningBid учитывает сумму, затем баллы и �
   assert.equal(winner?.id, "4", "Побеждает ставка с минимальной суммой, затем по баллам и времени");
 });
 
-test("shouldAutoAssignToCreator срабатывает только после истечения grace-периода", () => {
+test("shouldAutoAssignToCreator учитывает наличие ставок при расчёте срока", () => {
   const start = new Date("2024-03-01T09:00:00Z");
   const plannedEnd = new Date("2024-03-02T18:00:00Z");
-  const task = createAuctionTask({
+
+  const noBidsTask = createAuctionTask({
     auctionStartAt: start,
     auctionPlannedEndAt: plannedEnd,
+    auctionHasBids: false,
   });
 
   const beforeGrace = new Date(plannedEnd.getTime() + 2 * 60 * 60 * 1000);
-  assert.equal(shouldAutoAssignToCreator(task, beforeGrace), false);
+  assert.equal(shouldAutoAssignToCreator(noBidsTask, beforeGrace), false);
   const afterGrace = new Date(plannedEnd.getTime() + 4 * 60 * 60 * 1000);
-  assert.equal(shouldAutoAssignToCreator(task, afterGrace), true);
+  assert.equal(shouldAutoAssignToCreator(noBidsTask, afterGrace), true);
+
+  const withBidsTask = createAuctionTask({
+    auctionStartAt: start,
+    auctionPlannedEndAt: plannedEnd,
+    auctionHasBids: true,
+  });
+
+  const beforePlannedEnd = new Date(plannedEnd.getTime() - 60 * 60 * 1000);
+  assert.equal(shouldAutoAssignToCreator(withBidsTask, beforePlannedEnd), false);
+  assert.equal(shouldAutoAssignToCreator(withBidsTask, plannedEnd), true);
 });
 
 test("calculateOverduePenaltyHours считает только рабочие часы", () => {

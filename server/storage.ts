@@ -765,7 +765,13 @@ export class DbStorage implements IStorage {
         and(
           inArray(tasks.type, ["UNIT", "DEPARTMENT"] as any),
           eq(tasks.status, "BACKLOG" as const),
-          sql`${tasks.auctionPlannedEndAt} <= NOW()`
+          or(
+            and(eq(tasks.auctionHasBids, true), sql`${tasks.auctionPlannedEndAt} <= NOW()`),
+            and(
+              eq(tasks.auctionHasBids, false),
+              sql`${tasks.auctionPlannedEndAt} + interval '3 hours' <= NOW()`
+            )
+          )
         )
       );
   }
