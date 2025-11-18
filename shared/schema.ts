@@ -41,9 +41,9 @@ export const positionTypeEnum = pgEnum("position_type", [
   "employee",
 ]);
 export const pointTransactionTypeEnum = pgEnum("point_transaction_type", [
-  "task_completion",
-  "overdue_penalty",
-  "position_assigned",
+  "TASK_COMPLETION",
+  "MANUAL_ADJUSTMENT",
+  "BID_PLACEMENT",
 ]);
 
 // Organization structure tables
@@ -69,8 +69,6 @@ export const managements = pgTable("managements", {
     .references(() => departments.id, { onDelete: "cascade" }),
   leaderId: varchar("leader_id"),
   leaderName: text("leader_name"),
-  deputyId: varchar("deputy_id"),
-  isAutonomous: boolean("is_autonomous").notNull().default(false),
   rating: decimal("rating", { precision: 3, scale: 2 }).default("0"),
   employeeCount: integer("employee_count").default(0),
   createdAt: timestamp("created_at").defaultNow(),

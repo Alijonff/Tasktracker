@@ -49,13 +49,14 @@ Preferred communication style: Simple, everyday language.
 
 **Database:** PostgreSQL (configured for Neon serverless).
 
-**Schema Design:**
-- **Organizational Hierarchy:** `departments`, `managements`, `divisions`, `employees` (with role, rating, points, time metrics).
-- **Task Management:** `tasks` (auction-only, статусы: backlog → inProgress → underReview → completed; хранит дедлайны, исполнителей, минимальный грейд и параметры аукциона).
-- **Auction System:** Tasks now store auction configuration directly on the task: `auction_mode` ("MONEY" or "TIME"), `base_price`/`base_time_minutes` as the starting bid value, `auctionPlannedEndAt` for the planned close time, and `earned_money`/`earned_time_minutes` for the winning bid. Price still grows linearly from the base value to ×1.5 until the planned end.
-- **Auction Bids:** `auctionBids` table tracks monetary bids (`bidAmount` in decimal), bidder grade, and rating. Auto-closure assigns to lowest bidder; if no bids, assigns to department director with max sum.
-- **Rating & Grade System:** Employees have decimal rating (0-5) and points that determine grade (D/C/B/A). Grades calculated dynamically: <45=D, 45-64=C, 65-84=B, ≥85=A. Only employees with grade ≥ task's `minimumGrade` can bid. **Admin users have positionType='admin', role='admin', and maintain 0 points with no point accumulation.**
-- **Review Deadline:** Tasks in `underReview` status have `reviewDeadline` field set to 48 real hours (excluding weekends) from transition time. Worker automatically returns tasks to `inProgress` after deadline expires.
+**Schema Design (v2.1):**
+- **Organizational Hierarchy:** `departments`, `managements`, `divisions`, `employees` (with positionType, role, rating, points, time metrics).
+- **Task Management:** `tasks` support three types: `INDIVIDUAL` (direct assignment, no auction), `UNIT` (division-level auction), `DEPARTMENT` (department-wide auction). Статусы: backlog → inProgress → underReview → completed. Хранит дедлайны, исполнителей, минимальный грейд и параметры аукциона.
+- **Auction System:** Tasks store auction configuration: `auction_mode` ("MONEY" or "TIME"), `base_price`/`base_time_minutes` as starting bid, `auctionPlannedEndAt` for planned close, `earned_money`/`earned_time_minutes` for winning bid reward. Ceiling prices reach ×1.5 base value at planned end + 3 working hours. INDIVIDUAL tasks have null auction fields.
+- **Auction Bids:** `auctionBids` table tracks bids with `value_money`/`value_time_minutes`, bidder grade/rating/points, `is_active` flag. Auto-closure assigns to lowest bidder; if no bids, assigns to department director with ceiling reward. Bids deactivated on employee termination or department transfer.
+- **File Attachments:** `task_attachments` table stores task files (max 10 files × 25MB) in Object Storage. Authorization: creator deletes any files, executor/uploader delete own files, admin deletes all.
+- **Points System:** `point_transactions` table tracks point changes with type (TASK_COMPLETION, MANUAL_ADJUSTMENT, BID_PLACEMENT), reference IDs, amounts, and timestamps. Employees earn/lose points; grades calculated dynamically: <45=D, 45-64=C, 65-84=B, ≥85=A. Only employees with grade ≥ task's `minimumGrade` can bid. **Admin users have positionType='admin', role='admin', maintain 0 points with no accumulation.**
+- **Review Deadline:** Tasks in `underReview` have `reviewDeadline` set to 48 real hours (excluding weekends) from transition. Worker auto-returns to `inProgress` after expiration.
 
 ### Authentication & Authorization
 
