@@ -1,4 +1,5 @@
 import type { AuctionBid, Task } from "@shared/schema";
+import type { TaskMode } from "@shared/taskMetadata";
 import { diffWorkingHours } from "@shared/utils";
 
 export const NO_BID_GRACE_HOURS = 3;
@@ -52,9 +53,30 @@ export function calculateAuctionPrice(task: Task, now: Date = new Date()): numbe
   return initial + (max - initial) * progress;
 }
 
-export function compareBids(a: AuctionBid, b: AuctionBid): number {
-  const amountDiff = (parseDecimal(a.bidAmount) ?? Number.POSITIVE_INFINITY) -
-    (parseDecimal(b.bidAmount) ?? Number.POSITIVE_INFINITY);
+export function getBidValue(bid: AuctionBid, mode: TaskMode): number | null {
+  if (mode === "TIME") {
+    if (typeof bid.valueTimeMinutes === "number" && Number.isFinite(bid.valueTimeMinutes)) {
+      return bid.valueTimeMinutes;
+    }
+  }
+
+  const moneyValue = parseDecimal((bid as any).bidAmount ?? bid.valueMoney);
+  if (moneyValue !== null) {
+    return moneyValue;
+  }
+
+  if (typeof bid.valueTimeMinutes === "number" && Number.isFinite(bid.valueTimeMinutes)) {
+    return bid.valueTimeMinutes;
+  }
+
+  return null;
+}
+
+export function compareBids(a: AuctionBid, b: AuctionBid, mode: TaskMode = "MONEY"): number {
+  const aValue = getBidValue(a, mode);
+  const bValue = getBidValue(b, mode);
+
+  const amountDiff = (aValue ?? Number.POSITIVE_INFINITY) - (bValue ?? Number.POSITIVE_INFINITY);
   if (amountDiff !== 0) {
     return amountDiff;
   }
@@ -69,12 +91,12 @@ export function compareBids(a: AuctionBid, b: AuctionBid): number {
   return aTime - bTime;
 }
 
-export function selectWinningBid(bids: AuctionBid[]): AuctionBid | null {
+export function selectWinningBid(bids: AuctionBid[], mode: TaskMode = "MONEY"): AuctionBid | null {
   if (bids.length === 0) {
     return null;
   }
 
-  const sorted = [...bids].sort(compareBids);
+  const sorted = [...bids].sort((a, b) => compareBids(a, b, mode));
   return sorted[0];
 }
 

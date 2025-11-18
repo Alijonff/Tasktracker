@@ -141,13 +141,14 @@ export const tasks = pgTable("tasks", {
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
   creatorName: text("creator_name").notNull(),
-  assigneeId: varchar("assignee_id").references(() => users.id, {
+  executorId: varchar("executor_id").references(() => users.id, {
     onDelete: "set null",
   }),
-  assigneeName: text("assignee_name"),
+  executorName: text("executor_name"),
   minimumGrade: gradeEnum("required_grade").notNull().default("D"),
   deadline: timestamp("deadline").notNull(),
   reviewDeadline: timestamp("review_deadline"),
+  doneAt: timestamp("done_at"),
   rating: decimal("rating", { precision: 3, scale: 2 }),
   assignedPoints: integer("assigned_points"),
   auctionStartAt: timestamp("auction_start_at"),
@@ -189,7 +190,9 @@ export const auctionBids = pgTable("auction_bids", {
   bidderRating: decimal("bidder_rating", { precision: 3, scale: 2 }).notNull(),
   bidderGrade: gradeEnum("bidder_grade").notNull(),
   bidderPoints: integer("bidder_points").notNull().default(0),
-  bidAmount: decimal("bid_amount", { precision: 10, scale: 2 }).notNull(),
+  valueMoney: decimal("value_money", { precision: 10, scale: 2 }),
+  valueTimeMinutes: integer("value_time_minutes"),
+  isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -292,6 +295,7 @@ export const insertTaskSchema = createInsertSchema(tasks)
     id: true,
     createdAt: true,
     updatedAt: true,
+    doneAt: true,
   })
   .extend({
     deadline: dateTransform,
@@ -302,6 +306,7 @@ export const insertTaskSchema = createInsertSchema(tasks)
 export const insertBidSchema = createInsertSchema(auctionBids).omit({
   id: true,
   createdAt: true,
+  isActive: true,
 });
 
 export const insertCommentSchema = createInsertSchema(taskComments).omit({

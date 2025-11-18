@@ -86,7 +86,7 @@ export interface IStorage {
     status?: string;
     type?: string;
     search?: string;
-    assigneeId?: string;
+    executorId?: string;
     creatorId?: string;
     participantId?: string;
     statuses?: Task["status"][];
@@ -337,7 +337,7 @@ export class DbStorage implements IStorage {
     status?: string;
     type?: string;
     search?: string;
-    assigneeId?: string;
+    executorId?: string;
     creatorId?: string;
     participantId?: string;
     statuses?: Task["status"][];
@@ -366,8 +366,8 @@ export class DbStorage implements IStorage {
     if (filters.type && filters.type !== "all") {
       conditions.push(eq(tasks.type, filters.type as any));
     }
-    if (filters.assigneeId) {
-      conditions.push(eq(tasks.assigneeId, filters.assigneeId));
+    if (filters.executorId) {
+      conditions.push(eq(tasks.executorId, filters.executorId));
     }
     if (filters.creatorId) {
       conditions.push(eq(tasks.creatorId, filters.creatorId));
@@ -375,7 +375,7 @@ export class DbStorage implements IStorage {
     if (filters.participantId) {
       conditions.push(
         or(
-          eq(tasks.assigneeId, filters.participantId),
+          eq(tasks.executorId, filters.participantId),
           eq(tasks.creatorId, filters.participantId)
         )
       );
@@ -434,9 +434,9 @@ export class DbStorage implements IStorage {
     return await db
       .select()
       .from(auctionBids)
-      .where(eq(auctionBids.taskId, taskId))
+      .where(and(eq(auctionBids.taskId, taskId), eq(auctionBids.isActive, true)))
       .orderBy(
-        asc(auctionBids.bidAmount),
+        asc(sql`COALESCE(${auctionBids.valueTimeMinutes}, ${auctionBids.valueMoney})`),
         desc(auctionBids.bidderPoints),
         asc(auctionBids.createdAt),
       );
@@ -456,7 +456,8 @@ export class DbStorage implements IStorage {
   async deleteEmployeeBids(employeeId: string): Promise<string[]> {
     return await db.transaction(async (tx) => {
       const deletedBids = await tx
-        .delete(auctionBids)
+        .update(auctionBids)
+        .set({ isActive: false })
         .where(eq(auctionBids.bidderId, employeeId))
         .returning({ taskId: auctionBids.taskId });
 
@@ -470,7 +471,7 @@ export class DbStorage implements IStorage {
         await tx.execute(sql`
           UPDATE tasks
           SET auction_has_bids = EXISTS(
-            SELECT 1 FROM auction_bids WHERE task_id = tasks.id
+            SELECT 1 FROM auction_bids WHERE task_id = tasks.id AND is_active = true
           )
           WHERE id = ANY(${taskIds})
         `);
@@ -636,17 +637,17 @@ export class DbStorage implements IStorage {
         .from(tasks)
         .where(eq(tasks.id, taskId));
 
-      if (!task || !task.assigneeId) {
-        throw new Error("Task not found or has no assignee");
+      if (!task || !task.executorId) {
+        throw new Error("Task not found or has no executor");
       }
 
-      const [assignee] = await tx
+      const [executor] = await tx
         .select()
         .from(users)
-        .where(eq(users.id, task.assigneeId));
+        .where(eq(users.id, task.executorId));
 
-      if (!assignee) {
-        throw new Error("Assignee not found");
+      if (!executor) {
+        throw new Error("Executor not found");
       }
 
       const totalPoints = basePoints - penaltyPoints;
@@ -658,8 +659,8 @@ export class DbStorage implements IStorage {
 
       if (basePoints !== 0) {
         await tx.insert(pointTransactions).values({
-          userId: assignee.id,
-          userName: assignee.name,
+          userId: executor.id,
+          userName: executor.name,
           amount: basePoints,
           type: "task_completion",
           taskId: task.id,
@@ -670,8 +671,8 @@ export class DbStorage implements IStorage {
 
       if (penaltyPoints > 0) {
         await tx.insert(pointTransactions).values({
-          userId: assignee.id,
-          userName: assignee.name,
+          userId: executor.id,
+          userName: executor.name,
           amount: -penaltyPoints,
           type: "overdue_penalty",
           taskId: task.id,
@@ -680,11 +681,11 @@ export class DbStorage implements IStorage {
         });
       }
 
-      const newPoints = Number(assignee.points) + totalPoints;
+      const newPoints = Number(executor.points) + totalPoints;
       await tx
         .update(users)
         .set({ points: newPoints })
-        .where(eq(users.id, assignee.id));
+        .where(eq(users.id, executor.id));
     });
   }
 
@@ -740,8 +741,8 @@ export class DbStorage implements IStorage {
       .update(tasks)
       .set({
         status: "IN_PROGRESS" as const,
-        assigneeId: winnerId || null,
-        assigneeName: winnerName || null,
+        executorId: winnerId || null,
+        executorName: winnerName || null,
         auctionAssignedSum: assignedSum || null,
         auctionWinnerId: winnerId || null,
         auctionWinnerName: winnerName || null,

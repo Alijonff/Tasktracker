@@ -6,6 +6,7 @@ import {
   calculateAuctionPrice,
   calculateOverduePenaltyHours,
   compareBids,
+  getBidValue,
   parseDecimal,
   selectWinningBid,
   shouldAutoAssignToCreator,
@@ -268,9 +269,21 @@ const createTaskSchema = z
     auctionInitialSum: decimalNumberSchema,
   });
 
-const placeBidSchema = z.object({
-  bidAmount: decimalNumberSchema,
-});
+const placeBidSchema = z
+  .object({
+    valueMoney: decimalNumberSchema.optional(),
+    valueTimeMinutes: z
+      .union([z.string(), z.number()])
+      .transform((value) => {
+        if (typeof value === "number") return value;
+        const parsed = Number.parseInt(value, 10);
+        return Number.isFinite(parsed) ? parsed : NaN;
+      })
+      .pipe(z.number().int().positive("Значение должно быть больше нуля").optional()),
+  })
+  .refine((data) => data.valueMoney !== undefined || data.valueTimeMinutes !== undefined, {
+    message: "Укажите значение ставки",
+  });
 
 const updateManagementDeputySchema = z.object({
   deputyId: z.string().min(1).nullable(),
@@ -445,26 +458,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         await storage.updateTask(task.id, {
           status: "IN_PROGRESS" as any,
-          assigneeId: task.creatorId,
-          assigneeName: task.creatorName,
+          executorId: task.creatorId,
+          executorName: task.creatorName,
           auctionWinnerId: task.creatorId,
           auctionWinnerName: task.creatorName,
           auctionAssignedSum: task.auctionMaxSum ?? task.auctionInitialSum ?? null,
           auctionEndAt: now,
         });
       } else {
-        const winningBid = selectWinningBid(bids);
+        const winningBid = selectWinningBid(bids, metadata.mode);
         if (!winningBid) {
           continue;
         }
 
+        const assignedValue = getBidValue(winningBid, metadata.mode);
+
+        const assignedSum =
+          assignedValue !== null
+            ? metadata.mode === "TIME"
+              ? assignedValue.toString()
+              : decimalToString(assignedValue)
+            : task.auctionMaxSum ?? null;
+
         await storage.updateTask(task.id, {
           status: "IN_PROGRESS" as any,
-          assigneeId: winningBid.bidderId,
-          assigneeName: winningBid.bidderName,
+          executorId: winningBid.bidderId,
+          executorName: winningBid.bidderName,
           auctionWinnerId: winningBid.bidderId,
           auctionWinnerName: winningBid.bidderName,
-          auctionAssignedSum: winningBid.bidAmount,
+          auctionAssignedSum: assignedSum,
           auctionEndAt: now,
         });
       }
@@ -1240,8 +1262,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         divisionId: null,
         creatorId: currentUser.id,
         creatorName: currentUser.name,
-        assigneeId: requestedTaskType === "INDIVIDUAL" ? currentUser.id : null,
-        assigneeName: requestedTaskType === "INDIVIDUAL" ? currentUser.name : null,
+        executorId: requestedTaskType === "INDIVIDUAL" ? currentUser.id : null,
+        executorName: requestedTaskType === "INDIVIDUAL" ? currentUser.name : null,
         minimumGrade: parsed.minimumGrade,
         deadline: parsed.deadline,
         rating: null,
@@ -1281,7 +1303,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status,
         type,
         search,
-        assigneeId,
+        executorId,
         participantId,
       } = req.query;
 
@@ -1320,8 +1342,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (typeof search === "string" && search.trim() !== "") {
         filters.search = search.trim();
       }
-      if (typeof assigneeId === "string" && assigneeId !== "" && assigneeId !== "all") {
-        filters.assigneeId = assigneeId;
+      if (typeof executorId === "string" && executorId !== "" && executorId !== "all") {
+        filters.executorId = executorId;
       }
       if (typeof participantId === "string" && participantId !== "" && participantId !== "all") {
         filters.participantId = participantId;
@@ -1345,7 +1367,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const currentUser = req.session.user!;
       const tasks = await storage.getAllTasks({
-        assigneeId: currentUser.id,
+        executorId: currentUser.id,
         orderBy: "updatedAt",
       });
       res.json(tasks.map((task) => normalizeTaskResponse(task)));
@@ -1454,14 +1476,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const isAdmin = currentUser.role === "admin";
       const isDirector = currentUser.role === "director" && currentUser.departmentId === task.departmentId;
-      const isAssignee = task.assigneeId === currentUser.id;
+      const isExecutor = task.executorId === currentUser.id;
 
       if (targetStatus === "IN_PROGRESS") {
         if (currentStatus === "BACKLOG") {
-          if (!task.assigneeId) {
+          if (!task.executorId) {
             return res.status(400).json({ error: "Задача должна иметь исполнителя" });
           }
-          if (!(isAssignee || isDirector || isAdmin)) {
+          if (!(isExecutor || isDirector || isAdmin)) {
             return res.status(403).json({ error: "Только исполнитель или директор могут начать задачу" });
           }
         } else if (currentStatus === "UNDER_REVIEW") {
@@ -1474,7 +1496,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      if (targetStatus === "UNDER_REVIEW" && !isAssignee && !isAdmin) {
+      if (targetStatus === "UNDER_REVIEW" && !isExecutor && !isAdmin) {
         return res.status(403).json({ error: "Только исполнитель может отправить задачу на проверку" });
       }
 
@@ -1501,12 +1523,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         updateData.reviewDeadline = calculateReviewDeadline(new Date());
       }
 
+      if (targetStatus === "DONE") {
+        updateData.doneAt = new Date();
+      }
+
       const updated = await storage.updateTask(id, updateData);
       if (!updated) {
         return res.status(404).json({ error: "Задача не найдена" });
       }
 
-      if (targetStatus === "DONE" && task.assigneeId && task.assignedPoints == null) {
+      if (targetStatus === "DONE" && task.executorId && task.assignedPoints == null) {
         const basePoints = getBasePointsForTask(task);
         let penaltyPoints = 0;
         if (task.deadline) {
@@ -1617,7 +1643,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const parsed = placeBidSchema.parse(req.body);
-      const bidAmount = normalizeAuctionAmount(parsed.bidAmount, metadata.mode);
+      const rawBidValue =
+        metadata.mode === "TIME"
+          ? parsed.valueTimeMinutes
+          : parsed.valueMoney ?? parsed.valueTimeMinutes;
+
+      if (rawBidValue === undefined) {
+        return res.status(400).json({ error: "Укажите значение ставки" });
+      }
+
+      const bidAmount = normalizeAuctionAmount(rawBidValue, metadata.mode);
       const auctionPrice = calculateAuctionPrice(task);
       if (auctionPrice === null) {
         return res.status(400).json({ error: "Ставки недоступны для этой задачи" });
@@ -1628,35 +1663,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const existingBids = await storage.getTaskBids(id);
-        const currentWinningBid = selectWinningBid(existingBids);
+      const currentWinningBid = selectWinningBid(existingBids, metadata.mode);
 
-        if (currentWinningBid) {
-          const candidateBid = {
-            id: "pending",
-            taskId: task.id,
-            bidderId: activeUser.id,
-            bidderName: activeUser.name,
-            bidderRating: (activeUser.rating as string | null) ?? "0",
-            bidderGrade: userGrade,
-            bidderPoints: Number(activeUser.points ?? 0),
-            bidAmount: decimalToString(bidAmount),
-            createdAt: new Date(),
-          } as AuctionBid;
-
-          if (compareBids(candidateBid, currentWinningBid) >= 0) {
-            return res.status(400).json({ error: "Есть более выгодная ставка" });
-          }
-        }
-
-        const bidRecord = await storage.createBid({
+      if (currentWinningBid) {
+        const candidateBid = {
+          id: "pending",
           taskId: task.id,
           bidderId: activeUser.id,
           bidderName: activeUser.name,
           bidderRating: (activeUser.rating as string | null) ?? "0",
           bidderGrade: userGrade,
           bidderPoints: Number(activeUser.points ?? 0),
-          bidAmount: decimalToString(bidAmount),
-        });
+          valueMoney: metadata.mode === "MONEY" ? decimalToString(bidAmount) : null,
+          valueTimeMinutes: metadata.mode === "TIME" ? bidAmount : null,
+          createdAt: new Date(),
+        } as AuctionBid;
+
+        if (compareBids(candidateBid, currentWinningBid, metadata.mode) >= 0) {
+          return res.status(400).json({ error: "Есть более выгодная ставка" });
+        }
+      }
+
+      const bidRecord = await storage.createBid({
+        taskId: task.id,
+        bidderId: activeUser.id,
+        bidderName: activeUser.name,
+        bidderRating: (activeUser.rating as string | null) ?? "0",
+        bidderGrade: userGrade,
+        bidderPoints: Number(activeUser.points ?? 0),
+        valueMoney: metadata.mode === "MONEY" ? decimalToString(bidAmount) : null,
+        valueTimeMinutes: metadata.mode === "TIME" ? bidAmount : null,
+      });
 
       res.status(201).json(bidRecord);
     } catch (error) {

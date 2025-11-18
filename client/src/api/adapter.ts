@@ -18,8 +18,8 @@ export interface AuctionTaskSummary {
   divisionId?: string | null;
   creatorId: string;
   creatorName: string;
-  assigneeId?: string | null;
-  assigneeName?: string | null;
+  executorId?: string | null;
+  executorName?: string | null;
   minimumGrade: Grade;
   deadline: string;
   startingPrice: number;
@@ -110,8 +110,8 @@ function transformTask(task: Task): AuctionTaskSummary {
     divisionId: task.divisionId ?? undefined,
     creatorId: task.creatorId,
     creatorName: task.creatorName,
-    assigneeId: task.assigneeId ?? undefined,
-    assigneeName: task.assigneeName ?? undefined,
+    executorId: task.executorId ?? undefined,
+    executorName: task.executorName ?? undefined,
     minimumGrade: (task.minimumGrade ?? "D") as Grade,
     deadline: new Date(task.deadline).toISOString(),
     startingPrice,
@@ -244,8 +244,13 @@ export async function updateTaskStatus(taskId: string, status: AuctionStatus): P
   await apiRequest("PATCH", `/api/tasks/${taskId}/status`, { status });
 }
 
-export async function placeBid(taskId: string, amountSum: number): Promise<{ taskId: string; amount: number }> {
-  await apiRequest("POST", `/api/tasks/${taskId}/bids`, { bidAmount: amountSum });
+export async function placeBid(
+  taskId: string,
+  amountSum: number,
+  mode: TaskMode,
+): Promise<{ taskId: string; amount: number }> {
+  const payload = mode === "TIME" ? { valueTimeMinutes: amountSum } : { valueMoney: amountSum };
+  await apiRequest("POST", `/api/tasks/${taskId}/bids`, payload);
   return { taskId, amount: amountSum };
 }
 
