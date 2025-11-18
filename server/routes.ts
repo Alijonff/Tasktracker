@@ -294,6 +294,7 @@ const createTaskSchema = z
     deadline: dateInputSchema,
     minimumGrade: gradeSchema.default("D"),
     departmentId: z.string().min(1, "Укажите департамент").optional(),
+    managementId: z.string().min(1, "Укажите управление").optional(),
     executorId: z.string().min(1, "Укажите исполнителя").optional(),
     auctionInitialSum: decimalNumberSchema,
   });
@@ -450,12 +451,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       canCreateAuctions = true;
     } else if (user.positionType === "deputy" && user.departmentId) {
       canCreateAuctions = true;
-    } else if (
-      user.managementId &&
-      (user.positionType === "management_head" || user.positionType === "management_deputy")
-    ) {
-      const management = await storage.getManagement(user.managementId);
-      canCreateAuctions = Boolean(management?.isAutonomous);
     }
 
     return { ...user, canCreateAuctions };
@@ -1259,37 +1254,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const requestedMode = parsed.mode;
       const requestedTaskType = parsed.taskType ?? parsed.type;
 
-      const allowedScopes: Array<{ departmentId: string; managementId: string | null }> = [];
+      const allowedDepartmentIds = new Set<string>();
 
       if (currentUser.role === "director" && currentUser.departmentId) {
-        allowedScopes.push({ departmentId: currentUser.departmentId, managementId: null });
+        allowedDepartmentIds.add(currentUser.departmentId);
       }
 
       if (currentUser.positionType === "deputy" && currentUser.departmentId) {
-        allowedScopes.push({ departmentId: currentUser.departmentId, managementId: null });
+        allowedDepartmentIds.add(currentUser.departmentId);
       }
 
-      if (allowedScopes.length === 0) {
+      if (allowedDepartmentIds.size === 0) {
         return res.status(403).json({ error: "У вас нет прав для создания аукционов" });
       }
 
-      let selectedScope: { departmentId: string; managementId: string | null } | undefined;
+      let departmentId = parsed.departmentId;
 
-      if (parsed.departmentId) {
-        selectedScope = allowedScopes.find((scope) => scope.departmentId === parsed.departmentId);
-        if (!selectedScope) {
+      if (departmentId) {
+        if (!allowedDepartmentIds.has(departmentId)) {
           return res.status(403).json({ error: "Нет доступа к выбранному департаменту" });
         }
       } else {
-        const uniqueDepartments = Array.from(new Set(allowedScopes.map((scope) => scope.departmentId)));
+        const uniqueDepartments = Array.from(allowedDepartmentIds);
         if (uniqueDepartments.length > 1) {
           return res.status(400).json({ error: "Укажите департамент для аукциона" });
         }
-        selectedScope = allowedScopes[0];
+        [departmentId] = uniqueDepartments;
       }
 
-      if (!selectedScope) {
+      if (!departmentId) {
         return res.status(500).json({ error: "Не удалось определить департамент" });
+      }
+
+      let managementId: string | null = null;
+
+      if (requestedTaskType === "UNIT") {
+        if (!parsed.managementId) {
+          return res.status(400).json({ error: "Укажите управление для задачи" });
+        }
+
+        const management = await storage.getManagement(parsed.managementId);
+
+        if (!management) {
+          return res.status(404).json({ error: "Управление не найдено" });
+        }
+
+        if (management.departmentId !== departmentId) {
+          return res
+            .status(400)
+            .json({ error: "Управление должно принадлежать выбранному департаменту" });
+        }
+
+        managementId = management.id;
       }
 
       const startAt = new Date();
@@ -1319,7 +1335,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(400).json({ error: "Нельзя назначить администратора" });
         }
 
-        if (executor.departmentId !== selectedScope.departmentId) {
+        if (executor.departmentId !== departmentId) {
           return res.status(400).json({ error: "Исполнитель должен принадлежать выбранному департаменту" });
         }
 
@@ -1336,8 +1352,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         type: parsed.type,
         status: requestedTaskType === "INDIVIDUAL" ? "IN_PROGRESS" : "BACKLOG",
         auctionMode: requestedTaskType === "INDIVIDUAL" ? null : requestedMode,
-        departmentId: selectedScope.departmentId,
-        managementId: selectedScope.managementId,
+        departmentId,
+        managementId,
         divisionId: null,
         creatorId: currentUser.id,
         creatorName: currentUser.name,
