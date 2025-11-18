@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { createAuctionTask, type CreateAuctionTaskPayload, type Grade } from "@/api/adapter";
-import type { Department } from "@shared/schema";
+import type { Department, Management } from "@shared/schema";
 import { SessionUser } from "@/types/session";
 import type { TaskMode, TaskType } from "@shared/taskMetadata";
 
@@ -25,6 +25,7 @@ interface FormState {
   startingPrice: string;
   deadlineDate: string;
   departmentId?: string;
+  managementId?: string;
   mode: TaskMode;
   taskType: TaskType;
 }
@@ -46,6 +47,7 @@ function createInitialFormState(): FormState {
     startingPrice: "",
     deadlineDate: formatDateOnly(defaultDeadline),
     departmentId: undefined,
+    managementId: undefined,
     mode: "MONEY",
     taskType: "DEPARTMENT",
   };
@@ -130,6 +132,10 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
     queryKey: ["/api/departments"],
     enabled: shouldLoadDepartments,
   });
+  const { data: managements } = useQuery<Management[]>({
+    queryKey: ["/api/managements"],
+    enabled: open,
+  });
 
   const availableDepartments = useMemo(() => {
     if (!currentUser) return [] as Department[];
@@ -143,6 +149,10 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
       return false;
     });
   }, [currentUser, departments]);
+  const availableManagements = useMemo(() => {
+    if (!formState.departmentId) return [] as Management[];
+    return (managements ?? []).filter((management) => management.departmentId === formState.departmentId);
+  }, [formState.departmentId, managements]);
   const isTimeMode = formState.mode === "TIME";
 
   useEffect(() => {
@@ -161,6 +171,34 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
       }
     }
   }, [open, availableDepartments, currentUser?.departmentId, formState.departmentId]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    if (formState.taskType !== "UNIT") {
+      if (formState.managementId) {
+        setFormState((prev) => ({ ...prev, managementId: undefined }));
+      }
+      return;
+    }
+
+    if (!formState.departmentId) {
+      if (formState.managementId) {
+        setFormState((prev) => ({ ...prev, managementId: undefined }));
+      }
+      return;
+    }
+
+    if (formState.managementId && availableManagements.some((management) => management.id === formState.managementId)) {
+      return;
+    }
+
+    if (availableManagements.length === 1) {
+      setFormState((prev) => ({ ...prev, managementId: availableManagements[0].id }));
+    } else if (formState.managementId) {
+      setFormState((prev) => ({ ...prev, managementId: undefined }));
+    }
+  }, [availableManagements, formState.departmentId, formState.managementId, formState.taskType, open]);
 
   const minDate = useMemo(() => formatDateOnly(new Date()), []);
 
@@ -238,6 +276,18 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
       return;
     }
 
+    if (formState.taskType === "UNIT") {
+      if (!formState.departmentId) {
+        toast({ title: "Выберите департамент для управления", variant: "destructive" });
+        return;
+      }
+
+      if (!formState.managementId) {
+        toast({ title: "Выберите управление", variant: "destructive" });
+        return;
+      }
+    }
+
     if (!deadline || deadline <= new Date()) {
       toast({ title: "Выберите корректный дедлайн", variant: "destructive" });
       return;
@@ -250,6 +300,7 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
       startingPrice: amount,
       deadline: deadline.toISOString(),
       departmentId: formState.departmentId,
+      managementId: formState.taskType === "UNIT" ? formState.managementId : undefined,
       mode: formState.mode,
       taskType: formState.taskType,
     });
@@ -307,6 +358,39 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">Выберите департамент, от имени которого создаёте аукцион</p>
+              </div>
+            )}
+
+            {formState.taskType === "UNIT" && (
+              <div className="space-y-2">
+                <Label htmlFor="auction-management">Управление *</Label>
+                <Select
+                  value={formState.managementId ?? ""}
+                  onValueChange={(value) => setFormState((prev) => ({ ...prev, managementId: value }))}
+                  disabled={
+                    mutation.isPending ||
+                    !formState.departmentId ||
+                    availableManagements.length === 0
+                  }
+                >
+                  <SelectTrigger id="auction-management">
+                    <SelectValue placeholder="Выберите управление" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableManagements.map((management) => (
+                      <SelectItem key={management.id} value={management.id}>
+                        {management.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {formState.departmentId
+                    ? availableManagements.length === 0
+                      ? "В выбранном департаменте нет управлений"
+                      : "Выберите управление, для которого создаётся аукцион"
+                    : "Сначала выберите департамент"}
+                </p>
               </div>
             )}
 
