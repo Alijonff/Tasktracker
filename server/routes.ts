@@ -295,6 +295,7 @@ const createTaskSchema = z
     minimumGrade: gradeSchema.default("D"),
     departmentId: z.string().min(1, "Укажите департамент").optional(),
     managementId: z.string().min(1, "Укажите управление").optional(),
+    divisionId: z.string().min(1, "Укажите отдел").optional(),
     executorId: z.string().min(1, "Укажите исполнителя").optional(),
     auctionInitialSum: decimalNumberSchema,
   });
@@ -1287,25 +1288,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       let managementId: string | null = null;
+      let divisionId: string | null = null;
 
       if (requestedTaskType === "UNIT") {
-        if (!parsed.managementId) {
-          return res.status(400).json({ error: "Укажите управление для задачи" });
+        if (!parsed.divisionId) {
+          return res.status(400).json({ error: "Укажите отдел для задачи" });
         }
 
-        const management = await storage.getManagement(parsed.managementId);
+        const division = await storage.getDivision(parsed.divisionId);
 
-        if (!management) {
-          return res.status(404).json({ error: "Управление не найдено" });
+        if (!division) {
+          return res.status(404).json({ error: "Отдел не найден" });
         }
 
-        if (management.departmentId !== departmentId) {
+        if (division.departmentId !== departmentId) {
           return res
             .status(400)
-            .json({ error: "Управление должно принадлежать выбранному департаменту" });
+            .json({ error: "Отдел должен принадлежать выбранному департаменту" });
         }
 
-        managementId = management.id;
+        managementId = division.managementId ?? null;
+        divisionId = division.id;
       }
 
       const startAt = new Date();
@@ -1354,7 +1357,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         auctionMode: requestedTaskType === "INDIVIDUAL" ? null : requestedMode,
         departmentId,
         managementId,
-        divisionId: null,
+        divisionId,
         creatorId: currentUser.id,
         creatorName: currentUser.name,
         executorId: requestedTaskType === "INDIVIDUAL" ? individualExecutor!.id : null,
@@ -1541,6 +1544,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const targetStatus = status as Task["status"];
       const currentStatus = task.status as Task["status"];
       const commentText = typeof comment === "string" ? comment.trim() : "";
+      const isCreator = task.creatorId === currentUser.id;
 
       if (currentStatus === targetStatus) {
         return res.json(task);
@@ -1571,8 +1575,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             return res.status(403).json({ error: "Только исполнитель или директор могут начать задачу" });
           }
         } else if (currentStatus === "UNDER_REVIEW") {
-          if (!(isDirector || isAdmin)) {
-            return res.status(403).json({ error: "Только директор может вернуть задачу на доработку" });
+          if (!(isCreator || isDirector || isAdmin)) {
+            return res
+              .status(403)
+              .json({ error: "Только создатель или директор могут вернуть задачу на доработку" });
           }
           if (!commentText) {
             return res.status(400).json({ error: "Добавьте комментарий при возврате задачи" });
@@ -1704,16 +1710,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         if (metadata.taskType === "UNIT") {
-          if (task.divisionId && activeUser.divisionId !== task.divisionId) {
+          if (!task.divisionId) {
+            return res.status(400).json({ error: "Для задач типа 'UNIT' должен быть указан отдел" });
+          }
+
+          if (activeUser.divisionId !== task.divisionId) {
             return res
               .status(403)
               .json({ error: "Ставки доступны только сотрудникам отдела задачи" });
-          }
-
-          if (task.managementId && activeUser.managementId !== task.managementId) {
-            return res
-              .status(403)
-              .json({ error: "Ставки доступны только сотрудникам управления задачи" });
           }
         }
       }

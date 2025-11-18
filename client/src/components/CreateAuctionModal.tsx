@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { createAuctionTask, type CreateAuctionTaskPayload, type Grade } from "@/api/adapter";
-import type { Department, Management } from "@shared/schema";
+import type { Department, Division } from "@shared/schema";
 import { SessionUser } from "@/types/session";
 import type { TaskMode, TaskType } from "@shared/taskMetadata";
 
@@ -25,7 +25,7 @@ interface FormState {
   startingPrice: string;
   deadlineDate: string;
   departmentId?: string;
-  managementId?: string;
+  divisionId?: string;
   mode: TaskMode;
   taskType: TaskType;
 }
@@ -47,7 +47,7 @@ function createInitialFormState(): FormState {
     startingPrice: "",
     deadlineDate: formatDateOnly(defaultDeadline),
     departmentId: undefined,
-    managementId: undefined,
+    divisionId: undefined,
     mode: "MONEY",
     taskType: "DEPARTMENT",
   };
@@ -114,7 +114,7 @@ const modeOptions: Array<{ value: TaskMode; label: string; helper: string }> = [
 
 const taskTypeOptions: Array<{ value: TaskType; label: string; helper: string }> = [
   { value: "DEPARTMENT", label: "Департамент", helper: "Стандартный аукцион" },
-  { value: "UNIT", label: "Управление", helper: "Аукцион внутри управления" },
+  { value: "UNIT", label: "Отдел", helper: "Аукцион внутри отдела" },
   { value: "INDIVIDUAL", label: "Индивидуальная", helper: "Без аукциона, сразу в работу" },
 ];
 
@@ -132,8 +132,8 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
     queryKey: ["/api/departments"],
     enabled: shouldLoadDepartments,
   });
-  const { data: managements } = useQuery<Management[]>({
-    queryKey: ["/api/managements"],
+  const { data: divisions } = useQuery<Division[]>({
+    queryKey: ["/api/divisions"],
     enabled: open,
   });
 
@@ -149,10 +149,10 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
       return false;
     });
   }, [currentUser, departments]);
-  const availableManagements = useMemo(() => {
-    if (!formState.departmentId) return [] as Management[];
-    return (managements ?? []).filter((management) => management.departmentId === formState.departmentId);
-  }, [formState.departmentId, managements]);
+  const availableDivisions = useMemo(() => {
+    if (!formState.departmentId) return [] as Division[];
+    return (divisions ?? []).filter((division) => division.departmentId === formState.departmentId);
+  }, [divisions, formState.departmentId]);
   const isTimeMode = formState.mode === "TIME";
 
   useEffect(() => {
@@ -176,29 +176,29 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
     if (!open) return;
 
     if (formState.taskType !== "UNIT") {
-      if (formState.managementId) {
-        setFormState((prev) => ({ ...prev, managementId: undefined }));
+      if (formState.divisionId) {
+        setFormState((prev) => ({ ...prev, divisionId: undefined }));
       }
       return;
     }
 
     if (!formState.departmentId) {
-      if (formState.managementId) {
-        setFormState((prev) => ({ ...prev, managementId: undefined }));
+      if (formState.divisionId) {
+        setFormState((prev) => ({ ...prev, divisionId: undefined }));
       }
       return;
     }
 
-    if (formState.managementId && availableManagements.some((management) => management.id === formState.managementId)) {
+    if (formState.divisionId && availableDivisions.some((division) => division.id === formState.divisionId)) {
       return;
     }
 
-    if (availableManagements.length === 1) {
-      setFormState((prev) => ({ ...prev, managementId: availableManagements[0].id }));
-    } else if (formState.managementId) {
-      setFormState((prev) => ({ ...prev, managementId: undefined }));
+    if (availableDivisions.length === 1) {
+      setFormState((prev) => ({ ...prev, divisionId: availableDivisions[0].id }));
+    } else if (formState.divisionId) {
+      setFormState((prev) => ({ ...prev, divisionId: undefined }));
     }
-  }, [availableManagements, formState.departmentId, formState.managementId, formState.taskType, open]);
+  }, [availableDivisions, formState.departmentId, formState.divisionId, formState.taskType, open]);
 
   const minDate = useMemo(() => formatDateOnly(new Date()), []);
 
@@ -278,12 +278,12 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
 
     if (formState.taskType === "UNIT") {
       if (!formState.departmentId) {
-        toast({ title: "Выберите департамент для управления", variant: "destructive" });
+        toast({ title: "Выберите департамент для отдела", variant: "destructive" });
         return;
       }
 
-      if (!formState.managementId) {
-        toast({ title: "Выберите управление", variant: "destructive" });
+      if (!formState.divisionId) {
+        toast({ title: "Выберите отдел", variant: "destructive" });
         return;
       }
     }
@@ -300,7 +300,8 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
       startingPrice: amount,
       deadline: deadline.toISOString(),
       departmentId: formState.departmentId,
-      managementId: formState.taskType === "UNIT" ? formState.managementId : undefined,
+      managementId: undefined,
+      divisionId: formState.taskType === "UNIT" ? formState.divisionId : undefined,
       mode: formState.mode,
       taskType: formState.taskType,
     });
@@ -363,32 +364,28 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
 
             {formState.taskType === "UNIT" && (
               <div className="space-y-2">
-                <Label htmlFor="auction-management">Управление *</Label>
+                <Label htmlFor="auction-division">Отдел *</Label>
                 <Select
-                  value={formState.managementId ?? ""}
-                  onValueChange={(value) => setFormState((prev) => ({ ...prev, managementId: value }))}
-                  disabled={
-                    mutation.isPending ||
-                    !formState.departmentId ||
-                    availableManagements.length === 0
-                  }
+                  value={formState.divisionId ?? ""}
+                  onValueChange={(value) => setFormState((prev) => ({ ...prev, divisionId: value }))}
+                  disabled={mutation.isPending || !formState.departmentId || availableDivisions.length === 0}
                 >
-                  <SelectTrigger id="auction-management">
-                    <SelectValue placeholder="Выберите управление" />
+                  <SelectTrigger id="auction-division">
+                    <SelectValue placeholder="Выберите отдел" />
                   </SelectTrigger>
                   <SelectContent>
-                    {availableManagements.map((management) => (
-                      <SelectItem key={management.id} value={management.id}>
-                        {management.name}
+                    {availableDivisions.map((division) => (
+                      <SelectItem key={division.id} value={division.id}>
+                        {division.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
                   {formState.departmentId
-                    ? availableManagements.length === 0
-                      ? "В выбранном департаменте нет управлений"
-                      : "Выберите управление, для которого создаётся аукцион"
+                    ? availableDivisions.length === 0
+                      ? "В выбранном департаменте нет отделов"
+                      : "Выберите отдел, для которого создаётся аукцион"
                     : "Сначала выберите департамент"}
                 </p>
               </div>
