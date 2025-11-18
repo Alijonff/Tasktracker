@@ -7,7 +7,7 @@ export async function reassignTasksFromTerminatedEmployee(
 ): Promise<void> {
   const activeTasks = await storage.getAllTasks({
     assigneeId: employeeId,
-    statuses: ["inProgress", "underReview"],
+    statuses: ["IN_PROGRESS", "UNDER_REVIEW"],
   });
 
   await Promise.all(

@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { UsersRound, Gavel, CalendarDays, UserRound } from "lucide-react";
 import type { Grade } from "@/api/adapter";
 import type { TaskMode } from "@shared/taskMetadata";
+import type { Task } from "@shared/schema";
 
 interface TaskDetailDialogProps {
   open: boolean;
@@ -16,7 +17,7 @@ interface TaskDetailDialogProps {
     id: string;
     title: string;
     description: string;
-    status: "backlog" | "inProgress" | "underReview" | "completed";
+    status: Task["status"];
     creator: string;
     deadline: string;
     minimumGrade: Grade;

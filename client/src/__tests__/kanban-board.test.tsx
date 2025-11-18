@@ -11,7 +11,7 @@ const tasks: KanbanTask[] = [
     id: "t1",
     title: "Подготовка отчёта",
     description: "Собрать данные",
-    status: "backlog",
+    status: "BACKLOG",
     creatorName: "Дилшод",
     minimumGrade: "D",
     deadline: "2024-01-01T10:00:00.000Z",
@@ -29,7 +29,7 @@ test("KanbanBoard snapshot", () => {
 });
 
 test("KanbanBoard enforces transition rules", () => {
-  assert.equal(isAllowedTransition("backlog", "inProgress"), true);
-  assert.equal(isAllowedTransition("backlog", "completed"), false);
-  assert.ok(allowedTransitions.underReview.includes("completed"));
+  assert.equal(isAllowedTransition("BACKLOG", "IN_PROGRESS"), true);
+  assert.equal(isAllowedTransition("BACKLOG", "DONE"), false);
+  assert.ok(allowedTransitions.UNDER_REVIEW.includes("DONE"));
 });

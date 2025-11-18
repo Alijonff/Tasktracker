@@ -38,29 +38,29 @@ interface KanbanBoardProps {
 }
 
 const columnConfig: Record<KanbanStatus, { title: string; description: string }> = {
-  backlog: {
+  BACKLOG: {
     title: "Бэклог",
     description: "Аукционы ожидают старта",
   },
-  inProgress: {
+  IN_PROGRESS: {
     title: "В работе",
     description: "Ведутся работы по аукциону",
   },
-  underReview: {
+  UNDER_REVIEW: {
     title: "На проверке",
     description: "Результат ожидает подтверждения",
   },
-  completed: {
+  DONE: {
     title: "Завершена",
     description: "Аукцион закрыт",
   },
 };
 
 export const allowedTransitions: Record<KanbanStatus, KanbanStatus[]> = {
-  backlog: ["inProgress"],
-  inProgress: ["underReview"],
-  underReview: ["inProgress", "completed"],
-  completed: [],
+  BACKLOG: ["IN_PROGRESS"],
+  IN_PROGRESS: ["UNDER_REVIEW"],
+  UNDER_REVIEW: ["IN_PROGRESS", "DONE"],
+  DONE: [],
 };
 
 export const isAllowedTransition = (from: KanbanStatus, to: KanbanStatus): boolean => {
@@ -209,10 +209,10 @@ export default function KanbanBoard({
 }: KanbanBoardProps) {
   const createEmptyColumns = useCallback(
     (): Record<KanbanStatus, KanbanTask[]> => ({
-      backlog: [],
-      inProgress: [],
-      underReview: [],
-      completed: [],
+      BACKLOG: [],
+      IN_PROGRESS: [],
+      UNDER_REVIEW: [],
+      DONE: [],
     }),
     [],
   );

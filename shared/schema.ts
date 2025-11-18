@@ -23,12 +23,12 @@ export const roleEnum = pgEnum("role", [
 ]);
 export const gradeEnum = pgEnum("grade", ["A", "B", "C", "D"]);
 export const taskStatusEnum = pgEnum("task_status", [
-  "backlog",
-  "inProgress",
-  "underReview",
-  "completed",
+  "BACKLOG",
+  "IN_PROGRESS",
+  "UNDER_REVIEW",
+  "DONE",
 ]);
-export const taskTypeEnum = pgEnum("task_type", ["auction"]);
+export const taskTypeEnum = pgEnum("task_type", ["INDIVIDUAL", "UNIT", "DEPARTMENT"]);
 export const positionTypeEnum = pgEnum("position_type", [
   "admin",
   "director",
@@ -126,7 +126,7 @@ export const tasks = pgTable("tasks", {
     .default(sql`gen_random_uuid()`),
   title: text("title").notNull(),
   description: text("description").notNull(),
-  status: taskStatusEnum("status").notNull().default("backlog"),
+  status: taskStatusEnum("status").notNull().default("BACKLOG"),
   type: taskTypeEnum("type").notNull(),
   departmentId: varchar("department_id")
     .notNull()

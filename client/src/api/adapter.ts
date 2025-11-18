@@ -3,7 +3,7 @@ import type { Task, PointTransaction, SelectUser } from "@shared/schema";
 import type { TaskMode, TaskType } from "@shared/taskMetadata";
 import { calculateGradeProgress } from "@shared/utils";
 
-export type AuctionStatus = "backlog" | "inProgress" | "underReview" | "completed";
+export type AuctionStatus = Task["status"];
 export type Grade = "A" | "B" | "C" | "D";
 
 export interface AuctionTaskSummary {
@@ -83,7 +83,7 @@ function parseNumber(value: unknown): number | undefined {
 
 function transformTask(task: Task): AuctionTaskSummary {
   const mode = ((task as any).mode as TaskMode) ?? "MONEY";
-  const taskType = ((task as any).taskType as TaskType) ?? "DEPARTMENT";
+  const taskType = ((task as any).taskType as TaskType) ?? (task.type as TaskType) ?? "DEPARTMENT";
   const startingPrice =
     parseNumber((task as any).auctionInitialAmount) ??
     parseNumber(task.auctionInitialSum) ??
@@ -201,7 +201,7 @@ export async function listAuctions(params: ListAuctionsParams = {}): Promise<Auc
     ? status
     : status
     ? [status]
-    : rest.statuses ?? ["backlog"];
+    : rest.statuses ?? ["BACKLOG"];
 
   const baseParams: ListTasksParams = {
     ...rest,
@@ -228,7 +228,7 @@ export async function createAuctionTask(payload: CreateAuctionTaskPayload): Prom
   const response = await apiRequest("POST", "/api/tasks", {
     title: payload.title,
     description: payload.description,
-    type: "auction" as const,
+    type: payload.taskType ?? "DEPARTMENT",
     mode: payload.mode ?? "MONEY",
     taskType: payload.taskType ?? "DEPARTMENT",
     minimumGrade: payload.minimumGrade,
