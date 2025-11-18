@@ -245,7 +245,7 @@ export async function updateTaskStatus(taskId: string, status: AuctionStatus): P
 }
 
 export async function placeBid(taskId: string, amountSum: number): Promise<{ taskId: string; amount: number }> {
-  await apiRequest("POST", `/api/tasks/${taskId}/bids`, { amount: amountSum });
+  await apiRequest("POST", `/api/tasks/${taskId}/bids`, { bidAmount: amountSum });
   return { taskId, amount: amountSum };
 }
 

@@ -17,6 +17,59 @@ const gradeWeights: Record<Grade, number> = {
   A: 3,
 };
 
+function getBidAvailability(
+  task: AuctionTaskSummary,
+  user: SessionUser | null | undefined,
+  userGrade: Grade | null,
+): { canBid: boolean; reason?: string } {
+  if (!user) {
+    return { canBid: false, reason: "Необходимо войти в систему" };
+  }
+
+  if (user.id === task.creatorId) {
+    return { canBid: false, reason: "Создатель задачи не может делать ставки" };
+  }
+
+  if (user.role !== "admin") {
+    if (!user.departmentId || user.departmentId !== task.departmentId) {
+      return { canBid: false, reason: "Только для сотрудников департамента задачи" };
+    }
+
+    if (task.taskType === "UNIT") {
+      if (task.divisionId && user.divisionId !== task.divisionId) {
+        return { canBid: false, reason: "Только для отдела задачи" };
+      }
+      if (task.managementId && user.managementId !== task.managementId) {
+        return { canBid: false, reason: "Только для управления задачи" };
+      }
+    }
+  }
+
+  if (userGrade && gradeWeights[userGrade] < gradeWeights[task.minimumGrade]) {
+    return { canBid: false, reason: `Ставка доступна с грейда ${task.minimumGrade}` };
+  }
+
+  return { canBid: true };
+}
+
+function extractErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    const [, ...rest] = error.message.split(":");
+    const payload = rest.join(":").trim();
+    if (payload) {
+      try {
+        const parsed = JSON.parse(payload);
+        if (parsed?.error) return String(parsed.error);
+      } catch (err) {
+        console.debug("Не удалось распарсить ошибку ставки", err);
+      }
+      return payload;
+    }
+    return error.message;
+  }
+  return "Не удалось отправить ставку";
+}
+
 export default function Auctions() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -53,8 +106,8 @@ export default function Auctions() {
       queryClient.invalidateQueries({ queryKey: ["auctions"], exact: false });
       setBidDialogOpen(false);
     },
-    onError: () => {
-      toast({ title: "Не удалось отправить ставку", variant: "destructive" });
+    onError: (error) => {
+      toast({ title: extractErrorMessage(error), variant: "destructive" });
     },
   });
 
@@ -63,15 +116,14 @@ export default function Auctions() {
   const backlogAuctions = useMemo(() => {
     const backlogTasks = tasks.filter((task) => task.status === "backlog");
     return backlogTasks.map((task) => {
-      const gradeAllowed = userGrade ? gradeWeights[userGrade] >= gradeWeights[task.minimumGrade] : true;
-      const restrictionReason = userGrade && !gradeAllowed ? `Ставка доступна с грейда ${task.minimumGrade}` : undefined;
+      const { canBid, reason } = getBidAvailability(task, currentUser, userGrade);
       return {
         task,
-        canBid: task.canBid && gradeAllowed,
-        restrictionReason,
+        canBid: task.canBid && canBid,
+        restrictionReason: reason,
       };
     });
-  }, [tasks, userGrade]);
+  }, [tasks, userGrade, currentUser]);
 
   return (
     <div className="space-y-6">
