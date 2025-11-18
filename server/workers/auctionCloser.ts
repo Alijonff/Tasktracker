@@ -1,8 +1,5 @@
 import {
-  calculateAuctionPrice,
-  getAuctionBaseValue,
-  getAuctionMaxValue,
-  getBidValue,
+  calculateEarnedValue,
   resolveAuctionMode,
   selectWinningBid,
   shouldAutoAssignToCreator,
@@ -59,9 +56,7 @@ export async function processExpiredAuctions(): Promise<void> {
             continue;
           }
 
-          const calculatedPrice = calculateAuctionPrice(auction, now, mode);
-          const assignedValue =
-            calculatedPrice ?? getAuctionMaxValue(auction, mode) ?? getAuctionBaseValue(auction, mode) ?? null;
+          const assignedValue = calculateEarnedValue(auction, null, mode);
 
           await storage.closeAuction(auction.id, {
             winnerId: auction.creatorId,
@@ -72,7 +67,7 @@ export async function processExpiredAuctions(): Promise<void> {
           });
 
           console.log(
-            `[AuctionCloser] Closed auction ${auction.id} without bids, assigned to creator ${auction.creatorName}`
+            `[AuctionCloser] Closed auction ${auction.id} without bids, assigned to creator ${auction.creatorName} with value ${assignedValue}`
           );
         } else {
           const winningBid = selectWinningBid(bids, mode);
@@ -80,7 +75,7 @@ export async function processExpiredAuctions(): Promise<void> {
             continue;
           }
 
-          const assignedValue = getBidValue(winningBid, mode) ?? getAuctionMaxValue(auction, mode);
+          const assignedValue = calculateEarnedValue(auction, winningBid, mode);
 
           await storage.closeAuction(auction.id, {
             winnerId: winningBid.bidderId,
@@ -91,7 +86,7 @@ export async function processExpiredAuctions(): Promise<void> {
           });
 
           console.log(
-            `[AuctionCloser] Closed auction ${auction.id}, winner: ${winningBid.bidderName} with bid ${assignedValue}`
+            `[AuctionCloser] Closed auction ${auction.id}, winner: ${winningBid.bidderName} with value ${assignedValue}`
           );
         }
       } catch (error) {

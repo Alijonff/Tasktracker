@@ -139,3 +139,25 @@ export function shouldAutoAssignToCreator(task: Task, now: Date = new Date()): b
 export function calculateOverduePenaltyHours(deadline: Date, completedAt: Date): number {
   return Math.max(0, Math.ceil(diffWorkingHours(deadline, completedAt)));
 }
+
+export function calculateEarnedValue(
+  task: Task,
+  winningBid: AuctionBid | null,
+  mode: TaskMode
+): number | null {
+  if (mode === "TIME") {
+    if (winningBid) {
+      return getBidValue(winningBid, mode);
+    }
+    return getAuctionMaxValue(task, mode);
+  }
+
+  if (mode === "MONEY") {
+    if (winningBid) {
+      return getBidValue(winningBid, mode);
+    }
+    return getAuctionMaxValue(task, mode);
+  }
+
+  return null;
+}
