@@ -220,14 +220,16 @@ export async function listAuctions(params: ListAuctionsParams = {}): Promise<Auc
     ? [status]
     : rest.statuses ?? ["BACKLOG"];
 
-  const baseParams: ListTasksParams = {
-    ...rest,
-    scope,
-    statuses,
-  };
-
-  const allTasks = await listTasks(baseParams);
-  return allTasks.filter((task) => task.taskType !== "INDIVIDUAL");
+  try {
+    const response = await apiRequest("GET", "/api/auctions/active");
+    const data = (await response.json()) as Task[];
+    const transformed = data.map(transformTask);
+    const filtered = applyClientFilters(transformed, { ...rest, scope, statuses });
+    return filtered.filter((task) => task.taskType !== "INDIVIDUAL");
+  } catch (error) {
+    console.warn("Failed to load auctions", error);
+    return [];
+  }
 }
 
 export interface CreateAuctionTaskPayload {
