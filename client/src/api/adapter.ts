@@ -28,6 +28,11 @@ export interface AuctionTaskSummary {
   leadingBidderId?: string;
   leadingBidderName?: string;
   canBid: boolean;
+  earnedMoney?: string | number | null;
+  earnedTimeMinutes?: number | null;
+  assignedPoints?: number | null;
+  updatedAt?: string | null;
+  doneAt?: string | null;
 }
 
 export interface ListTasksParams {
@@ -123,6 +128,11 @@ function transformTask(task: Task): AuctionTaskSummary {
     deadline: new Date(task.deadline).toISOString(),
     startingPrice,
     currentPrice,
+    earnedMoney: task.earnedMoney ?? undefined,
+    earnedTimeMinutes: task.earnedTimeMinutes ?? undefined,
+    assignedPoints: task.assignedPoints ?? undefined,
+    updatedAt: task.updatedAt ? new Date(task.updatedAt).toISOString() : undefined,
+    doneAt: task.doneAt ? new Date(task.doneAt).toISOString() : undefined,
     bidsCount: 0,
     leadingBidderId: task.auctionWinnerId ?? undefined,
     leadingBidderName: task.auctionWinnerName ?? undefined,
@@ -210,14 +220,16 @@ export async function listAuctions(params: ListAuctionsParams = {}): Promise<Auc
     ? [status]
     : rest.statuses ?? ["BACKLOG"];
 
-  const baseParams: ListTasksParams = {
-    ...rest,
-    scope,
-    statuses,
-  };
-
-  const allTasks = await listTasks(baseParams);
-  return allTasks.filter((task) => task.taskType !== "INDIVIDUAL");
+  try {
+    const response = await apiRequest("GET", "/api/auctions/active");
+    const data = (await response.json()) as Task[];
+    const transformed = data.map(transformTask);
+    const filtered = applyClientFilters(transformed, { ...rest, scope, statuses });
+    return filtered.filter((task) => task.taskType !== "INDIVIDUAL");
+  } catch (error) {
+    console.warn("Failed to load auctions", error);
+    return [];
+  }
 }
 
 export interface CreateAuctionTaskPayload {

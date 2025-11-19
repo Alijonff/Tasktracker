@@ -49,14 +49,15 @@ Preferred communication style: Simple, everyday language.
 
 **Database:** PostgreSQL (configured for Neon serverless).
 
-**Schema Design (v2.1):**
+**Schema Design (v2.2):**
 - **Organizational Hierarchy:** `departments`, `managements`, `divisions`, `employees` (with positionType, role, rating, points, time metrics).
 - **Task Management:** `tasks` support three types: `INDIVIDUAL` (direct assignment, no auction), `UNIT` (division-level auction), `DEPARTMENT` (department-wide auction). Статусы: backlog → inProgress → underReview → completed. Хранит дедлайны, исполнителей, минимальный грейд и параметры аукциона.
-- **Auction System:** Tasks store auction configuration: `auction_mode` ("MONEY" or "TIME"), `base_price`/`base_time_minutes` as starting bid, `auctionPlannedEndAt` for planned close, `earned_money`/`earned_time_minutes` for winning bid reward. Ceiling prices reach ×1.5 base value at planned end + 3 working hours. INDIVIDUAL tasks have null auction fields.
-- **Auction Bids:** `auctionBids` table tracks bids with `value_money`/`value_time_minutes`, bidder grade/rating/points, `is_active` flag. Auto-closure assigns to lowest bidder; if no bids, assigns to department director with ceiling reward. Bids deactivated on employee termination or department transfer.
+- **Auction System:** Tasks store auction configuration: `auction_mode` ("MONEY" or "TIME"), `base_price`/`base_time_minutes` as starting bid, `auctionPlannedEndAt` for planned close, `earned_money`/`earned_time_minutes` for winning bid reward. Ceiling prices reach ×1.5 base value at planned end + 3 working hours. INDIVIDUAL tasks have null auction fields. **Discrete price growth**: Auction price stops at first bid checkpoint; grace period extends 3 real hours after 18:00 deadline.
+- **Auction Bids:** `auctionBids` table tracks bids with `value_money`/`value_time_minutes`, bidder grade/rating/points, `is_active` flag. Auto-closure assigns to lowest bidder; if no bids, assigns to department director with ceiling reward. **Tie-breaking**: Winner selected by lowest bid → current_points → createdAt. Bids deactivated on employee termination or department transfer.
 - **File Attachments:** `task_attachments` table stores task files (max 10 files × 25MB) in Object Storage. Authorization: creator deletes any files, executor/uploader delete own files, admin deletes all.
 - **Points System:** `point_transactions` table tracks point changes with type (TASK_COMPLETION, MANUAL_ADJUSTMENT, BID_PLACEMENT), reference IDs, amounts, and timestamps. Employees earn/lose points; grades calculated dynamically: <45=D, 45-64=C, 65-84=B, ≥85=A. Only employees with grade ≥ task's `minimumGrade` can bid. **Admin users have positionType='admin', role='admin', maintain 0 points with no accumulation.**
 - **Review Deadline:** Tasks in `underReview` have `reviewDeadline` set to 48 real hours (excluding weekends) from transition. Worker auto-returns to `inProgress` after expiration.
+- **Reports & Analytics (v2.2):** Reports page implements monthly filtering by task completion date (`doneAt` with fallback to `updatedAt`). Aggregates earned value metrics (earnedMoney, earnedTimeMinutes, assignedPoints) across organizational hierarchy (department → management → division → employee). Month selector: current month, previous month, all time. Summary cards display completed tasks count, total earned money, total earned time (hours), total points. Drilldown cards show per-entity metrics when month filter is active.
 
 ### Authentication & Authorization
 

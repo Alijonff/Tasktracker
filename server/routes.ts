@@ -49,6 +49,11 @@ import {
   calculateGradeProgress,
   type PositionType,
 } from "@shared/utils";
+import {
+  canUserBidOnAuction,
+  evaluateAuctionVisibility,
+  isAuctionVisibleToUser,
+} from "./utils/auctionAccess";
 import multer from "multer";
 import { Client } from "@replit/object-storage";
 
@@ -112,16 +117,6 @@ const positionRoleMap: Record<PositionType, "director" | "manager" | "senior" | 
   employee: "employee",
 };
 
-const roleGradeMap: Record<"admin" | "director" | "manager" | "senior" | "employee", Grade> = {
-  admin: "A",
-  director: "A",
-  manager: "B",
-  senior: "C",
-  employee: "D",
-};
-
-const gradePriority: Record<Grade, number> = { A: 4, B: 3, C: 2, D: 1 };
-
 const basePointsByGrade: Record<Grade, number> = {
   A: 30,
   B: 20,
@@ -139,14 +134,6 @@ const positionGradeMap: Record<PositionType, Grade> = {
   senior: "C",
   employee: "D",
 };
-
-function hasGradeAccess(userGrade: Grade, minimum: Grade): boolean {
-  return gradePriority[userGrade] >= gradePriority[minimum];
-}
-
-function getRoleGrade(role: "admin" | "director" | "manager" | "senior" | "employee"): Grade {
-  return roleGradeMap[role];
-}
 
 function getBasePointsForTask(task: Task): number {
   const minimumGrade = (task.minimumGrade as Grade) ?? "D";
@@ -447,9 +434,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   async function enhanceUserCapabilities(user: Omit<User, "passwordHash">) {
     let canCreateAuctions = false;
 
-    if (user.role === "admin") {
-      canCreateAuctions = true;
-    } else if (user.role === "director" && user.departmentId) {
+    if (user.role === "director" && user.departmentId) {
       canCreateAuctions = true;
     } else if (user.positionType === "deputy" && user.departmentId) {
       canCreateAuctions = true;
@@ -475,7 +460,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         continue;
       }
 
-      const closingTime = plannedEnd.getTime() + NO_BID_GRACE_HOURS * 60 * 60 * 1000;
+      const closingTime = task.auctionHasBids
+        ? plannedEnd.getTime()
+        : plannedEnd.getTime() + NO_BID_GRACE_HOURS * 60 * 60 * 1000;
       if (closingTime > now.getTime()) {
         continue;
       }
@@ -1453,7 +1440,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const allTasks = await storage.getAllTasks(filters);
-      const tasksWithAuctionPrice = allTasks.map((task) => normalizeTaskResponse(task));
+      const visibleTasks = allTasks.filter((task) => {
+        if (currentUser.role === "admin") return true;
+        const metadata = resolveTaskMetadata(task);
+        if (metadata.taskType === "DEPARTMENT" || metadata.taskType === "UNIT") {
+          return isAuctionVisibleToUser(task, currentUser, metadata);
+        }
+        return true;
+      });
+      const tasksWithAuctionPrice = visibleTasks.map((task) => normalizeTaskResponse(task));
       res.json(tasksWithAuctionPrice);
     } catch (error) {
       console.error("Ошибка при получении задач:", error);
@@ -1479,23 +1474,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const currentUser = req.session.user!;
 
-      const scope =
-        currentUser.role === "admin"
-          ? { departmentId: undefined as string | undefined }
-          : currentUser.departmentId
-          ? { departmentId: currentUser.departmentId }
-          : null;
-
-      if (!scope) {
+      if (currentUser.role === "admin") {
         return res.json([]);
       }
 
-      await finalizeExpiredAuctions(scope.departmentId);
+      if (!currentUser.departmentId) {
+        return res.json([]);
+      }
 
-      const activeAuctions = await storage.getActiveAuctions(
-        scope.departmentId ? { departmentId: scope.departmentId } : undefined,
+      await finalizeExpiredAuctions(currentUser.departmentId);
+
+      const activeAuctions = await storage.getActiveAuctions({ departmentId: currentUser.departmentId });
+      const visibleAuctions = activeAuctions.filter((task) =>
+        isAuctionVisibleToUser(task, currentUser, resolveTaskMetadata(task)),
       );
-      const auctionsWithPrice = activeAuctions.map((task) => normalizeTaskResponse(task));
+      const auctionsWithPrice = visibleAuctions.map((task) => normalizeTaskResponse(task));
 
       res.json(auctionsWithPrice);
     } catch (error) {
@@ -1515,11 +1508,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const currentUser = req.session.user!;
-      if (
-        currentUser.role !== "admin" &&
-        (!currentUser.departmentId || currentUser.departmentId !== task.departmentId)
-      ) {
-        return res.status(403).json({ error: "Недостаточно прав для просмотра задачи" });
+      const metadata = resolveTaskMetadata(task);
+
+      if (currentUser.role !== "admin") {
+        if (metadata.taskType === "DEPARTMENT" || metadata.taskType === "UNIT") {
+          const visibility = evaluateAuctionVisibility(task, currentUser, metadata);
+          if (!visibility.visible) {
+            return res
+              .status(403)
+              .json({ error: visibility.reason ?? "Недостаточно прав для просмотра задачи" });
+          }
+        } else if (!currentUser.departmentId || currentUser.departmentId !== task.departmentId) {
+          return res.status(403).json({ error: "Недостаточно прав для просмотра задачи" });
+        }
       }
 
       res.json(normalizeTaskResponse(task));
@@ -1698,34 +1699,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Пользователь не найден или деактивирован" });
       }
 
-      if (activeUser.role === "admin") {
-        return res.status(403).json({ error: "Администраторы не могут делать ставки" });
-      }
-
-      if (activeUser.id === task.creatorId) {
-        return res.status(400).json({ error: "Создатель задачи не может делать ставки" });
-      }
-
-      if (activeUser.role !== "admin") {
-        if (!activeUser.departmentId || activeUser.departmentId !== task.departmentId) {
-          return res
-            .status(403)
-            .json({ error: "Ставки доступны только сотрудникам департамента задачи" });
-        }
-
-        if (metadata.taskType === "UNIT") {
-          if (!task.divisionId) {
-            return res.status(400).json({ error: "Для задач типа 'UNIT' должен быть указан отдел" });
-          }
-
-          if (activeUser.divisionId !== task.divisionId) {
-            return res
-              .status(403)
-              .json({ error: "Ставки доступны только сотрудникам отдела задачи" });
-          }
-        }
-      }
-
       await finalizeExpiredAuctions(task.departmentId);
       const refreshedTask = await storage.getTask(id);
       if (
@@ -1738,20 +1711,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       task = refreshedTask;
 
-      const roleForGrade = (roleGradeMap[activeUser.role as keyof typeof roleGradeMap]
-        ? activeUser.role
-        : "employee") as keyof typeof roleGradeMap;
-      const userGrade: Grade = (activeUser.grade as Grade) ?? getRoleGrade(roleForGrade);
-      const minimumGrade = task.minimumGrade as Grade;
-      if (!hasGradeAccess(userGrade, minimumGrade)) {
-        return res
-          .status(403)
-          .json({ error: `Ставки доступны с грейда ${minimumGrade}, ваш грейд: ${userGrade}` });
+      const refreshedMetadata = resolveTaskMetadata(task, metadata);
+      if (refreshedMetadata.taskType === "UNIT" && !task.divisionId) {
+        return res.status(400).json({ error: "Для задач типа 'UNIT' должен быть указан отдел" });
       }
+
+      const bidAccess = canUserBidOnAuction(task, refreshedMetadata, activeUser);
+      if (!bidAccess.allowed) {
+        const statusCode = bidAccess.reason?.includes("Создатель") ? 400 : 403;
+        return res
+          .status(statusCode)
+          .json({ error: bidAccess.reason ?? "Недостаточно прав для участия в аукционе" });
+      }
+
+      const userGrade: Grade = bidAccess.userGrade ?? (activeUser.grade as Grade);
 
       const parsed = placeBidSchema.parse(req.body);
       const rawBidValue =
-        metadata.mode === "TIME"
+        refreshedMetadata.mode === "TIME"
           ? parsed.valueTimeMinutes
           : parsed.valueMoney ?? parsed.valueTimeMinutes;
 
@@ -1759,8 +1736,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Укажите значение ставки" });
       }
 
-      const bidAmount = normalizeAuctionAmount(rawBidValue, metadata.mode);
-      const auctionPrice = calculateAuctionPrice(task, new Date(), metadata.mode);
+      const bidAmount = normalizeAuctionAmount(rawBidValue, refreshedMetadata.mode);
+      const auctionPrice = calculateAuctionPrice(task, new Date(), refreshedMetadata.mode);
       if (auctionPrice === null) {
         return res.status(400).json({ error: "Ставки недоступны для этой задачи" });
       }
@@ -1770,7 +1747,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const existingBids = await filterOutAdminBids(await storage.getTaskBids(id));
-      const currentWinningBid = selectWinningBid(existingBids, metadata.mode);
+      const currentWinningBid = selectWinningBid(existingBids, refreshedMetadata.mode);
 
       if (currentWinningBid) {
         const candidateBid = {
@@ -1781,12 +1758,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           bidderRating: (activeUser.rating as string | null) ?? "0",
           bidderGrade: userGrade,
           bidderPoints: Number(activeUser.points ?? 0),
-          valueMoney: metadata.mode === "MONEY" ? decimalToString(bidAmount) : null,
-          valueTimeMinutes: metadata.mode === "TIME" ? bidAmount : null,
+          valueMoney: refreshedMetadata.mode === "MONEY" ? decimalToString(bidAmount) : null,
+          valueTimeMinutes: refreshedMetadata.mode === "TIME" ? bidAmount : null,
           createdAt: new Date(),
         } as AuctionBid;
 
-        if (compareBids(candidateBid, currentWinningBid, metadata.mode) >= 0) {
+        if (compareBids(candidateBid, currentWinningBid, refreshedMetadata.mode) >= 0) {
           return res.status(400).json({ error: "Есть более выгодная ставка" });
         }
       }
@@ -1799,8 +1776,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           bidderRating: (activeUser.rating as string | null) ?? "0",
           bidderGrade: userGrade,
           bidderPoints: Number(activeUser.points ?? 0),
-          valueMoney: metadata.mode === "MONEY" ? decimalToString(bidAmount) : null,
-          valueTimeMinutes: metadata.mode === "TIME" ? bidAmount : null,
+          valueMoney: refreshedMetadata.mode === "MONEY" ? decimalToString(bidAmount) : null,
+          valueTimeMinutes: refreshedMetadata.mode === "TIME" ? bidAmount : null,
         },
         { currentAuctionAmount: auctionPrice },
       );

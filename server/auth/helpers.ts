@@ -2,7 +2,7 @@ import type { User, Task } from "@shared/schema";
 import { calculateGrade } from "@shared/utils";
 
 export function canCreateAuctionsForRole(role: string): boolean {
-  return role === "admin" || role === "director";
+  return role === "director";
 }
 
 export function canPlaceBidOnTask(user: User, task: Task): {

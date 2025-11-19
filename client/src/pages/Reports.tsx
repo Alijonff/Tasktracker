@@ -16,6 +16,9 @@ import {
   Building2,
   Users,
   User,
+  Calendar,
+  Clock,
+  Target,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import type { Management, Division, User as UserModel, Department } from "@shared/schema";
@@ -45,6 +48,9 @@ interface ChartItem {
   rating?: number;
   parentId?: string;
   isDepartmentOption?: boolean;
+  earnedMoney?: number;
+  earnedTime?: number;
+  totalPoints?: number;
 }
 
 const statusLabels: Record<AuctionStatus, string> = {
@@ -69,6 +75,7 @@ function parseUserRating(value: UserModel["rating"]): number | undefined {
 export default function Reports() {
   const [drilldown, setDrilldown] = useState<DrilldownState>({ level: "department" });
   const [selectedDepartmentId, setSelectedDepartmentId] = useState<string | "all" | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState<string>("current");
 
   const { data: authData } = useQuery<{ user: SessionUser | null }>({ queryKey: ["/api/auth/me"] });
   const currentUser = authData?.user;
@@ -137,12 +144,73 @@ export default function Reports() {
     if (!selectedDepartmentId || selectedDepartmentId === "all") return employees;
     return employees.filter((emp) => emp.departmentId === selectedDepartmentId);
   }, [employees, selectedDepartmentId]);
+
+  const getMonthRange = (monthKey: string): { start: Date; end: Date } | null => {
+    const now = new Date();
+    
+    if (monthKey === "current") {
+      const start = new Date(now.getFullYear(), now.getMonth(), 1);
+      const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      return { start, end };
+    }
+    
+    if (monthKey === "previous") {
+      const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const end = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+      return { start, end };
+    }
+    
+    if (monthKey === "all") {
+      return null;
+    }
+    
+    const [year, month] = monthKey.split("-").map(Number);
+    if (!year || !month || month < 1 || month > 12) return null;
+    
+    const start = new Date(year, month - 1, 1);
+    const end = new Date(year, month, 0, 23, 59, 59, 999);
+    return { start, end };
+  };
+
+  const filteredTasks = useMemo(() => {
+    const range = getMonthRange(selectedMonth);
+    if (!range) return tasks;
+    
+    return tasks.filter((task) => {
+      if (task.status !== "DONE") return false;
+      
+      const completionDate = task.doneAt ?? task.updatedAt;
+      if (!completionDate) return false;
+      
+      const taskDate = new Date(completionDate);
+      return taskDate >= range.start && taskDate <= range.end;
+    });
+  }, [tasks, selectedMonth]);
   const stats = useMemo(() => {
-    const completed = tasks.filter((t) => t.status === "DONE").length;
+    const activeTasks = selectedMonth === "all" ? tasks : filteredTasks;
+    const completed = activeTasks.filter((t) => t.status === "DONE").length;
     const inProgress = tasks.filter((t) => t.status === "IN_PROGRESS").length;
     const backlog = tasks.filter((t) => t.status === "BACKLOG").length;
     const total = tasks.length;
     const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
+    
+    const completedTasks = activeTasks.filter((task) => task.status === "DONE");
+    const earnedMoney = completedTasks.reduce((sum, task) => {
+      const earned = typeof task.earnedMoney === "number" ? task.earnedMoney : 
+                     typeof task.earnedMoney === "string" ? parseFloat(task.earnedMoney) : 0;
+      return sum + (Number.isFinite(earned) ? earned : 0);
+    }, 0);
+    
+    const earnedTime = completedTasks.reduce((sum, task) => {
+      const earned = task.earnedTimeMinutes ?? 0;
+      return sum + (typeof earned === "number" && Number.isFinite(earned) ? earned : 0);
+    }, 0);
+    
+    const totalPoints = completedTasks.reduce((sum, task) => {
+      const points = task.assignedPoints ?? 0;
+      return sum + (typeof points === "number" && Number.isFinite(points) ? points : 0);
+    }, 0);
+
     const monetaryTasks = tasks.filter((task) => task.mode !== "TIME");
     const totalBudget = monetaryTasks.reduce(
       (sum, task) => sum + (task.currentPrice ?? task.startingPrice ?? 0),
@@ -162,43 +230,86 @@ export default function Reports() {
       ).length;
     }
 
-    return { completed, inProgress, backlog, total, completionRate, avgBudget, employeeCount };
-  }, [tasks, drilldown, filteredEmployees, filteredDivisions]);
+    return { completed, inProgress, backlog, total, completionRate, avgBudget, employeeCount, earnedMoney, earnedTime, totalPoints };
+  }, [tasks, filteredTasks, selectedMonth, drilldown, filteredEmployees, filteredDivisions]);
 
   const chartData = useMemo<ChartItem[]>(() => {
     if (selectedDepartmentId === null) return [];
+    const activeTasks = selectedMonth === "all" ? tasks : filteredTasks;
 
     if (drilldown.level === "department") {
       if (selectedDepartmentId === "all") {
         return departments.map((department) => {
           const deptTasks = tasks.filter((task) => task.departmentId === department.id);
+          const deptCompletedTasks = activeTasks.filter((task) => task.departmentId === department.id && task.status === "DONE");
+          
+          const earnedMoney = deptCompletedTasks.reduce((sum, task) => {
+            const earned = typeof task.earnedMoney === "number" ? task.earnedMoney : 
+                          typeof task.earnedMoney === "string" ? parseFloat(task.earnedMoney) : 0;
+            return sum + (Number.isFinite(earned) ? earned : 0);
+          }, 0);
+          
+          const earnedTime = deptCompletedTasks.reduce((sum, task) => {
+            const earned = task.earnedTimeMinutes ?? 0;
+            return sum + (typeof earned === "number" && Number.isFinite(earned) ? earned : 0);
+          }, 0);
+          
+          const totalPoints = deptCompletedTasks.reduce((sum, task) => {
+            const points = task.assignedPoints ?? 0;
+            return sum + (typeof points === "number" && Number.isFinite(points) ? points : 0);
+          }, 0);
+          
           return {
             id: department.id,
             name: department.name,
-            completed: deptTasks.filter((task) => task.status === "DONE").length,
+            completed: deptCompletedTasks.length,
             inProgress: deptTasks.filter((task) => task.status === "IN_PROGRESS").length,
             backlog: deptTasks.filter((task) => task.status === "BACKLOG").length,
             total: deptTasks.length,
             entityType: "department",
             divisions: managements.filter((mgmt) => mgmt.departmentId === department.id).length,
             isDepartmentOption: true,
+            earnedMoney,
+            earnedTime,
+            totalPoints,
           };
         });
       }
 
       return filteredManagements.map((management) => {
         const managementTasks = tasks.filter((task) => task.managementId === management.id);
+        const managementCompletedTasks = activeTasks.filter((task) => task.managementId === management.id && task.status === "DONE");
         const managementDivisions = filteredDivisions.filter((division) => division.managementId === management.id);
+        
+        const earnedMoney = managementCompletedTasks.reduce((sum, task) => {
+          const earned = typeof task.earnedMoney === "number" ? task.earnedMoney : 
+                        typeof task.earnedMoney === "string" ? parseFloat(task.earnedMoney) : 0;
+          return sum + (Number.isFinite(earned) ? earned : 0);
+        }, 0);
+        
+        const earnedTime = managementCompletedTasks.reduce((sum, task) => {
+          const earned = task.earnedTimeMinutes ?? 0;
+          return sum + (typeof earned === "number" && Number.isFinite(earned) ? earned : 0);
+        }, 0);
+        
+        const totalPoints = managementCompletedTasks.reduce((sum, task) => {
+          const points = task.assignedPoints ?? 0;
+          return sum + (typeof points === "number" && Number.isFinite(points) ? points : 0);
+        }, 0);
+        
         return {
           id: management.id,
           name: management.name,
-          completed: managementTasks.filter((task) => task.status === "DONE").length,
+          completed: managementCompletedTasks.length,
           inProgress: managementTasks.filter((task) => task.status === "IN_PROGRESS").length,
           backlog: managementTasks.filter((task) => task.status === "BACKLOG").length,
           total: managementTasks.length,
           entityType: "management",
           divisions: managementDivisions.length,
           parentId: management.departmentId,
+          earnedMoney,
+          earnedTime,
+          totalPoints,
         };
       });
     }
@@ -208,17 +319,38 @@ export default function Reports() {
       const managementDivisions = filteredDivisions.filter((division) => division.managementId === drilldown.managementId);
       return managementDivisions.map((division) => {
         const divisionTasks = tasks.filter((task) => task.divisionId === division.id);
+        const divisionCompletedTasks = activeTasks.filter((task) => task.divisionId === division.id && task.status === "DONE");
         const divisionEmployees = filteredEmployees.filter((emp) => emp.divisionId === division.id);
+        
+        const earnedMoney = divisionCompletedTasks.reduce((sum, task) => {
+          const earned = typeof task.earnedMoney === "number" ? task.earnedMoney : 
+                        typeof task.earnedMoney === "string" ? parseFloat(task.earnedMoney) : 0;
+          return sum + (Number.isFinite(earned) ? earned : 0);
+        }, 0);
+        
+        const earnedTime = divisionCompletedTasks.reduce((sum, task) => {
+          const earned = task.earnedTimeMinutes ?? 0;
+          return sum + (typeof earned === "number" && Number.isFinite(earned) ? earned : 0);
+        }, 0);
+        
+        const totalPoints = divisionCompletedTasks.reduce((sum, task) => {
+          const points = task.assignedPoints ?? 0;
+          return sum + (typeof points === "number" && Number.isFinite(points) ? points : 0);
+        }, 0);
+        
         return {
           id: division.id,
           name: division.name,
-          completed: divisionTasks.filter((task) => task.status === "DONE").length,
+          completed: divisionCompletedTasks.length,
           inProgress: divisionTasks.filter((task) => task.status === "IN_PROGRESS").length,
           backlog: divisionTasks.filter((task) => task.status === "BACKLOG").length,
           total: divisionTasks.length,
           entityType: "division",
           employees: divisionEmployees.length,
           parentId: drilldown.managementId,
+          earnedMoney,
+          earnedTime,
+          totalPoints,
         };
       });
     }
@@ -230,22 +362,45 @@ export default function Reports() {
         const employeeTasks = tasks.filter(
           (task) => task.executorId === employee.id || task.leadingBidderId === employee.id,
         );
+        const employeeCompletedTasks = activeTasks.filter(
+          (task) => (task.executorId === employee.id || task.leadingBidderId === employee.id) && task.status === "DONE",
+        );
+        
+        const earnedMoney = employeeCompletedTasks.reduce((sum, task) => {
+          const earned = typeof task.earnedMoney === "number" ? task.earnedMoney : 
+                        typeof task.earnedMoney === "string" ? parseFloat(task.earnedMoney) : 0;
+          return sum + (Number.isFinite(earned) ? earned : 0);
+        }, 0);
+        
+        const earnedTime = employeeCompletedTasks.reduce((sum, task) => {
+          const earned = task.earnedTimeMinutes ?? 0;
+          return sum + (typeof earned === "number" && Number.isFinite(earned) ? earned : 0);
+        }, 0);
+        
+        const totalPoints = employeeCompletedTasks.reduce((sum, task) => {
+          const points = task.assignedPoints ?? 0;
+          return sum + (typeof points === "number" && Number.isFinite(points) ? points : 0);
+        }, 0);
+        
         return {
           id: employee.id,
           name: employee.name ?? employee.username ?? "Сотрудник",
-          completed: employeeTasks.filter((task) => task.status === "DONE").length,
+          completed: employeeCompletedTasks.length,
           inProgress: employeeTasks.filter((task) => task.status === "IN_PROGRESS").length,
           backlog: employeeTasks.filter((task) => task.status === "BACKLOG").length,
           total: employeeTasks.length,
           entityType: "employee",
           rating: parseUserRating(employee.rating),
           parentId: drilldown.divisionId,
+          earnedMoney,
+          earnedTime,
+          totalPoints,
         };
       });
     }
 
     return [];
-  }, [selectedDepartmentId, drilldown, departments, tasks, managements, filteredManagements, filteredDivisions, filteredEmployees]);
+  }, [selectedDepartmentId, drilldown, departments, tasks, managements, filteredManagements, filteredDivisions, filteredEmployees, selectedMonth, filteredTasks]);
 
   const employeeTasks = useMemo(() => {
     if (drilldown.level !== "employee" || !drilldown.employeeId) return [];
@@ -411,7 +566,7 @@ export default function Reports() {
             onValueChange={handleDepartmentSelect}
             disabled={!departments.length}
           >
-            <SelectTrigger className="mt-2">
+            <SelectTrigger className="mt-2" data-testid="select-department">
               <SelectValue placeholder="Выберите департамент" />
             </SelectTrigger>
             <SelectContent>
@@ -424,6 +579,27 @@ export default function Reports() {
             </SelectContent>
           </Select>
         </div>
+        
+        <div className="w-full sm:w-56">
+          <Label className="text-sm text-muted-foreground flex items-center gap-2">
+            <Calendar size={14} />
+            Период
+          </Label>
+          <Select
+            value={selectedMonth}
+            onValueChange={setSelectedMonth}
+          >
+            <SelectTrigger className="mt-2" data-testid="select-month">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="current">Текущий месяц</SelectItem>
+              <SelectItem value="previous">Прошлый месяц</SelectItem>
+              <SelectItem value="all">Весь период</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        
         {canViewAllDepartments && (
           <div className="flex items-center gap-3 pb-1">
             <Switch
@@ -445,65 +621,65 @@ export default function Reports() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card data-testid="card-total-tasks">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-3">
-              <div className="p-3 rounded-md bg-primary/20">
-                <BarChart3 className="text-primary" size={24} />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Всего задач</p>
-                <p className="text-2xl font-bold font-mono" data-testid="text-total-tasks">
-                  {stats.total}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card data-testid="card-completion-rate">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card data-testid="card-completed-tasks">
           <CardContent className="p-6">
             <div className="flex items-center gap-3">
               <div className="p-3 rounded-md bg-chart-3/20">
                 <TrendingUp className="text-chart-3" size={24} />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Завершено</p>
-                <p className="text-2xl font-bold font-mono" data-testid="text-completion-rate">
-                  {stats.completionRate}%
+                <p className="text-sm text-muted-foreground">Завершено задач</p>
+                <p className="text-2xl font-bold font-mono" data-testid="text-completed-tasks">
+                  {stats.completed}
                 </p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card data-testid="card-avg-budget">
+        <Card data-testid="card-earned-money">
           <CardContent className="p-6">
             <div className="flex items-center gap-3">
               <div className="p-3 rounded-md bg-chart-1/20">
                 <Wallet className="text-chart-1" size={24} />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Средняя сумма</p>
-                <p className="text-2xl font-bold font-mono" data-testid="text-avg-budget">
-                  {formatMoney(stats.avgBudget)}
+                <p className="text-sm text-muted-foreground">Заработано</p>
+                <p className="text-2xl font-bold font-mono" data-testid="text-earned-money">
+                  {formatMoney(stats.earnedMoney)}
                 </p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card data-testid="card-employee-count">
+        <Card data-testid="card-earned-time">
+          <CardContent className="p-6">
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-md bg-chart-4/20">
+                <Clock className="text-chart-4" size={24} />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Время (ч)</p>
+                <p className="text-2xl font-bold font-mono" data-testid="text-earned-time">
+                  {Math.round((stats.earnedTime / 60) * 10) / 10}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card data-testid="card-total-points">
           <CardContent className="p-6">
             <div className="flex items-center gap-3">
               <div className="p-3 rounded-md bg-chart-5/20">
-                <Users className="text-chart-5" size={24} />
+                <Target className="text-chart-5" size={24} />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Сотрудников</p>
-                <p className="text-2xl font-bold font-mono" data-testid="text-employee-count">
-                  {stats.employeeCount}
+                <p className="text-sm text-muted-foreground">Баллы</p>
+                <p className="text-2xl font-bold font-mono" data-testid="text-total-points">
+                  {stats.totalPoints}
                 </p>
               </div>
             </div>
@@ -633,6 +809,43 @@ export default function Reports() {
                               {item.divisions ?? item.employees}
                             </span>
                           </div>
+                        )}
+                        {selectedMonth !== "all" && (
+                          <>
+                            {typeof item.earnedMoney === "number" && item.earnedMoney > 0 && (
+                              <div className="flex items-center justify-between text-sm pt-2 border-t">
+                                <span className="text-muted-foreground flex items-center gap-1">
+                                  <Wallet size={14} />
+                                  Заработано:
+                                </span>
+                                <span className="font-mono font-semibold text-chart-1">
+                                  {formatMoney(item.earnedMoney)}
+                                </span>
+                              </div>
+                            )}
+                            {typeof item.earnedTime === "number" && item.earnedTime > 0 && (
+                              <div className="flex items-center justify-between text-sm pt-2 border-t">
+                                <span className="text-muted-foreground flex items-center gap-1">
+                                  <Clock size={14} />
+                                  Время (ч):
+                                </span>
+                                <span className="font-mono font-semibold text-chart-4">
+                                  {Math.round((item.earnedTime / 60) * 10) / 10}
+                                </span>
+                              </div>
+                            )}
+                            {typeof item.totalPoints === "number" && item.totalPoints !== 0 && (
+                              <div className="flex items-center justify-between text-sm pt-2 border-t">
+                                <span className="text-muted-foreground flex items-center gap-1">
+                                  <Target size={14} />
+                                  Баллы:
+                                </span>
+                                <span className="font-mono font-semibold text-chart-5">
+                                  {item.totalPoints}
+                                </span>
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
                     </CardContent>
