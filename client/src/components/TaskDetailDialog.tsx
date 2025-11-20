@@ -1,7 +1,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { formatAuctionValue, formatDateTime } from "@/lib/formatters";
+import { formatAuctionValue, formatDateTime, formatMoney } from "@/lib/formatters";
 import StatusBadge from "./StatusBadge";
 import GradeBadge from "./GradeBadge";
 import { Badge } from "@/components/ui/badge";

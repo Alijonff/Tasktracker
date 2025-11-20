@@ -236,7 +236,8 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
   const mutation = useMutation({
     mutationFn: (payload: CreateAuctionTaskPayload) => createAuctionTask(payload),
     onSuccess: () => {
-      toast({ title: "Аукцион создан" });
+      const isIndividualTask = formState.taskType === "INDIVIDUAL";
+      toast({ title: isIndividualTask ? "Задача создана" : "Аукцион создан" });
       queryClient.invalidateQueries({ queryKey: ["auctions"], exact: false });
       setFormState(createInitialFormState());
       onOpenChange(false);
