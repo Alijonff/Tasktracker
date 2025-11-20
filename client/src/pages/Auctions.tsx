@@ -199,6 +199,7 @@ export default function Auctions() {
         task={selectedTask ? {
           id: selectedTask.id,
           title: selectedTask.title,
+          startingPrice: selectedTask.startingPrice,
           currentPrice: selectedTask.currentPrice ?? selectedTask.startingPrice,
           minimumGrade: selectedTask.minimumGrade,
           mode: selectedTask.mode,

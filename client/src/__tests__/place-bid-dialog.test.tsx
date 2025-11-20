@@ -9,6 +9,7 @@ import { expectToMatchSnapshot } from "./helpers/snapshot";
 const task = {
   id: "auction-1",
   title: "Редизайн портала",
+  startingPrice: 2_000_000,
   currentPrice: 1_800_000,
   minimumGrade: "C" as const,
   mode: "MONEY" as const,
@@ -24,6 +25,8 @@ test("PlaceBidDialog snapshot", () => {
 
 test("parseBidAmount validates positive sums", () => {
   assert.equal(parseBidAmount("2500000"), 2_500_000);
+  assert.equal(parseBidAmount("999 000"), 999_000);
+  assert.equal(parseBidAmount("1,5"), 1.5);
   assert.equal(parseBidAmount("0"), null);
   assert.equal(parseBidAmount("-500"), null);
   assert.equal(parseBidAmount("not-a-number"), null);
