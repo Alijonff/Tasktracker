@@ -1,5 +1,12 @@
 import React from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -80,7 +87,7 @@ export default function PlaceBidDialog({
       <DialogContent className="max-w-2xl" data-testid="dialog-place-bid">
         <DialogHeader>
           <DialogTitle>Сделать ставку</DialogTitle>
-          <p className="text-sm text-muted-foreground">{task.title}</p>
+          <DialogDescription>{task.title}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6">
