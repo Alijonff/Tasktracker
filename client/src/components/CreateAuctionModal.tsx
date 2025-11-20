@@ -140,184 +140,185 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
     queryKey: ["/api/employees"],
     enabled: open && formState.taskType === "INDIVIDUAL",
   });
+
   const availableDepartments = useMemo(() => {
-
-    const availableDepartments = useMemo(() => {
-      if (!currentUser) return [] as Department[];
-      return (departments ?? []).filter((department) => {
-        if (currentUser.role === "director") {
-          return department.leaderId === currentUser.id;
-        }
-        if (currentUser.positionType === "deputy" && currentUser.departmentId) {
-          return department.id === currentUser.departmentId;
-        }
-        return false;
-      });
-    }, [currentUser, departments]);
-    const availableDivisions = useMemo(() => {
-      if (!formState.departmentId) return [] as Division[];
-      return (divisions ?? []).filter((division) => division.departmentId === formState.departmentId);
-    }, [divisions, formState.departmentId]);
-    const isTimeMode = formState.mode === "TIME";
-
-    useEffect(() => {
-      if (!open) {
-        setFormState(createInitialFormState());
+    if (!currentUser) return [] as Department[];
+    return (departments ?? []).filter((department) => {
+      if (currentUser.role === "director") {
+        return department.leaderId === currentUser.id;
       }
-    }, [open]);
-
-    useEffect(() => {
-      if (!open) return;
-      if (!formState.departmentId) {
-        if (availableDepartments.length === 1) {
-          setFormState((prev) => ({ ...prev, departmentId: availableDepartments[0].id }));
-        } else if (currentUser?.departmentId) {
-          setFormState((prev) => ({ ...prev, departmentId: currentUser.departmentId ?? prev.departmentId }));
-        }
+      if (currentUser.positionType === "deputy" && currentUser.departmentId) {
+        return department.id === currentUser.departmentId;
       }
-    }, [open, availableDepartments, currentUser?.departmentId, formState.departmentId]);
+      return false;
+    });
+  }, [currentUser, departments]);
 
-    useEffect(() => {
-      if (!open) return;
+  const availableDivisions = useMemo(() => {
+    if (!formState.departmentId) return [] as Division[];
+    return (divisions ?? []).filter((division) => division.departmentId === formState.departmentId);
+  }, [divisions, formState.departmentId]);
 
-      if (formState.taskType !== "UNIT") {
-        if (formState.divisionId) {
-          setFormState((prev) => ({ ...prev, divisionId: undefined }));
-        }
-        return;
+  const isTimeMode = formState.mode === "TIME";
+
+  useEffect(() => {
+    if (!open) {
+      setFormState(createInitialFormState());
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (!formState.departmentId) {
+      if (availableDepartments.length === 1) {
+        setFormState((prev) => ({ ...prev, departmentId: availableDepartments[0].id }));
+      } else if (currentUser?.departmentId) {
+        setFormState((prev) => ({ ...prev, departmentId: currentUser.departmentId ?? prev.departmentId }));
       }
+    }
+  }, [open, availableDepartments, currentUser?.departmentId, formState.departmentId]);
 
-      if (!formState.departmentId) {
-        if (formState.divisionId) {
-          setFormState((prev) => ({ ...prev, divisionId: undefined }));
-        }
-        return;
-      }
+  useEffect(() => {
+    if (!open) return;
 
-      if (formState.divisionId && availableDivisions.some((division) => division.id === formState.divisionId)) {
-        return;
-      }
-
-      if (availableDivisions.length === 1) {
-        setFormState((prev) => ({ ...prev, divisionId: availableDivisions[0].id }));
-      } else if (formState.divisionId) {
+    if (formState.taskType !== "UNIT") {
+      if (formState.divisionId) {
         setFormState((prev) => ({ ...prev, divisionId: undefined }));
       }
-    }, [availableDivisions, formState.departmentId, formState.divisionId, formState.taskType, open]);
+      return;
+    }
 
-    const minDate = useMemo(() => formatDateOnly(new Date()), []);
+    if (!formState.departmentId) {
+      if (formState.divisionId) {
+        setFormState((prev) => ({ ...prev, divisionId: undefined }));
+      }
+      return;
+    }
 
-    const mutation = useMutation({
-      mutationFn: (payload: CreateAuctionTaskPayload) => createAuctionTask(payload),
-      onSuccess: () => {
-        toast({ title: "Аукцион создан" });
-        queryClient.invalidateQueries({ queryKey: ["auctions"], exact: false });
-        setFormState(createInitialFormState());
-        onOpenChange(false);
-        setLocation("/auctions");
-      },
-      onError: (error: unknown) => {
-        const { status, message } = parseApiError(error);
-        if (status === 403) {
-          toast({
-            title: message ?? "У вас нет прав создавать аукционы в этом департаменте",
-            variant: "destructive",
-          });
-          return;
-        }
+    if (formState.divisionId && availableDivisions.some((division) => division.id === formState.divisionId)) {
+      return;
+    }
 
-        if (status === 400 || status === 422) {
-          toast({
-            title: "Ошибка при создании",
-            description: message ?? "Проверьте введённые данные",
-            variant: "destructive",
-          });
-          return;
-        }
+    if (availableDivisions.length === 1) {
+      setFormState((prev) => ({ ...prev, divisionId: availableDivisions[0].id }));
+    } else if (formState.divisionId) {
+      setFormState((prev) => ({ ...prev, divisionId: undefined }));
+    }
+  }, [availableDivisions, formState.departmentId, formState.divisionId, formState.taskType, open]);
 
+  const minDate = useMemo(() => formatDateOnly(new Date()), []);
+
+  const mutation = useMutation({
+    mutationFn: (payload: CreateAuctionTaskPayload) => createAuctionTask(payload),
+    onSuccess: () => {
+      toast({ title: "Аукцион создан" });
+      queryClient.invalidateQueries({ queryKey: ["auctions"], exact: false });
+      setFormState(createInitialFormState());
+      onOpenChange(false);
+      setLocation("/auctions");
+    },
+    onError: (error: unknown) => {
+      const { status, message } = parseApiError(error);
+      if (status === 403) {
         toast({
-          title: "Не удалось создать аукцион, попробуйте позже",
-          variant: "destructive",
-        });
-      },
-    });
-
-    const handleDialogChange = (nextOpen: boolean) => {
-      if (!nextOpen) {
-        setFormState(createInitialFormState());
-      }
-      onOpenChange(nextOpen);
-    };
-
-    const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
-
-      const trimmedTitle = formState.title.trim();
-      const trimmedDescription = formState.description.trim();
-      const amount = Number(formState.startingPrice);
-      const deadline = composeDeadline(formState.deadlineDate);
-      const isTimeMode = formState.mode === "TIME";
-
-      if (availableDepartments.length > 1 && !formState.departmentId) {
-        toast({ title: "Выберите департамент", variant: "destructive" });
-        return;
-      }
-
-      if (!trimmedTitle) {
-        toast({ title: "Введите название", variant: "destructive" });
-        return;
-      }
-
-      if (!trimmedDescription) {
-        toast({ title: "Опишите задачу", variant: "destructive" });
-        return;
-      }
-
-      if (!Number.isFinite(amount) || amount <= 0) {
-        toast({
-          title: isTimeMode ? "Укажите корректное время в минутах" : "Укажите корректную начальную сумму",
+          title: message ?? "У вас нет прав создавать аукционы в этом департаменте",
           variant: "destructive",
         });
         return;
       }
 
-      if (formState.taskType === "UNIT") {
-        if (!formState.departmentId) {
-          toast({ title: "Выберите департамент для отдела", variant: "destructive" });
-          return;
-        }
-
-        if (!formState.divisionId) {
-          toast({ title: "Выберите отдел", variant: "destructive" });
-          return;
-        }
-      }
-
-      if (!deadline || deadline <= new Date()) {
-        toast({ title: "Выберите корректный дедлайн", variant: "destructive" });
+      if (status === 400 || status === 422) {
+        toast({
+          title: "Ошибка при создании",
+          description: message ?? "Проверьте введённые данные",
+          variant: "destructive",
+        });
         return;
       }
 
-      mutation.mutate({
-        title: trimmedTitle,
-        description: trimmedDescription,
-        minimumGrade: formState.minimumGrade,
-        startingPrice: amount,
-        deadline: deadline.toISOString(),
-        departmentId: formState.departmentId,
-        managementId: undefined,
-        divisionId: formState.taskType === "UNIT" ? formState.divisionId : undefined,
-        mode: formState.mode,
-        taskType: formState.taskType,
+      toast({
+        title: "Не удалось создать аукцион, попробуйте позже",
+        variant: "destructive",
       });
-    };
+    },
+  });
 
-    return (
-      <Dialog open={open} onOpenChange={handleDialogChange}>
-        <DialogContent className="max-w-2xl" data-testid="dialog-create-auction">
-          <DialogHeader>
-            <DialogTitle>Создать новый аукцион</DialogTitle>
-          </DialogHeader>
+  const handleDialogChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      setFormState(createInitialFormState());
+    }
+    onOpenChange(nextOpen);
+  };
+
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const trimmedTitle = formState.title.trim();
+    const trimmedDescription = formState.description.trim();
+    const amount = Number(formState.startingPrice);
+    const deadline = composeDeadline(formState.deadlineDate);
+    const isTimeMode = formState.mode === "TIME";
+
+    if (availableDepartments.length > 1 && !formState.departmentId) {
+      toast({ title: "Выберите департамент", variant: "destructive" });
+      return;
+    }
+
+    if (!trimmedTitle) {
+      toast({ title: "Введите название", variant: "destructive" });
+      return;
+    }
+
+    if (!trimmedDescription) {
+      toast({ title: "Опишите задачу", variant: "destructive" });
+      return;
+    }
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast({
+        title: isTimeMode ? "Укажите корректное время в минутах" : "Укажите корректную начальную сумму",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (formState.taskType === "UNIT") {
+      if (!formState.departmentId) {
+        toast({ title: "Выберите департамент для отдела", variant: "destructive" });
+        return;
+      }
+
+      if (!formState.divisionId) {
+        toast({ title: "Выберите отдел", variant: "destructive" });
+        return;
+      }
+    }
+
+    if (!deadline || deadline <= new Date()) {
+      toast({ title: "Выберите корректный дедлайн", variant: "destructive" });
+      return;
+    }
+
+    mutation.mutate({
+      title: trimmedTitle,
+      description: trimmedDescription,
+      minimumGrade: formState.minimumGrade,
+      startingPrice: amount,
+      deadline: deadline.toISOString(),
+      departmentId: formState.departmentId,
+      managementId: undefined,
+      divisionId: formState.taskType === "UNIT" ? formState.divisionId : undefined,
+      mode: formState.mode,
+      taskType: formState.taskType,
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleDialogChange}>
+      <DialogContent className="max-w-2xl" data-testid="dialog-create-auction">
+        <DialogHeader>
+          <DialogTitle>Создать новый аукцион</DialogTitle>
+        </DialogHeader>
 
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div className="space-y-4">

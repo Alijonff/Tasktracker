@@ -142,10 +142,16 @@ export function calculateOverdueDays(deadline: Date, completedAt: Date = new Dat
  * @param endDate - End date/time
  * @returns Number of working hours (can be fractional)
  */
-export function diffWorkingHours(startDate: Date, endDate: Date): number {
+export function diffWorkingHours(
+  startDate: Date,
+  endDate: Date,
+  options: { useTashkentTime?: boolean } = {},
+): number {
   if (endDate <= startDate) {
     return 0;
   }
+
+  const useTashkentTime = options.useTashkentTime ?? true;
 
   const msPerHour = 1000 * 60 * 60;
   const workdayStartHour = 9;
@@ -154,8 +160,9 @@ export function diffWorkingHours(startDate: Date, endDate: Date): number {
   let totalHours = 0;
   
   // Convert to Tashkent "shifted" time (UTC methods return Tashkent components)
-  const current = getTashkentTime(startDate);
-  const end = getTashkentTime(endDate);
+  const convert = (date: Date) => (useTashkentTime ? getTashkentTime(date) : new Date(date));
+  const current = convert(startDate);
+  const end = convert(endDate);
 
   while (current.getTime() < end.getTime()) {
     const day = current.getUTCDay();
