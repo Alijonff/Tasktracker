@@ -36,6 +36,7 @@ interface PlaceBidDialogProps {
   task?: {
     id: string;
     title: string;
+    startingPrice: number;
     currentPrice: number;
     minimumGrade: Grade;
     bids: Bid[];
@@ -45,7 +46,8 @@ interface PlaceBidDialogProps {
 }
 
 export function parseBidAmount(raw: string): number | null {
-  const parsed = Number(raw);
+  const normalized = raw.replace(/\s+/g, "").replace(/,/g, ".");
+  const parsed = Number(normalized);
   if (!Number.isFinite(parsed) || parsed <= 0) {
     return null;
   }
@@ -69,11 +71,20 @@ export default function PlaceBidDialog({
 
   if (!task) return null;
 
-  const currentPrice = task.currentPrice ?? 0;
-  const valueLabel = formatAuctionValue(currentPrice, task.mode);
+  const startingPrice = task.startingPrice ?? 0;
+  const bestBid = task.bids.reduce<Bid | null>((currentBest, bid) => {
+    if (!currentBest) return bid;
+    if (bid.amount < currentBest.amount) return bid;
+    if (bid.amount === currentBest.amount && (bid.rating ?? 0) > (currentBest.rating ?? 0)) {
+      return bid;
+    }
+    return currentBest;
+  }, null);
+  const bestPrice = bestBid?.amount ?? task.currentPrice ?? startingPrice;
+  const valueLabel = formatAuctionValue(bestPrice, task.mode);
   const parsedAmount = parseBidAmount(amount);
   const isAmountEntered = parsedAmount !== null;
-  const isAmountWithinLimit = parsedAmount !== null && parsedAmount <= currentPrice;
+  const isAmountWithinLimit = parsedAmount !== null && parsedAmount <= bestPrice;
   const isBidValid = isAmountEntered && isAmountWithinLimit;
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -100,6 +111,9 @@ export default function PlaceBidDialog({
               <span>Минимальный грейд</span>
               <GradeBadge grade={task.minimumGrade} />
             </div>
+            <p className="text-xs text-muted-foreground">
+              Начальная ставка: {formatAuctionValue(startingPrice, task.mode)}
+            </p>
             <p className="text-xs text-muted-foreground">
               {task.mode === "TIME"
                 ? "Введите количество минут, которое потребуется на выполнение"
@@ -138,11 +152,11 @@ export default function PlaceBidDialog({
               </div>
               <ScrollArea className="h-48">
                 <div className="space-y-2">
-                  {task.bids.map((bid, index) => (
+                  {task.bids.map((bid) => (
                     <div
                       key={bid.id}
                       className={`flex items-center justify-between p-3 rounded-md ${
-                        index === 0 ? "bg-primary/10 border border-primary/30" : "bg-card"
+                        bid.id === bestBid?.id ? "bg-primary/10 border border-primary/30" : "bg-card"
                       }`}
                     >
                       <div className="flex items-center gap-3">
@@ -158,7 +172,7 @@ export default function PlaceBidDialog({
                           <p className="font-mono font-bold text-primary">
                             {formatAuctionValue(bid.amount, task.mode)}
                           </p>
-                          {index === 0 && <p className="text-xs text-primary">Лидер</p>}
+                          {bid.id === bestBid?.id && <p className="text-xs text-primary">Лидер</p>}
                         </div>
                       </div>
                     </div>

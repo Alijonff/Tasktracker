@@ -100,9 +100,11 @@ function transformTask(task: Task): AuctionTaskSummary {
   const currentPrice =
     mode === "TIME"
       ? parseNumber((task as any).auctionCurrentAmount) ??
+      parseNumber(task.currentPrice) ??
       parseNumber(task.earnedTimeMinutes) ??
       parseNumber(task.baseTimeMinutes)
       : parseNumber((task as any).auctionCurrentAmount) ??
+      parseNumber(task.currentPrice) ??
       parseNumber(task.earnedMoney) ??
       parseNumber(task.basePrice) ??
       parseNumber((task as any).auctionMaxPrice) ??
