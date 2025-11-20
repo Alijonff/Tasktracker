@@ -149,10 +149,10 @@ export interface IStorage {
     taskId: string,
     options: { winnerId?: string; winnerName?: string; assignedValue?: number | null; mode: TaskMode; endAt?: Date }
   ): Promise<Task | undefined>;
-  
+
   // Review management
   getReviewsToExpire(): Promise<Task[]>;
-  
+
   // Monthly metrics
   getMonthlyMetrics(departmentId?: string): Promise<{
     completedTasksCount: number;
@@ -160,6 +160,10 @@ export interface IStorage {
     activeAuctionsCount: number;
     backlogCount: number;
   }>;
+
+  // Analytics
+  getEmployeeAnalytics(filters?: { departmentId?: string; managementId?: string; divisionId?: string }): Promise<any[]>;
+  getStructureAnalytics(filters?: { departmentId?: string }): Promise<any>;
 
   // Task Attachments
   getTaskAttachments(taskId: string): Promise<TaskAttachment[]>;
@@ -237,8 +241,8 @@ export class DbStorage implements IStorage {
       mustChangePassword?: boolean;
     }
   ): Promise<User | undefined> {
-      const [user] = await db.update(users)
-        .set(updates)
+    const [user] = await db.update(users)
+      .set(updates)
       .where(eq(users.id, id))
       .returning();
     return user;
@@ -653,13 +657,13 @@ export class DbStorage implements IStorage {
           comment: data.comment ?? null,
         })
         .returning();
-      
+
       // Update user's points within the same transaction
       const [user] = await tx
         .select()
         .from(users)
         .where(eq(users.id, data.userId));
-      
+
       if (user) {
         const newPoints = Number(user.points) + data.amount;
         await tx
@@ -667,7 +671,7 @@ export class DbStorage implements IStorage {
           .set({ points: newPoints })
           .where(eq(users.id, data.userId));
       }
-      
+
       return transaction;
     });
   }
@@ -749,7 +753,7 @@ export class DbStorage implements IStorage {
     if (filters?.departmentId) {
       conditions.push(eq(tasks.departmentId, filters.departmentId));
     }
-    
+
     return await db
       .select()
       .from(tasks)
@@ -880,6 +884,76 @@ export class DbStorage implements IStorage {
       closedAuctionsSum: String(sumRow?.value ?? '0'),
       activeAuctionsCount: Number(activeRow?.value ?? 0),
       backlogCount: Number(backlogRow?.value ?? 0),
+    };
+  }
+
+  async getEmployeeAnalytics(filters?: { departmentId?: string; managementId?: string; divisionId?: string }): Promise<any[]> {
+    const conditions: any[] = [];
+    if (filters?.departmentId) conditions.push(eq(users.departmentId, filters.departmentId));
+    if (filters?.managementId) conditions.push(eq(users.managementId, filters.managementId));
+    if (filters?.divisionId) conditions.push(eq(users.divisionId, filters.divisionId));
+
+    const employees = await db.select().from(users).where(and(...conditions));
+
+    const taskStats = await db
+      .select({
+        executorId: tasks.executorId,
+        completedCount: sql<number>`count(CASE WHEN ${tasks.status} = 'DONE' THEN 1 END)`,
+        earnedMoney: sql<string>`sum(CASE WHEN ${tasks.status} = 'DONE' AND ${tasks.auctionMode} = 'MONEY' THEN ${tasks.earnedMoney} ELSE 0 END)`,
+        earnedTime: sql<number>`sum(CASE WHEN ${tasks.status} = 'DONE' AND ${tasks.auctionMode} = 'TIME' THEN ${tasks.earnedTimeMinutes} ELSE 0 END)`,
+        assignedPoints: sql<number>`sum(CASE WHEN ${tasks.status} = 'DONE' THEN ${tasks.assignedPoints} ELSE 0 END)`
+      })
+      .from(tasks)
+      .groupBy(tasks.executorId);
+
+    const statsMap = new Map(taskStats.map(s => [s.executorId, s]));
+
+    return employees.map(emp => {
+      const stats = statsMap.get(emp.id);
+      return {
+        id: emp.id,
+        name: emp.name,
+        grade: emp.grade,
+        points: Number(emp.points || 0),
+        completedTasks: Number(stats?.completedCount || 0),
+        earnedMoney: Number(stats?.earnedMoney || 0),
+        earnedTime: Number(stats?.earnedTime || 0),
+        earnedPoints: Number(stats?.assignedPoints || 0)
+      };
+    });
+  }
+
+  async getStructureAnalytics(filters?: { departmentId?: string }): Promise<any> {
+    const conditions: any[] = [];
+    if (filters?.departmentId) {
+      conditions.push(eq(tasks.departmentId, filters.departmentId));
+    }
+
+    const divisionStats = await db
+      .select({
+        divisionId: tasks.divisionId,
+        totalTasks: sql<number>`count(*)`,
+        completedTasks: sql<number>`count(CASE WHEN ${tasks.status} = 'DONE' THEN 1 END)`,
+        totalMoney: sql<string>`sum(CASE WHEN ${tasks.status} = 'DONE' AND ${tasks.auctionMode} = 'MONEY' THEN ${tasks.earnedMoney} ELSE 0 END)`,
+      })
+      .from(tasks)
+      .where(and(...conditions, sql`${tasks.divisionId} IS NOT NULL`))
+      .groupBy(tasks.divisionId);
+
+    const managementStats = await db
+      .select({
+        managementId: tasks.managementId,
+        totalTasks: sql<number>`count(*)`,
+        completedTasks: sql<number>`count(CASE WHEN ${tasks.status} = 'DONE' THEN 1 END)`,
+        totalMoney: sql<string>`sum(CASE WHEN ${tasks.status} = 'DONE' AND ${tasks.auctionMode} = 'MONEY' THEN ${tasks.earnedMoney} ELSE 0 END)`,
+      })
+      .from(tasks)
+      .where(and(...conditions, sql`${tasks.managementId} IS NOT NULL`))
+      .groupBy(tasks.managementId);
+
+    return {
+      divisions: divisionStats,
+      managements: managementStats
     };
   }
 

@@ -1,6 +1,6 @@
 import type { AuctionBid, Task } from "@shared/schema";
 import { normalizeTaskMode, type TaskMode } from "@shared/taskMetadata";
-import { diffWorkingHours } from "@shared/utils";
+import { diffWorkingHours, getTashkentTime } from "@shared/utils";
 
 export const NO_BID_GRACE_HOURS = 3;
 export const AUCTION_RANGE_MULTIPLIER = 1.5;
@@ -43,75 +43,103 @@ export function getAuctionCurrentValue(task: Task, mode: TaskMode): number | nul
     if (typeof task.currentPrice === "number" && Number.isFinite(task.currentPrice)) {
       return task.currentPrice;
     }
-
-    const parsed = parseDecimal((task as any).currentPrice);
-    return parsed;
+    return parseDecimal((task as any).currentPrice);
   }
-
   return parseDecimal((task as any).currentPrice);
 }
 
-export function calculateAuctionPrice(task: Task, now: Date = new Date(), mode?: TaskMode): number | null {
+export function calculateAuctionPrice(
+  task: Task,
+  now: Date = new Date(),
+  mode: "MONEY" | "TIME"
+): number | null {
   if (!task.auctionStartAt || !task.auctionPlannedEndAt) {
     return null;
   }
 
-  const resolvedMode = mode ?? resolveAuctionMode(task);
-  const initial = getAuctionBaseValue(task, resolvedMode);
-  const max = getAuctionMaxValue(task, resolvedMode);
-  const storedCurrent = getAuctionCurrentValue(task, resolvedMode);
-  const start = new Date(task.auctionStartAt);
-  const plannedEnd = new Date(task.auctionPlannedEndAt);
+  const startAt = new Date(task.auctionStartAt);
+  const endAt = new Date(task.auctionPlannedEndAt); // deadline_at (18:00)
+  const graceEndAt = new Date(endAt.getTime() + 3 * 60 * 60 * 1000); // deadline_at + 3h (21:00)
 
-  if (
-    initial === null ||
-    max === null ||
-    Number.isNaN(start.getTime()) ||
-    Number.isNaN(plannedEnd.getTime()) ||
-    start.getTime() === plannedEnd.getTime()
-  ) {
+  // Auction is closed after grace period
+  if (now > graceEndAt) {
     return null;
   }
 
-  if (task.auctionHasBids) {
-    return storedCurrent ?? initial;
+  // Get base value depending on mode
+  const baseValue = mode === "MONEY"
+    ? (task.basePrice ? Number(task.basePrice) : null)
+    : (task.baseTimeMinutes ? Number(task.baseTimeMinutes) : null);
+
+  if (baseValue === null) {
+    return null;
   }
 
-  if (now <= start) {
-    return initial;
+  // Before auction starts
+  if (now < startAt) {
+    return baseValue;
   }
 
-  const effectiveNow = now.getTime() > plannedEnd.getTime() ? plannedEnd : now;
+  // Checkpoints logic (v2.2)
+  // Checkpoints are at: 00:00, 03:00, 06:00, 09:00, 12:00, 15:00, 18:00, 21:00 (Tashkent time)
+  // Growth starts after the *second* checkpoint passes since creation.
+  // Growth stops at deadline_at OR when first bid is placed (handled by caller checking task.auctionHasBids)
 
-  const startDayEvening = new Date(start);
-  startDayEvening.setHours(18, 0, 0, 0);
+  const checkpoints = [0, 3, 6, 9, 12, 15, 18, 21];
 
-  const finalCheckpoint = new Date(startDayEvening);
-  finalCheckpoint.setDate(finalCheckpoint.getDate() + 1);
+  // Helper to get checkpoints passed between two times
+  const countCheckpoints = (start: Date, current: Date) => {
+    let count = 0;
 
-  const checkpoints: Date[] = [];
-  for (
-    let point = startDayEvening;
-    point.getTime() <= finalCheckpoint.getTime();
-    point = new Date(point.getTime() + 3 * 60 * 60 * 1000)
-  ) {
-    if (point.getTime() >= start.getTime()) {
-      checkpoints.push(new Date(point));
+    // We use getTashkentTime to work with "local" hours
+    const s = getTashkentTime(start);
+    const c = getTashkentTime(current);
+
+    // Normalize to start of days (in Tashkent time)
+    const sDay = new Date(s); sDay.setUTCHours(0, 0, 0, 0);
+    const cDay = new Date(c); cDay.setUTCHours(0, 0, 0, 0);
+
+    let iter = new Date(sDay);
+    while (iter.getTime() <= cDay.getTime()) {
+      for (const hour of checkpoints) {
+        const cpTime = new Date(iter);
+        cpTime.setUTCHours(hour, 0, 0, 0);
+
+        // Checkpoint must be strictly after start and less than or equal to current
+        // We compare using the "shifted" times which preserves the relative order and duration
+        if (cpTime.getTime() > s.getTime() && cpTime.getTime() <= c.getTime()) {
+          count++;
+        }
+      }
+      iter.setUTCDate(iter.getUTCDate() + 1);
     }
+    return count;
+  };
+
+  // Growth period: from startAt to deadline_at
+  // After deadline_at, price is frozen at the level reached by deadline_at
+  const effectiveNow = now > endAt ? endAt : now;
+  const passedCheckpoints = countCheckpoints(startAt, effectiveNow);
+
+  // "Growth starts from the second control moment"
+  // So 0 or 1 checkpoint passed => no increase (multiplier 1.0)
+  // 2 checkpoints passed => 1 increase
+  const increases = Math.max(0, passedCheckpoints - 1);
+
+  const totalCheckpoints = countCheckpoints(startAt, endAt);
+
+  if (totalCheckpoints < 2) {
+    return baseValue;
   }
 
-  if (checkpoints.length === 0) {
-    return initial;
-  }
+  // We have (totalCheckpoints - 1) steps to reach AUCTION_RANGE_MULTIPLIER
+  const maxMultiplier = AUCTION_RANGE_MULTIPLIER;
+  const fraction = increases / Math.max(1, totalCheckpoints - 1);
+  const cappedFraction = Math.min(1, fraction);
 
-  const intervals = checkpoints.length - 1;
-  const step = intervals > 0 ? (AUCTION_RANGE_MULTIPLIER - 1) / intervals : 0;
-  const reached = checkpoints.filter((checkpoint) => checkpoint.getTime() <= effectiveNow.getTime()).length;
-  const stageIndex = Math.min(Math.max(reached - 1, 0), checkpoints.length - 1);
-  const multiplier = 1 + step * stageIndex;
+  const multiplier = 1 + (maxMultiplier - 1) * cappedFraction;
 
-  const scaled = initial + (max - initial) * ((multiplier - 1) / (AUCTION_RANGE_MULTIPLIER - 1));
-  return Math.min(Math.max(scaled, initial), max);
+  return Math.round(baseValue * multiplier);
 }
 
 export function getBidValue(bid: AuctionBid, mode: TaskMode): number | null {

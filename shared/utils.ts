@@ -75,8 +75,39 @@ export function getInitialPointsByPosition(positionType: PositionType): number {
   return startingPointsByGrade[grade];
 }
 
+export function getTashkentTime(date: Date): Date {
+  // Create a date object for the same instant
+  const d = new Date(date);
+  // Get the offset for Asia/Tashkent (UTC+5)
+  // We use Intl to get the correct local time parts
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Tashkent",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    second: "numeric",
+    hour12: false,
+  }).formatToParts(d);
+
+  const part = (type: string) => parseInt(parts.find((p) => p.type === type)?.value || "0");
+  
+  // Construct a new Date object that represents the "local" time in Tashkent
+  // Note: This date object's "UTC" methods will actually return Tashkent time components if we treat it as UTC,
+  // but to keep it simple we just return a Date where getHours() etc return Tashkent time if run in +5 env,
+  // OR we just use the parts.
+  // Actually, the safest way to do math is to shift the timestamp by the offset difference.
+  
+  // Simpler approach: use the parts to build a string or just use the parts directly in logic.
+  // Let's return a Date object that, when inspected with getUTCHours(), returns the Tashkent hours.
+  // This is a "shifted" date.
+  return new Date(Date.UTC(part("year"), part("month") - 1, part("day"), part("hour"), part("minute"), part("second")));
+}
+
 export function isWeekend(date: Date): boolean {
-  const day = date.getDay();
+  const tashkentDate = getTashkentTime(date);
+  const day = tashkentDate.getUTCDay();
   return day === 0 || day === 6; // Sunday or Saturday
 }
 
@@ -86,16 +117,19 @@ export function calculateOverdueDays(deadline: Date, completedAt: Date = new Dat
   }
 
   let days = 0;
-  const current = new Date(deadline);
-  current.setHours(0, 0, 0, 0);
-  const end = new Date(completedAt);
-  end.setHours(0, 0, 0, 0);
+  // Use Tashkent time for day boundaries
+  const current = getTashkentTime(deadline);
+  current.setUTCHours(0, 0, 0, 0);
   
-  while (current < end) {
-    if (!isWeekend(current)) {
+  const end = getTashkentTime(completedAt);
+  end.setUTCHours(0, 0, 0, 0);
+  
+  while (current.getTime() < end.getTime()) {
+    const day = current.getUTCDay();
+    if (day !== 0 && day !== 6) {
       days++;
     }
-    current.setDate(current.getDate() + 1);
+    current.setUTCDate(current.getUTCDate() + 1);
   }
   
   return days;
@@ -103,7 +137,7 @@ export function calculateOverdueDays(deadline: Date, completedAt: Date = new Dat
 
 /**
  * Calculate difference in working hours between two dates, excluding weekends
- * Assumes 8 working hours per day
+ * Assumes 9 working hours per day (09:00 - 18:00)
  * @param startDate - Start date/time
  * @param endDate - End date/time
  * @returns Number of working hours (can be fractional)
@@ -115,33 +149,39 @@ export function diffWorkingHours(startDate: Date, endDate: Date): number {
 
   const msPerHour = 1000 * 60 * 60;
   const workdayStartHour = 9;
-  const workdayEndHour = 17;
+  const workdayEndHour = 18; // Changed from 17 to 18
 
   let totalHours = 0;
-  const current = new Date(startDate);
+  
+  // Convert to Tashkent "shifted" time (UTC methods return Tashkent components)
+  const current = getTashkentTime(startDate);
+  const end = getTashkentTime(endDate);
 
-  while (current < endDate) {
-    if (isWeekend(current)) {
-      current.setDate(current.getDate() + 1);
-      current.setHours(0, 0, 0, 0);
+  while (current.getTime() < end.getTime()) {
+    const day = current.getUTCDay();
+    if (day === 0 || day === 6) {
+      // Skip weekend
+      current.setUTCDate(current.getUTCDate() + 1);
+      current.setUTCHours(0, 0, 0, 0);
       continue;
     }
 
     const dayWorkStart = new Date(current);
-    dayWorkStart.setHours(workdayStartHour, 0, 0, 0);
+    dayWorkStart.setUTCHours(workdayStartHour, 0, 0, 0);
+    
     const dayWorkEnd = new Date(current);
-    dayWorkEnd.setHours(workdayEndHour, 0, 0, 0);
+    dayWorkEnd.setUTCHours(workdayEndHour, 0, 0, 0);
 
     const windowStartMs = Math.max(current.getTime(), dayWorkStart.getTime());
-    const windowEndMs = Math.min(endDate.getTime(), dayWorkEnd.getTime());
+    const windowEndMs = Math.min(end.getTime(), dayWorkEnd.getTime());
 
     if (windowEndMs > windowStartMs) {
       totalHours += (windowEndMs - windowStartMs) / msPerHour;
     }
 
     // Move to the start of the next day
-    current.setDate(current.getDate() + 1);
-    current.setHours(0, 0, 0, 0);
+    current.setUTCDate(current.getUTCDate() + 1);
+    current.setUTCHours(0, 0, 0, 0);
   }
 
   return totalHours;
@@ -150,48 +190,64 @@ export function diffWorkingHours(startDate: Date, endDate: Date): number {
 /**
  * Add working hours to a date, excluding weekends
  * @param startDate - Start date/time
- * @param hours - Number of working hours to add (9-17 workday)
+ * @param hours - Number of working hours to add (9-18 workday)
  * @returns New date/time after adding working hours
  */
 export function addWorkingHours(startDate: Date, hours: number): Date {
   const msPerHour = 1000 * 60 * 60;
   const workdayStartHour = 9;
-  const workdayEndHour = 17;
+  const workdayEndHour = 18; // Changed from 17 to 18
 
   let remainingHours = hours;
-  const result = new Date(startDate);
+  
+  // Work with Tashkent time
+  const current = getTashkentTime(startDate);
 
   while (remainingHours > 0) {
-    if (isWeekend(result)) {
-      result.setDate(result.getDate() + 1);
-      result.setHours(workdayStartHour, 0, 0, 0);
+    const day = current.getUTCDay();
+    if (day === 0 || day === 6) {
+      current.setUTCDate(current.getUTCDate() + 1);
+      current.setUTCHours(workdayStartHour, 0, 0, 0);
       continue;
     }
 
-    const currentHour = result.getHours() + result.getMinutes() / 60;
+    const currentHour = current.getUTCHours() + current.getUTCMinutes() / 60;
 
     if (currentHour < workdayStartHour) {
-      result.setHours(workdayStartHour, 0, 0, 0);
+      current.setUTCHours(workdayStartHour, 0, 0, 0);
       continue;
     }
 
     if (currentHour >= workdayEndHour) {
-      result.setDate(result.getDate() + 1);
-      result.setHours(workdayStartHour, 0, 0, 0);
+      current.setUTCDate(current.getUTCDate() + 1);
+      current.setUTCHours(workdayStartHour, 0, 0, 0);
       continue;
     }
 
     const hoursUntilEndOfDay = workdayEndHour - currentHour;
     const hoursToAdd = Math.min(remainingHours, hoursUntilEndOfDay);
     
-    result.setTime(result.getTime() + hoursToAdd * msPerHour);
+    current.setTime(current.getTime() + hoursToAdd * msPerHour);
     remainingHours -= hoursToAdd;
 
     if (remainingHours > 0) {
-      result.setDate(result.getDate() + 1);
-      result.setHours(workdayStartHour, 0, 0, 0);
+      current.setUTCDate(current.getUTCDate() + 1);
+      current.setUTCHours(workdayStartHour, 0, 0, 0);
     }
   }
 
-  return result;
+  // Convert back from Tashkent "shifted" time to real UTC timestamp
+  // We need to reverse the shift. 
+  // Since we don't know the exact offset (DST etc) easily without a library, 
+  // we can use the difference between the original date and its Tashkent representation 
+  // BUT wait, the offset might change if we crossed a DST boundary (though Uzbekistan doesn't observe DST currently).
+  // Uzbekistan is fixed UTC+5.
+  
+  // Simple reverse for UTC+5:
+  // The 'current' is effectively UTC time that LOOKS like Tashkent time.
+  // So if 'current' says 18:00 UTC, it means 18:00 Tashkent.
+  // 18:00 Tashkent is 13:00 UTC.
+  // So we subtract 5 hours.
+  
+  return new Date(current.getTime() - 5 * 60 * 60 * 1000);
 }

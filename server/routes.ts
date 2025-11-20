@@ -15,6 +15,7 @@ import {
   resolveAuctionMode,
   selectWinningBid,
   shouldAutoAssignToCreator,
+  NO_BID_GRACE_HOURS,
 } from "./businessRules";
 import { filterOutAdminBids, isAdminUser } from "./utils/bidFilters";
 import { reassignTasksFromTerminatedEmployee } from "./services/employeeLifecycle";
@@ -55,7 +56,26 @@ import {
   isAuctionVisibleToUser,
 } from "./utils/auctionAccess";
 import multer from "multer";
-import { Client } from "@replit/object-storage";
+// import { Client } from "@replit/object-storage";
+
+// Mock Client for local development
+class Client {
+  async uploadFromBytes(path: string, buffer: any) {
+    console.log(`[Mock Storage] Uploading to ${path}`);
+    return { ok: true, error: null };
+  }
+  async download(path: string) {
+    console.log(`[Mock Storage] Downloading ${path}`);
+    return { ok: true, value: Buffer.from("mock data"), error: null };
+  }
+  async delete(path: string) {
+    console.log(`[Mock Storage] Deleting ${path}`);
+    return { ok: true, error: null };
+  }
+  async list(prefix: string) {
+    return { ok: true, value: [], error: null };
+  }
+}
 
 // Authentication middleware
 function requireAuth(req: Request, res: Response, next: NextFunction) {
@@ -118,10 +138,10 @@ const positionRoleMap: Record<PositionType, "director" | "manager" | "senior" | 
 };
 
 const basePointsByGrade: Record<Grade, number> = {
-  A: 30,
-  B: 20,
-  C: 15,
-  D: 10,
+  A: 12,
+  B: 9,
+  C: 6,
+  D: 3,
 };
 
 const positionGradeMap: Record<PositionType, Grade> = {
@@ -146,7 +166,7 @@ const taskTypeSchema = z.enum(TASK_TYPES);
 
 const decimalNumberSchema = z
   .union([z.number(), z.string()])
-  .transform((value) => {
+  .transform((value: number | string) => {
     if (typeof value === "number") {
       return value;
     }
@@ -320,7 +340,7 @@ async function clearManagementDeputyAssignment(userId: string) {
   }
 }
 
-class PositionAssignmentError extends Error {}
+class PositionAssignmentError extends Error { }
 
 async function resolveEmployeeAssignment(
   positionType: PositionType,
@@ -469,35 +489,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const bids = await filterOutAdminBids(await storage.getTaskBids(task.id));
 
-        if (bids.length === 0) {
-          if (!shouldAutoAssignToCreator(task, now) || (await isAdminUser(task.creatorId))) {
-            continue;
-          }
+      if (bids.length === 0) {
+        if (!shouldAutoAssignToCreator(task, now) || (await isAdminUser(task.creatorId))) {
+          continue;
+        }
 
-          const assignedValue = calculateEarnedValue(task, null, metadata.mode, now);
+        const assignedValue = calculateEarnedValue(task, null, metadata.mode, now);
 
-          await storage.updateTask(task.id, {
-            status: "IN_PROGRESS" as any,
-            executorId: task.creatorId,
-            executorName: task.creatorName,
-            auctionWinnerId: task.creatorId,
-            auctionWinnerName: task.creatorName,
-            earnedMoney:
-              metadata.mode === "MONEY" && assignedValue !== null && assignedValue !== undefined
-                ? decimalToString(assignedValue)
-                : null,
-            earnedTimeMinutes:
-              metadata.mode === "TIME" && assignedValue !== null ? Math.round(assignedValue) : null,
-            auctionEndAt: now,
-          });
-        } else {
-          const winningBid = selectWinningBid(bids, metadata.mode);
-          if (!winningBid || (await isAdminUser(winningBid.bidderId))) {
-            continue;
-          }
+        await storage.updateTask(task.id, {
+          status: "IN_PROGRESS" as any,
+          executorId: task.creatorId,
+          executorName: task.creatorName,
+          auctionWinnerId: task.creatorId,
+          auctionWinnerName: task.creatorName,
+          earnedMoney:
+            metadata.mode === "MONEY" && assignedValue !== null && assignedValue !== undefined
+              ? decimalToString(assignedValue)
+              : null,
+          earnedTimeMinutes:
+            metadata.mode === "TIME" && assignedValue !== null ? Math.round(assignedValue) : null,
+          auctionEndAt: now,
+        });
+      } else {
+        const winningBid = selectWinningBid(bids, metadata.mode);
+        if (!winningBid || (await isAdminUser(winningBid.bidderId))) {
+          continue;
+        }
 
-          const assignedValue = calculateEarnedValue(task, winningBid, metadata.mode, now);
-          const assignedSum = assignedValue ?? getAuctionMaxValue(task, metadata.mode);
+        const assignedValue = calculateEarnedValue(task, winningBid, metadata.mode, now);
+        const assignedSum = assignedValue ?? getAuctionMaxValue(task, metadata.mode);
 
         await storage.updateTask(task.id, {
           status: "IN_PROGRESS" as any,
@@ -545,10 +565,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { managementId, departmentId } = req.query;
       const filters: { managementId?: string; departmentId?: string } = {};
-      
+
       if (managementId) filters.managementId = managementId as string;
       if (departmentId) filters.departmentId = departmentId as string;
-      
+
       const allDivisions = await storage.getAllDivisions(Object.keys(filters).length > 0 ? filters : undefined);
       res.json(allDivisions);
     } catch (error) {
@@ -572,16 +592,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const existing = await storage.getDepartment(id);
-      
+
       if (!existing) {
         return res.status(404).json({ error: "Департамент не найден" });
       }
-      
+
       // Check authorization using ACTUAL departmentId from DB
       if (!canModifyDepartment(req.session.user, existing.id)) {
         return res.status(403).json({ error: "Недостаточно прав для изменения департамента" });
       }
-      
+
       const updated = await storage.updateDepartment(id, req.body);
       res.json(updated);
     } catch (error) {
@@ -593,12 +613,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/managements", requireAuth, async (req, res) => {
     try {
       const parsed = insertManagementSchema.parse(req.body);
-      
+
       // Check authorization - must be able to modify the parent department
       if (!canModifyDepartment(req.session.user, parsed.departmentId)) {
         return res.status(403).json({ error: "Недостаточно прав для создания управления" });
       }
-      
+
       const newManagement = await storage.createManagement(parsed);
       res.status(201).json(newManagement);
     } catch (error) {
@@ -611,23 +631,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const existing = await storage.getManagement(id);
-      
+
       if (!existing) {
         return res.status(404).json({ error: "Управление не найдено" });
       }
-      
+
       // Check authorization for current department
       if (!canModifyDepartment(req.session.user, existing.departmentId)) {
         return res.status(403).json({ error: "Недостаточно прав для изменения управления" });
       }
-      
+
       // If trying to change departmentId, verify rights to new department too
       if (req.body.departmentId && req.body.departmentId !== existing.departmentId) {
         if (!canModifyDepartment(req.session.user, req.body.departmentId)) {
           return res.status(403).json({ error: "Недостаточно прав для перемещения управления в другой департамент" });
         }
       }
-      
+
       const updated = await storage.updateManagement(id, req.body);
       res.json(updated);
     } catch (error) {
@@ -735,23 +755,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const existing = await storage.getDivision(id);
-      
+
       if (!existing) {
         return res.status(404).json({ error: "Подразделение не найдено" });
       }
-      
+
       // Check authorization for current department
       if (!canModifyDepartment(req.session.user, existing.departmentId)) {
         return res.status(403).json({ error: "Недостаточно прав для изменения подразделения" });
       }
-      
+
       // If trying to change departmentId, verify rights to new department too
       if (req.body.departmentId && req.body.departmentId !== existing.departmentId) {
         if (!canModifyDepartment(req.session.user, req.body.departmentId)) {
           return res.status(403).json({ error: "Недостаточно прав для перемещения подразделения в другой департамент" });
         }
       }
-      
+
       const updated = await storage.updateDivision(id, req.body);
       res.json(updated);
     } catch (error) {
@@ -768,7 +788,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const existing = await storage.getDepartment(id);
-      
+
       if (!existing) {
         return res.status(404).json({ error: "Департамент не найден" });
       }
@@ -809,7 +829,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const existing = await storage.getManagement(id);
-      
+
       if (!existing) {
         return res.status(404).json({ error: "Управление не найдено" });
       }
@@ -845,7 +865,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const existing = await storage.getDivision(id);
-      
+
       if (!existing) {
         return res.status(404).json({ error: "Подразделение не найдено" });
       }
@@ -979,7 +999,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         employee: "Сотрудник",
       };
       const positionLabel = positionLabels[parsed.positionType];
-      
+
       try {
         await storage.createPointTransaction({
           userId: user.id,
@@ -1001,7 +1021,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!updatedUser) {
         throw new Error("Failed to fetch updated user");
       }
-      
+
       const { passwordHash: _, ...userWithoutPassword } = updatedUser;
       res.status(201).json(userWithoutPassword);
     } catch (error: any) {
@@ -1797,7 +1817,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id: taskId } = req.params;
       const task = await storage.getTask(taskId);
-      
+
       if (!task) {
         return res.status(404).json({ error: "Задача не найдена" });
       }
@@ -1878,8 +1898,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const isExecutor = task.executorId === currentUser.id;
       const isUploader = attachment.uploaderId === currentUser.id;
       const isAdmin = currentUser.role === "admin";
-      
-      const canDelete = 
+
+      const canDelete =
         isAdmin ||
         isCreator || // creator can delete any attachment
         isUploader || // uploader can delete their attachment
@@ -2026,7 +2046,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         "employee",
         true
       );
-      
+
       const { passwordHash: _, ...userWithoutPassword } = user;
       res.json(userWithoutPassword);
     } catch (error: any) {
@@ -2051,11 +2071,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const user = await storage.updateUser(id, updates);
-      
+
       if (!user) {
         return res.status(404).json({ error: "Пользователь не найден" });
       }
-      
+
       const { passwordHash, ...userWithoutPassword } = user;
       res.json(userWithoutPassword);
     } catch (error) {
@@ -2112,6 +2132,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(history);
     } catch (error) {
       res.status(500).json({ error: "Не удалось получить историю баллов" });
+    }
+  });
+
+  app.get("/api/analytics/employees", requireAuth, async (req, res) => {
+    try {
+      const user = req.session.user!;
+      const filters: any = {};
+
+      if (user.role !== "admin") {
+        if (!user.departmentId) return res.status(403).json({ error: "Нет доступа" });
+        filters.departmentId = user.departmentId;
+      } else if (req.query.departmentId) {
+        filters.departmentId = req.query.departmentId;
+      }
+
+      const data = await storage.getEmployeeAnalytics(filters);
+      res.json(data);
+    } catch (error) {
+      console.error("Analytics error:", error);
+      res.status(500).json({ error: "Не удалось получить аналитику по сотрудникам" });
+    }
+  });
+
+  app.get("/api/analytics/structure", requireAuth, async (req, res) => {
+    try {
+      const user = req.session.user!;
+      const filters: any = {};
+
+      if (user.role !== "admin") {
+        if (!user.departmentId) return res.status(403).json({ error: "Нет доступа" });
+        filters.departmentId = user.departmentId;
+      } else if (req.query.departmentId) {
+        filters.departmentId = req.query.departmentId;
+      }
+
+      const data = await storage.getStructureAnalytics(filters);
+      res.json(data);
+    } catch (error) {
+      console.error("Analytics error:", error);
+      res.status(500).json({ error: "Не удалось получить структурную аналитику" });
     }
   });
 
