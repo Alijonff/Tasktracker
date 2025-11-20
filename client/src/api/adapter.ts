@@ -93,22 +93,22 @@ function transformTask(task: Task): AuctionTaskSummary {
     mode === "TIME"
       ? parseNumber((task as any).auctionInitialAmount) ?? parseNumber(task.baseTimeMinutes) ?? 0
       : parseNumber((task as any).auctionInitialAmount) ??
-        parseNumber(task.basePrice) ??
-        parseNumber((task as any).auctionInitialPrice) ??
-        parseNumber(task.estimatedHours) ??
-        0;
+      parseNumber(task.basePrice) ??
+      parseNumber((task as any).auctionInitialPrice) ??
+      parseNumber(task.estimatedHours) ??
+      0;
   const currentPrice =
     mode === "TIME"
       ? parseNumber((task as any).auctionCurrentAmount) ??
-        parseNumber(task.earnedTimeMinutes) ??
-        parseNumber(task.baseTimeMinutes)
+      parseNumber(task.earnedTimeMinutes) ??
+      parseNumber(task.baseTimeMinutes)
       : parseNumber((task as any).auctionCurrentAmount) ??
-        parseNumber(task.earnedMoney) ??
-        parseNumber(task.basePrice) ??
-        parseNumber((task as any).auctionMaxPrice) ??
-        parseNumber(task.auctionAssignedPrice) ??
-        parseNumber(task.auctionMaxPrice) ??
-        undefined;
+      parseNumber(task.earnedMoney) ??
+      parseNumber(task.basePrice) ??
+      parseNumber((task as any).auctionMaxPrice) ??
+      parseNumber(task.auctionAssignedPrice) ??
+      parseNumber(task.auctionMaxPrice) ??
+      undefined;
 
   return {
     id: task.id,
@@ -217,8 +217,8 @@ export async function listAuctions(params: ListAuctionsParams = {}): Promise<Auc
   const statuses = Array.isArray(status)
     ? status
     : status
-    ? [status]
-    : rest.statuses ?? ["BACKLOG"];
+      ? [status]
+      : rest.statuses ?? ["BACKLOG"];
 
   try {
     const response = await apiRequest("GET", "/api/auctions/active");
@@ -275,6 +275,41 @@ export async function placeBid(
   const payload = mode === "TIME" ? { valueTimeMinutes: amountSum } : { valueMoney: amountSum };
   await apiRequest("POST", `/api/tasks/${taskId}/bids`, payload);
   return { taskId, amount: amountSum };
+}
+
+export interface BidHistoryItem {
+  id: string;
+  bidder: string;
+  bidderName: string;
+  amount: number;
+  timestamp: string;
+  rating?: string;
+  grade?: Grade;
+}
+
+export async function getBidsForTask(taskId: string): Promise<BidHistoryItem[]> {
+  try {
+    const response = await apiRequest("GET", `/api/tasks/${taskId}/bids`);
+    const data = await response.json();
+
+    if (!Array.isArray(data)) {
+      console.warn("Invalid bids response", data);
+      return [];
+    }
+
+    return data.map((bid: any) => ({
+      id: bid.id,
+      bidder: bid.bidderName ?? "Unknown",
+      bidderName: bid.bidderName ?? "Unknown",
+      amount: bid.valueMoney ? parseFloat(bid.valueMoney) : (bid.valueTimeMinutes ?? 0),
+      timestamp: new Date(bid.createdAt).toLocaleString("ru-RU"),
+      rating: bid.bidderRating,
+      grade: bid.bidderGrade,
+    }));
+  } catch (error) {
+    console.warn("Failed to load bids for task", taskId, error);
+    return [];
+  }
 }
 
 export async function getDashboardMetrics(): Promise<DashboardMetrics> {

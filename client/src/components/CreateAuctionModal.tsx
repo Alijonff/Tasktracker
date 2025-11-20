@@ -136,379 +136,384 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
     queryKey: ["/api/divisions"],
     enabled: open,
   });
-
-  const availableDepartments = useMemo(() => {
-    if (!currentUser) return [] as Department[];
-    return (departments ?? []).filter((department) => {
-      if (currentUser.role === "director") {
-        return department.leaderId === currentUser.id;
-      }
-      if (currentUser.positionType === "deputy" && currentUser.departmentId) {
-        return department.id === currentUser.departmentId;
-      }
-      return false;
-    });
-  }, [currentUser, departments]);
-  const availableDivisions = useMemo(() => {
-    if (!formState.departmentId) return [] as Division[];
-    return (divisions ?? []).filter((division) => division.departmentId === formState.departmentId);
-  }, [divisions, formState.departmentId]);
-  const isTimeMode = formState.mode === "TIME";
-
-  useEffect(() => {
-    if (!open) {
-      setFormState(createInitialFormState());
-    }
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    if (!formState.departmentId) {
-      if (availableDepartments.length === 1) {
-        setFormState((prev) => ({ ...prev, departmentId: availableDepartments[0].id }));
-      } else if (currentUser?.departmentId) {
-        setFormState((prev) => ({ ...prev, departmentId: currentUser.departmentId ?? prev.departmentId }));
-      }
-    }
-  }, [open, availableDepartments, currentUser?.departmentId, formState.departmentId]);
-
-  useEffect(() => {
-    if (!open) return;
-
-    if (formState.taskType !== "UNIT") {
-      if (formState.divisionId) {
-        setFormState((prev) => ({ ...prev, divisionId: undefined }));
-      }
-      return;
-    }
-
-    if (!formState.departmentId) {
-      if (formState.divisionId) {
-        setFormState((prev) => ({ ...prev, divisionId: undefined }));
-      }
-      return;
-    }
-
-    if (formState.divisionId && availableDivisions.some((division) => division.id === formState.divisionId)) {
-      return;
-    }
-
-    if (availableDivisions.length === 1) {
-      setFormState((prev) => ({ ...prev, divisionId: availableDivisions[0].id }));
-    } else if (formState.divisionId) {
-      setFormState((prev) => ({ ...prev, divisionId: undefined }));
-    }
-  }, [availableDivisions, formState.departmentId, formState.divisionId, formState.taskType, open]);
-
-  const minDate = useMemo(() => formatDateOnly(new Date()), []);
-
-  const mutation = useMutation({
-    mutationFn: (payload: CreateAuctionTaskPayload) => createAuctionTask(payload),
-    onSuccess: () => {
-      toast({ title: "Аукцион создан" });
-      queryClient.invalidateQueries({ queryKey: ["auctions"], exact: false });
-      setFormState(createInitialFormState());
-      onOpenChange(false);
-      setLocation("/auctions");
-    },
-    onError: (error: unknown) => {
-      const { status, message } = parseApiError(error);
-      if (status === 403) {
-        toast({
-          title: message ?? "У вас нет прав создавать аукционы в этом департаменте",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      if (status === 400 || status === 422) {
-        toast({
-          title: "Ошибка при создании",
-          description: message ?? "Проверьте введённые данные",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      toast({
-        title: "Не удалось создать аукцион, попробуйте позже",
-        variant: "destructive",
-      });
-    },
+  const { data: employees = [] } = useQuery<any[]>({
+    queryKey: ["/api/employees"],
+    enabled: open && formState.taskType === "INDIVIDUAL",
   });
+  const availableDepartments = useMemo(() => {
 
-  const handleDialogChange = (nextOpen: boolean) => {
-    if (!nextOpen) {
-      setFormState(createInitialFormState());
-    }
-    onOpenChange(nextOpen);
-  };
-
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    const trimmedTitle = formState.title.trim();
-    const trimmedDescription = formState.description.trim();
-    const amount = Number(formState.startingPrice);
-    const deadline = composeDeadline(formState.deadlineDate);
+    const availableDepartments = useMemo(() => {
+      if (!currentUser) return [] as Department[];
+      return (departments ?? []).filter((department) => {
+        if (currentUser.role === "director") {
+          return department.leaderId === currentUser.id;
+        }
+        if (currentUser.positionType === "deputy" && currentUser.departmentId) {
+          return department.id === currentUser.departmentId;
+        }
+        return false;
+      });
+    }, [currentUser, departments]);
+    const availableDivisions = useMemo(() => {
+      if (!formState.departmentId) return [] as Division[];
+      return (divisions ?? []).filter((division) => division.departmentId === formState.departmentId);
+    }, [divisions, formState.departmentId]);
     const isTimeMode = formState.mode === "TIME";
 
-    if (availableDepartments.length > 1 && !formState.departmentId) {
-      toast({ title: "Выберите департамент", variant: "destructive" });
-      return;
-    }
+    useEffect(() => {
+      if (!open) {
+        setFormState(createInitialFormState());
+      }
+    }, [open]);
 
-    if (!trimmedTitle) {
-      toast({ title: "Введите название", variant: "destructive" });
-      return;
-    }
-
-    if (!trimmedDescription) {
-      toast({ title: "Опишите задачу", variant: "destructive" });
-      return;
-    }
-
-    if (!Number.isFinite(amount) || amount <= 0) {
-      toast({
-        title: isTimeMode ? "Укажите корректное время в минутах" : "Укажите корректную начальную сумму",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (formState.taskType === "UNIT") {
+    useEffect(() => {
+      if (!open) return;
       if (!formState.departmentId) {
-        toast({ title: "Выберите департамент для отдела", variant: "destructive" });
+        if (availableDepartments.length === 1) {
+          setFormState((prev) => ({ ...prev, departmentId: availableDepartments[0].id }));
+        } else if (currentUser?.departmentId) {
+          setFormState((prev) => ({ ...prev, departmentId: currentUser.departmentId ?? prev.departmentId }));
+        }
+      }
+    }, [open, availableDepartments, currentUser?.departmentId, formState.departmentId]);
+
+    useEffect(() => {
+      if (!open) return;
+
+      if (formState.taskType !== "UNIT") {
+        if (formState.divisionId) {
+          setFormState((prev) => ({ ...prev, divisionId: undefined }));
+        }
         return;
       }
 
-      if (!formState.divisionId) {
-        toast({ title: "Выберите отдел", variant: "destructive" });
+      if (!formState.departmentId) {
+        if (formState.divisionId) {
+          setFormState((prev) => ({ ...prev, divisionId: undefined }));
+        }
         return;
       }
-    }
 
-    if (!deadline || deadline <= new Date()) {
-      toast({ title: "Выберите корректный дедлайн", variant: "destructive" });
-      return;
-    }
+      if (formState.divisionId && availableDivisions.some((division) => division.id === formState.divisionId)) {
+        return;
+      }
 
-    mutation.mutate({
-      title: trimmedTitle,
-      description: trimmedDescription,
-      minimumGrade: formState.minimumGrade,
-      startingPrice: amount,
-      deadline: deadline.toISOString(),
-      departmentId: formState.departmentId,
-      managementId: undefined,
-      divisionId: formState.taskType === "UNIT" ? formState.divisionId : undefined,
-      mode: formState.mode,
-      taskType: formState.taskType,
+      if (availableDivisions.length === 1) {
+        setFormState((prev) => ({ ...prev, divisionId: availableDivisions[0].id }));
+      } else if (formState.divisionId) {
+        setFormState((prev) => ({ ...prev, divisionId: undefined }));
+      }
+    }, [availableDivisions, formState.departmentId, formState.divisionId, formState.taskType, open]);
+
+    const minDate = useMemo(() => formatDateOnly(new Date()), []);
+
+    const mutation = useMutation({
+      mutationFn: (payload: CreateAuctionTaskPayload) => createAuctionTask(payload),
+      onSuccess: () => {
+        toast({ title: "Аукцион создан" });
+        queryClient.invalidateQueries({ queryKey: ["auctions"], exact: false });
+        setFormState(createInitialFormState());
+        onOpenChange(false);
+        setLocation("/auctions");
+      },
+      onError: (error: unknown) => {
+        const { status, message } = parseApiError(error);
+        if (status === 403) {
+          toast({
+            title: message ?? "У вас нет прав создавать аукционы в этом департаменте",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        if (status === 400 || status === 422) {
+          toast({
+            title: "Ошибка при создании",
+            description: message ?? "Проверьте введённые данные",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        toast({
+          title: "Не удалось создать аукцион, попробуйте позже",
+          variant: "destructive",
+        });
+      },
     });
-  };
 
-  return (
-    <Dialog open={open} onOpenChange={handleDialogChange}>
-      <DialogContent className="max-w-2xl" data-testid="dialog-create-auction">
-        <DialogHeader>
-          <DialogTitle>Создать новый аукцион</DialogTitle>
-        </DialogHeader>
+    const handleDialogChange = (nextOpen: boolean) => {
+      if (!nextOpen) {
+        setFormState(createInitialFormState());
+      }
+      onOpenChange(nextOpen);
+    };
 
-        <form className="space-y-6" onSubmit={handleSubmit}>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="auction-title">Название задачи *</Label>
-              <Input
-                id="auction-title"
-                value={formState.title}
-                onChange={(event) => setFormState((prev) => ({ ...prev, title: event.target.value }))}
-                placeholder="Например, провести аудит инфраструктуры"
-                required
-              />
-            </div>
+    const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
 
-            <div className="space-y-2">
-              <Label htmlFor="auction-description">Описание *</Label>
-              <Textarea
-                id="auction-description"
-                value={formState.description}
-                onChange={(event) => setFormState((prev) => ({ ...prev, description: event.target.value }))}
-                placeholder="Опишите задачу подробно"
-                required
-                rows={5}
-              />
-            </div>
+      const trimmedTitle = formState.title.trim();
+      const trimmedDescription = formState.description.trim();
+      const amount = Number(formState.startingPrice);
+      const deadline = composeDeadline(formState.deadlineDate);
+      const isTimeMode = formState.mode === "TIME";
 
-            {availableDepartments.length > 1 && (
+      if (availableDepartments.length > 1 && !formState.departmentId) {
+        toast({ title: "Выберите департамент", variant: "destructive" });
+        return;
+      }
+
+      if (!trimmedTitle) {
+        toast({ title: "Введите название", variant: "destructive" });
+        return;
+      }
+
+      if (!trimmedDescription) {
+        toast({ title: "Опишите задачу", variant: "destructive" });
+        return;
+      }
+
+      if (!Number.isFinite(amount) || amount <= 0) {
+        toast({
+          title: isTimeMode ? "Укажите корректное время в минутах" : "Укажите корректную начальную сумму",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (formState.taskType === "UNIT") {
+        if (!formState.departmentId) {
+          toast({ title: "Выберите департамент для отдела", variant: "destructive" });
+          return;
+        }
+
+        if (!formState.divisionId) {
+          toast({ title: "Выберите отдел", variant: "destructive" });
+          return;
+        }
+      }
+
+      if (!deadline || deadline <= new Date()) {
+        toast({ title: "Выберите корректный дедлайн", variant: "destructive" });
+        return;
+      }
+
+      mutation.mutate({
+        title: trimmedTitle,
+        description: trimmedDescription,
+        minimumGrade: formState.minimumGrade,
+        startingPrice: amount,
+        deadline: deadline.toISOString(),
+        departmentId: formState.departmentId,
+        managementId: undefined,
+        divisionId: formState.taskType === "UNIT" ? formState.divisionId : undefined,
+        mode: formState.mode,
+        taskType: formState.taskType,
+      });
+    };
+
+    return (
+      <Dialog open={open} onOpenChange={handleDialogChange}>
+        <DialogContent className="max-w-2xl" data-testid="dialog-create-auction">
+          <DialogHeader>
+            <DialogTitle>Создать новый аукцион</DialogTitle>
+          </DialogHeader>
+
+          <form className="space-y-6" onSubmit={handleSubmit}>
+            <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="auction-department">Департамент *</Label>
-                <Select
-                  value={formState.departmentId ?? ""}
-                  onValueChange={(value) => setFormState((prev) => ({ ...prev, departmentId: value }))}
-                  disabled={mutation.isPending}
-                >
-                  <SelectTrigger id="auction-department">
-                    <SelectValue placeholder="Выберите департамент" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableDepartments.map((department) => (
-                      <SelectItem key={department.id} value={department.id}>
-                        {department.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">Выберите департамент, от имени которого создаёте аукцион</p>
-              </div>
-            )}
-
-            {formState.taskType === "UNIT" && (
-              <div className="space-y-2">
-                <Label htmlFor="auction-division">Отдел *</Label>
-                <Select
-                  value={formState.divisionId ?? ""}
-                  onValueChange={(value) => setFormState((prev) => ({ ...prev, divisionId: value }))}
-                  disabled={mutation.isPending || !formState.departmentId || availableDivisions.length === 0}
-                >
-                  <SelectTrigger id="auction-division">
-                    <SelectValue placeholder="Выберите отдел" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableDivisions.map((division) => (
-                      <SelectItem key={division.id} value={division.id}>
-                        {division.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  {formState.departmentId
-                    ? availableDivisions.length === 0
-                      ? "В выбранном департаменте нет отделов"
-                      : "Выберите отдел, для которого создаётся аукцион"
-                    : "Сначала выберите департамент"}
-                </p>
-              </div>
-            )}
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="task-type">Тип задачи</Label>
-                <Select
-                  value={formState.taskType}
-                  onValueChange={(value: TaskType) => setFormState((prev) => ({ ...prev, taskType: value }))}
-                  disabled={mutation.isPending}
-                >
-                  <SelectTrigger id="task-type">
-                    <SelectValue placeholder="Выберите тип" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {taskTypeOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  {taskTypeOptions.find((option) => option.value === formState.taskType)?.helper}
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="task-mode">Режим ставок</Label>
-                <Select
-                  value={formState.mode}
-                  onValueChange={(value: TaskMode) => setFormState((prev) => ({ ...prev, mode: value }))}
-                  disabled={mutation.isPending}
-                >
-                  <SelectTrigger id="task-mode">
-                    <SelectValue placeholder="Выберите режим" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {modeOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  {modeOptions.find((option) => option.value === formState.mode)?.helper}
-                </p>
-              </div>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="auction-minimum-grade">Минимальный грейд</Label>
-                <Select
-                  value={formState.minimumGrade}
-                  onValueChange={(value: Grade) => setFormState((prev) => ({ ...prev, minimumGrade: value }))}
-                >
-                  <SelectTrigger id="auction-minimum-grade">
-                    <SelectValue placeholder="Выберите минимальный грейд" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {gradeOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  К аукциону будут допущены сотрудники с указанным или более высоким грейдом
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="auction-starting-price">
-                  {isTimeMode ? "Оценка времени (минуты)" : "Начальная сумма (сум)"}
-                </Label>
+                <Label htmlFor="auction-title">Название задачи *</Label>
                 <Input
-                  id="auction-starting-price"
-                  type="number"
-                  inputMode="numeric"
-                  min={0}
-                  step={1}
-                  value={formState.startingPrice}
-                  onChange={(event) => setFormState((prev) => ({ ...prev, startingPrice: event.target.value }))}
-                  placeholder={isTimeMode ? "Например, 45" : "0"}
+                  id="auction-title"
+                  value={formState.title}
+                  onChange={(event) => setFormState((prev) => ({ ...prev, title: event.target.value }))}
+                  placeholder="Например, провести аудит инфраструктуры"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="auction-description">Описание *</Label>
+                <Textarea
+                  id="auction-description"
+                  value={formState.description}
+                  onChange={(event) => setFormState((prev) => ({ ...prev, description: event.target.value }))}
+                  placeholder="Опишите задачу подробно"
+                  required
+                  rows={5}
+                />
+              </div>
+
+              {availableDepartments.length > 1 && (
+                <div className="space-y-2">
+                  <Label htmlFor="auction-department">Департамент *</Label>
+                  <Select
+                    value={formState.departmentId ?? ""}
+                    onValueChange={(value) => setFormState((prev) => ({ ...prev, departmentId: value }))}
+                    disabled={mutation.isPending}
+                  >
+                    <SelectTrigger id="auction-department">
+                      <SelectValue placeholder="Выберите департамент" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableDepartments.map((department) => (
+                        <SelectItem key={department.id} value={department.id}>
+                          {department.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Выберите департамент, от имени которого создаёте аукцион</p>
+                </div>
+              )}
+
+              {formState.taskType === "UNIT" && (
+                <div className="space-y-2">
+                  <Label htmlFor="auction-division">Отдел *</Label>
+                  <Select
+                    value={formState.divisionId ?? ""}
+                    onValueChange={(value) => setFormState((prev) => ({ ...prev, divisionId: value }))}
+                    disabled={mutation.isPending || !formState.departmentId || availableDivisions.length === 0}
+                  >
+                    <SelectTrigger id="auction-division">
+                      <SelectValue placeholder="Выберите отдел" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableDivisions.map((division) => (
+                        <SelectItem key={division.id} value={division.id}>
+                          {division.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {formState.departmentId
+                      ? availableDivisions.length === 0
+                        ? "В выбранном департаменте нет отделов"
+                        : "Выберите отдел, для которого создаётся аукцион"
+                      : "Сначала выберите департамент"}
+                  </p>
+                </div>
+              )}
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="task-type">Тип задачи</Label>
+                  <Select
+                    value={formState.taskType}
+                    onValueChange={(value: TaskType) => setFormState((prev) => ({ ...prev, taskType: value }))}
+                    disabled={mutation.isPending}
+                  >
+                    <SelectTrigger id="task-type">
+                      <SelectValue placeholder="Выберите тип" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {taskTypeOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {taskTypeOptions.find((option) => option.value === formState.taskType)?.helper}
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="task-mode">Режим ставок</Label>
+                  <Select
+                    value={formState.mode}
+                    onValueChange={(value: TaskMode) => setFormState((prev) => ({ ...prev, mode: value }))}
+                    disabled={mutation.isPending}
+                  >
+                    <SelectTrigger id="task-mode">
+                      <SelectValue placeholder="Выберите режим" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {modeOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {modeOptions.find((option) => option.value === formState.mode)?.helper}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="auction-minimum-grade">Минимальный грейд</Label>
+                  <Select
+                    value={formState.minimumGrade}
+                    onValueChange={(value: Grade) => setFormState((prev) => ({ ...prev, minimumGrade: value }))}
+                  >
+                    <SelectTrigger id="auction-minimum-grade">
+                      <SelectValue placeholder="Выберите минимальный грейд" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {gradeOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    К аукциону будут допущены сотрудники с указанным или более высоким грейдом
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="auction-starting-price">
+                    {isTimeMode ? "Оценка времени (минуты)" : "Начальная сумма (сум)"}
+                  </Label>
+                  <Input
+                    id="auction-starting-price"
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    step={1}
+                    value={formState.startingPrice}
+                    onChange={(event) => setFormState((prev) => ({ ...prev, startingPrice: event.target.value }))}
+                    placeholder={isTimeMode ? "Например, 45" : "0"}
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {isTimeMode ? "Введите ожидаемое время в минутах" : "Укажите сумму, с которой начнутся торги"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="auction-deadline">Дедлайн аукциона</Label>
+                <Input
+                  id="auction-deadline"
+                  type="date"
+                  value={formState.deadlineDate}
+                  min={minDate}
+                  onChange={(event) => setFormState((prev) => ({ ...prev, deadlineDate: event.target.value }))}
                   required
                 />
                 <p className="text-xs text-muted-foreground">
-                  {isTimeMode ? "Введите ожидаемое время в минутах" : "Укажите сумму, с которой начнутся торги"}
+                  Торги завершатся в выбранный день в 19:00 по вашей локальной таймзоне
                 </p>
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="auction-deadline">Дедлайн аукциона</Label>
-              <Input
-                id="auction-deadline"
-                type="date"
-                value={formState.deadlineDate}
-                min={minDate}
-                onChange={(event) => setFormState((prev) => ({ ...prev, deadlineDate: event.target.value }))}
-                required
-              />
-              <p className="text-xs text-muted-foreground">
-                Торги завершатся в выбранный день в 19:00 по вашей локальной таймзоне
-              </p>
-            </div>
-          </div>
-
-          <DialogFooter className="gap-2">
-            <Button type="button" variant="outline" onClick={() => handleDialogChange(false)}>
-              Отмена
-            </Button>
-            <Button type="submit" disabled={mutation.isPending} data-testid="button-create-auction">
-              {mutation.isPending ? "Создание..." : "Создать"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
+            <DialogFooter className="gap-2">
+              <Button type="button" variant="outline" onClick={() => handleDialogChange(false)}>
+                Отмена
+              </Button>
+              <Button type="submit" disabled={mutation.isPending} data-testid="button-create-auction">
+                {mutation.isPending ? "Создание..." : "Создать"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    );
+  }

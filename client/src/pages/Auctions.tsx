@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import TaskCard from "@/components/TaskCard";
 import PlaceBidDialog from "@/components/PlaceBidDialog";
 import CreateAuctionModal from "@/components/CreateAuctionModal";
-import { listAuctions, placeBid, type AuctionTaskSummary, type Grade } from "@/api/adapter";
+import { listAuctions, placeBid, getBidsForTask, type AuctionTaskSummary, type Grade } from "@/api/adapter";
 import { useToast } from "@/hooks/use-toast";
 import { Gavel, PlusCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -97,12 +97,20 @@ export default function Auctions() {
 
   const canCreateAuction = Boolean(currentUser?.canCreateAuctions);
 
+  // Fetch bids for the selected task
+  const { data: selectedTaskBids = [] } = useQuery({
+    queryKey: ["task-bids", selectedTaskId],
+    queryFn: () => (selectedTaskId ? getBidsForTask(selectedTaskId) : Promise.resolve([])),
+    enabled: !!selectedTaskId && bidDialogOpen,
+  });
+
   const bidMutation = useMutation({
     mutationFn: ({ taskId, amount, mode }: { taskId: string; amount: number; mode: TaskMode }) =>
       placeBid(taskId, amount, mode),
     onSuccess: () => {
       toast({ title: "Ставка принята" });
       queryClient.invalidateQueries({ queryKey: ["auctions"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["task-bids", selectedTaskId] });
       setBidDialogOpen(false);
     },
     onError: (error) => {
@@ -194,7 +202,7 @@ export default function Auctions() {
           currentPrice: selectedTask.currentPrice ?? selectedTask.startingPrice,
           minimumGrade: selectedTask.minimumGrade,
           mode: selectedTask.mode,
-          bids: [],
+          bids: selectedTaskBids,
         } : undefined}
       />
 
