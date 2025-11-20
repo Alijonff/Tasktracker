@@ -20,6 +20,7 @@ import {
 import { filterOutAdminBids, isAdminUser } from "./utils/bidFilters";
 import { reassignTasksFromTerminatedEmployee } from "./services/employeeLifecycle";
 import { z } from "zod";
+import { decimalNumberSchema, placeBidSchema } from "./schemas/auctionSchemas";
 import {
   loginSchema,
   insertUserSchema,
@@ -144,18 +145,6 @@ function getBasePointsForTask(task: Task): number {
 const gradeSchema = z.enum(["A", "B", "C", "D"]);
 const taskModeSchema = z.enum(TASK_MODES);
 const taskTypeSchema = z.enum(TASK_TYPES);
-
-const decimalNumberSchema = z
-  .union([z.number(), z.string()])
-  .transform((value: number | string) => {
-    if (typeof value === "number") {
-      return value;
-    }
-    // Remove ALL whitespace (including internal spaces like "999 000")
-    const normalized = value.replace(/\s/g, '').replace(",", ".");
-    return Number.parseFloat(normalized);
-  })
-  .pipe(z.number().positive("Значение должно быть больше нуля"));
 
 function decimalToString(value: number): string {
   return value.toFixed(2);
@@ -294,22 +283,6 @@ const createTaskSchema = z
     divisionId: z.string().min(1, "Укажите отдел").optional(),
     executorId: z.string().min(1, "Укажите исполнителя").optional(),
     auctionInitialSum: decimalNumberSchema,
-  });
-
-const placeBidSchema = z
-  .object({
-    valueMoney: decimalNumberSchema.optional(),
-    valueTimeMinutes: z
-      .union([z.string(), z.number()])
-      .transform((value) => {
-        if (typeof value === "number") return value;
-        const parsed = Number.parseInt(value, 10);
-        return Number.isFinite(parsed) ? parsed : NaN;
-      })
-      .pipe(z.number().int().positive("Значение должно быть больше нуля").optional()),
-  })
-  .refine((data) => data.valueMoney !== undefined || data.valueTimeMinutes !== undefined, {
-    message: "Укажите значение ставки",
   });
 
 const updateManagementDeputySchema = z.object({
