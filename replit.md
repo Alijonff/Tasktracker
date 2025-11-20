@@ -2,7 +2,17 @@
 
 ## Overview
 
-TaskFlow is a comprehensive enterprise task management system designed for hierarchical organizations. It manages tasks and working time across a four-level organizational structure: Department → Management → Division → Employee. The system features auction-based task allocation, where employees bid on tasks by proposing completion times. Key capabilities include a rating system, detailed analytics, time tracking, real-time collaboration, and role-based access control. The project aims to optimize task distribution, improve resource allocation, and enhance organizational efficiency.
+TaskFlow is a comprehensive enterprise task management system designed for hierarchical organizations. It manages tasks and working time across a four-level organizational structure: Department → Management → Division → Employee. The system features auction-based task allocation, where employees bid on tasks by proposing completion times. Key capabilities include a rating system, detailed analytics, time tracking, real-time collaboration, role-based access control, and status-driven task workflows with comment support. The project aims to optimize task distribution, improve resource allocation, and enhance organizational efficiency.
+
+## Recent Changes (November 20, 2025)
+
+- **INDIVIDUAL task rewards fix**: Rewards (earnedMoney/earnedTimeMinutes) now correctly saved at task creation and displayed in TaskDetailDialog
+- **Status management UI**: Added status transition controls to TaskDetailDialog:
+  - IN_PROGRESS → UNDER_REVIEW: "Submit for review" button (executor only)
+  - UNDER_REVIEW → DONE: "Complete task" button (creator only)
+  - UNDER_REVIEW → IN_PROGRESS: "Return to work" button with mandatory comment field (creator only)
+- **ReturnToWorkDialog component**: New dialog for entering comments when returning tasks to work
+- **API enhancements**: Extended `updateTaskStatus` in adapter.ts to support optional comment parameter
 
 ## User Preferences
 
