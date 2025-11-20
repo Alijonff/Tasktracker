@@ -56,6 +56,8 @@ export default function TaskDetailDialog({ open, onOpenChange, task }: TaskDetai
 
   const isExecutor = currentUser?.id === (task as any).executorId;
   const isCreator = currentUser?.id === (task as any).creatorId;
+  const isAdmin = currentUser?.role === "admin";
+  const isDirector = currentUser?.role === "director" && currentUser?.departmentId === (task as any).departmentId;
 
   const { data: bids = [] } = useQuery<BidHistoryItem[]>({
     queryKey: ["task-bids", task.id],
@@ -82,6 +84,11 @@ export default function TaskDetailDialog({ open, onOpenChange, task }: TaskDetai
     onSuccess: () => {
       toast({ title: "Задача отправлена на проверку" });
       queryClient.invalidateQueries({ queryKey: ["tasks"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["my-tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["task", task.id] });
+      queryClient.invalidateQueries({ queryKey: ["task-bids", task.id] });
+      queryClient.invalidateQueries({ queryKey: ["auctions"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       onOpenChange(false);
     },
     onError: () => {
@@ -94,6 +101,11 @@ export default function TaskDetailDialog({ open, onOpenChange, task }: TaskDetai
     onSuccess: () => {
       toast({ title: "Задача успешно завершена" });
       queryClient.invalidateQueries({ queryKey: ["tasks"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["my-tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["task", task.id] });
+      queryClient.invalidateQueries({ queryKey: ["task-bids", task.id] });
+      queryClient.invalidateQueries({ queryKey: ["auctions"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       onOpenChange(false);
     },
     onError: () => {
@@ -106,6 +118,11 @@ export default function TaskDetailDialog({ open, onOpenChange, task }: TaskDetai
     onSuccess: () => {
       toast({ title: "Задача возвращена в работу" });
       queryClient.invalidateQueries({ queryKey: ["tasks"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["my-tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["task", task.id] });
+      queryClient.invalidateQueries({ queryKey: ["task-bids", task.id] });
+      queryClient.invalidateQueries({ queryKey: ["auctions"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       setReturnDialogOpen(false);
       onOpenChange(false);
     },
@@ -235,7 +252,7 @@ export default function TaskDetailDialog({ open, onOpenChange, task }: TaskDetai
               </div>
             )}
 
-            {task.status === "IN_PROGRESS" && isExecutor && (
+            {task.status === "IN_PROGRESS" && (isExecutor || isAdmin) && (
               <div className="p-4 rounded-md border space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
@@ -256,7 +273,7 @@ export default function TaskDetailDialog({ open, onOpenChange, task }: TaskDetai
               </div>
             )}
 
-            {task.status === "UNDER_REVIEW" && isCreator && (
+            {task.status === "UNDER_REVIEW" && (isCreator || isDirector || isAdmin) && (
               <div className="p-4 rounded-md border space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
@@ -267,14 +284,16 @@ export default function TaskDetailDialog({ open, onOpenChange, task }: TaskDetai
                 </div>
 
                 <div className="space-y-2">
-                  <Button
-                    className="w-full"
-                    onClick={() => completeTaskMutation.mutate()}
-                    disabled={completeTaskMutation.isPending || returnToWorkMutation.isPending}
-                    data-testid="button-complete-task"
-                  >
-                    {completeTaskMutation.isPending ? "Завершение..." : "Завершить задачу"}
-                  </Button>
+                  {(isDirector || isAdmin) && (
+                    <Button
+                      className="w-full"
+                      onClick={() => completeTaskMutation.mutate()}
+                      disabled={completeTaskMutation.isPending || returnToWorkMutation.isPending}
+                      data-testid="button-complete-task"
+                    >
+                      {completeTaskMutation.isPending ? "Завершение..." : "Завершить задачу"}
+                    </Button>
+                  )}
 
                   <Button
                     className="w-full"
@@ -290,12 +309,12 @@ export default function TaskDetailDialog({ open, onOpenChange, task }: TaskDetai
               </div>
             )}
 
-            {task.status === "UNDER_REVIEW" && !isCreator && (
+            {task.status === "UNDER_REVIEW" && !isCreator && !isDirector && !isAdmin && isExecutor && (
               <div className="p-4 rounded-md border space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="font-semibold">На проверке</h3>
-                    <p className="text-sm text-muted-foreground">Задача проверяется создателем</p>
+                    <p className="text-sm text-muted-foreground">Задача проверяется директором департамента</p>
                   </div>
                   <CheckCircle size={18} className="text-muted-foreground" />
                 </div>
