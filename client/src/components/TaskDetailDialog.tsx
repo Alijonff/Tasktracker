@@ -9,11 +9,12 @@ import GradeBadge from "./GradeBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import PlaceBidDialog from "./PlaceBidDialog";
-import { UsersRound, Gavel, CalendarDays, UserRound, Wallet } from "lucide-react";
+import ReturnToWorkDialog from "./ReturnToWorkDialog";
+import { UsersRound, Gavel, CalendarDays, UserRound, Wallet, CheckCircle, Send, RotateCcw } from "lucide-react";
 import type { BidHistoryItem, Grade } from "@/api/adapter";
 import type { TaskMode } from "@shared/taskMetadata";
 import type { Task } from "@shared/schema";
-import { getBidsForTask, placeBid } from "@/api/adapter";
+import { getBidsForTask, placeBid, updateTaskStatus } from "@/api/adapter";
 import { useToast } from "@/hooks/use-toast";
 import type { SessionUser } from "@/types/session";
 import { extractBidErrorMessage, getBidAvailability, resolveUserGrade } from "@/lib/bidRules";
@@ -47,10 +48,14 @@ export default function TaskDetailDialog({ open, onOpenChange, task }: TaskDetai
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [bidDialogOpen, setBidDialogOpen] = useState(false);
+  const [returnDialogOpen, setReturnDialogOpen] = useState(false);
 
   const { data: userResponse } = useQuery<{ user: SessionUser | null }>({ queryKey: ["/api/auth/me"] });
   const currentUser = userResponse?.user;
   const userGrade = useMemo(() => resolveUserGrade(currentUser), [currentUser]);
+
+  const isExecutor = currentUser?.id === (task as any).executorId;
+  const isCreator = currentUser?.id === (task as any).creatorId;
 
   const { data: bids = [] } = useQuery<BidHistoryItem[]>({
     queryKey: ["task-bids", task.id],
@@ -69,6 +74,43 @@ export default function TaskDetailDialog({ open, onOpenChange, task }: TaskDetai
     },
     onError: (error) => {
       toast({ title: extractBidErrorMessage(error), variant: "destructive" });
+    },
+  });
+
+  const submitForReviewMutation = useMutation({
+    mutationFn: () => updateTaskStatus(task.id, "UNDER_REVIEW"),
+    onSuccess: () => {
+      toast({ title: "Задача отправлена на проверку" });
+      queryClient.invalidateQueries({ queryKey: ["tasks"], exact: false });
+      onOpenChange(false);
+    },
+    onError: () => {
+      toast({ title: "Не удалось отправить задачу на проверку", variant: "destructive" });
+    },
+  });
+
+  const completeTaskMutation = useMutation({
+    mutationFn: () => updateTaskStatus(task.id, "DONE"),
+    onSuccess: () => {
+      toast({ title: "Задача успешно завершена" });
+      queryClient.invalidateQueries({ queryKey: ["tasks"], exact: false });
+      onOpenChange(false);
+    },
+    onError: () => {
+      toast({ title: "Не удалось завершить задачу", variant: "destructive" });
+    },
+  });
+
+  const returnToWorkMutation = useMutation({
+    mutationFn: (comment: string) => updateTaskStatus(task.id, "IN_PROGRESS", comment),
+    onSuccess: () => {
+      toast({ title: "Задача возвращена в работу" });
+      queryClient.invalidateQueries({ queryKey: ["tasks"], exact: false });
+      setReturnDialogOpen(false);
+      onOpenChange(false);
+    },
+    onError: () => {
+      toast({ title: "Не удалось вернуть задачу в работу", variant: "destructive" });
     },
   });
 
@@ -169,27 +211,108 @@ export default function TaskDetailDialog({ open, onOpenChange, task }: TaskDetai
               </div>
             </div>
 
-            <div className="p-4 rounded-md border space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-semibold">Участвовать в торгах</h3>
-                  <p className="text-sm text-muted-foreground">Подайте ставку прямо из карточки задачи</p>
+            {task.status === "BACKLOG" && (
+              <div className="p-4 rounded-md border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-semibold">Участвовать в торгах</h3>
+                    <p className="text-sm text-muted-foreground">Подайте ставку прямо из карточки задачи</p>
+                  </div>
+                  <Gavel size={18} className="text-primary" />
                 </div>
-                <Gavel size={18} className="text-primary" />
-              </div>
 
-              <Button
-                className="w-full"
-                onClick={() => setBidDialogOpen(true)}
-                disabled={!canBid || bidMutation.isPending}
-                data-testid="button-bid-from-detail"
-              >
-                Сделать ставку
-              </Button>
-              {!canBid && (
-                <p className="text-xs text-muted-foreground text-center">{bidAvailability.reason}</p>
-              )}
-            </div>
+                <Button
+                  className="w-full"
+                  onClick={() => setBidDialogOpen(true)}
+                  disabled={!canBid || bidMutation.isPending}
+                  data-testid="button-bid-from-detail"
+                >
+                  Сделать ставку
+                </Button>
+                {!canBid && (
+                  <p className="text-xs text-muted-foreground text-center">{bidAvailability.reason}</p>
+                )}
+              </div>
+            )}
+
+            {task.status === "IN_PROGRESS" && isExecutor && (
+              <div className="p-4 rounded-md border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-semibold">Отправить на проверку</h3>
+                    <p className="text-sm text-muted-foreground">Когда задача готова, отправьте ее создателю</p>
+                  </div>
+                  <Send size={18} className="text-primary" />
+                </div>
+
+                <Button
+                  className="w-full"
+                  onClick={() => submitForReviewMutation.mutate()}
+                  disabled={submitForReviewMutation.isPending}
+                  data-testid="button-submit-for-review"
+                >
+                  {submitForReviewMutation.isPending ? "Отправка..." : "Отправить на проверку"}
+                </Button>
+              </div>
+            )}
+
+            {task.status === "UNDER_REVIEW" && isCreator && (
+              <div className="p-4 rounded-md border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-semibold">Проверка задачи</h3>
+                    <p className="text-sm text-muted-foreground">Завершите или верните на доработку</p>
+                  </div>
+                  <CheckCircle size={18} className="text-primary" />
+                </div>
+
+                <div className="space-y-2">
+                  <Button
+                    className="w-full"
+                    onClick={() => completeTaskMutation.mutate()}
+                    disabled={completeTaskMutation.isPending || returnToWorkMutation.isPending}
+                    data-testid="button-complete-task"
+                  >
+                    {completeTaskMutation.isPending ? "Завершение..." : "Завершить задачу"}
+                  </Button>
+
+                  <Button
+                    className="w-full"
+                    variant="outline"
+                    onClick={() => setReturnDialogOpen(true)}
+                    disabled={completeTaskMutation.isPending || returnToWorkMutation.isPending}
+                    data-testid="button-return-to-work"
+                  >
+                    <RotateCcw size={16} className="mr-2" />
+                    Вернуть в работу
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {task.status === "UNDER_REVIEW" && !isCreator && (
+              <div className="p-4 rounded-md border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-semibold">На проверке</h3>
+                    <p className="text-sm text-muted-foreground">Задача проверяется создателем</p>
+                  </div>
+                  <CheckCircle size={18} className="text-muted-foreground" />
+                </div>
+              </div>
+            )}
+
+            {task.status === "DONE" && (
+              <div className="p-4 rounded-md border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-semibold">Завершена</h3>
+                    <p className="text-sm text-muted-foreground">Задача успешно выполнена</p>
+                  </div>
+                  <CheckCircle size={18} className="text-green-600" />
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </DialogContent>
@@ -208,6 +331,14 @@ export default function TaskDetailDialog({ open, onOpenChange, task }: TaskDetai
           bids,
           mode: task.mode,
         } : undefined}
+      />
+
+      <ReturnToWorkDialog
+        open={returnDialogOpen}
+        onOpenChange={setReturnDialogOpen}
+        onConfirm={(comment) => returnToWorkMutation.mutate(comment)}
+        isSubmitting={returnToWorkMutation.isPending}
+        taskTitle={task.title}
       />
     </Dialog>
   );
