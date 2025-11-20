@@ -458,13 +458,13 @@ export class DbStorage implements IStorage {
       );
   }
 
-  async createBid(bidData: InsertBid, options?: { currentAuctionAmount?: number | null }): Promise<AuctionBid> {
+  async createBid(bidData: InsertBid, options?: { winningAmount?: number | null }): Promise<AuctionBid> {
     return await db.transaction(async (tx) => {
       const [bid] = await tx.insert(auctionBids).values(bidData as any).returning();
       const updates: Partial<InsertTask> = { auctionHasBids: true, updatedAt: new Date() };
 
-      if (options?.currentAuctionAmount !== undefined && options?.currentAuctionAmount !== null) {
-        updates.currentPrice = options.currentAuctionAmount as any;
+      if (options?.winningAmount !== undefined && options?.winningAmount !== null) {
+        updates.currentPrice = options.winningAmount as any;
       }
 
       await tx.update(tasks).set(updates as any).where(eq(tasks.id, bidData.taskId));

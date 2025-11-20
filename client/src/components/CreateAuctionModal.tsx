@@ -23,9 +23,11 @@ interface FormState {
   description: string;
   minimumGrade: Grade;
   startingPrice: string;
-  deadlineDate: string;
+  auctionDeadlineDate: string;
+  taskDeadlineDate: string;
   departmentId?: string;
   divisionId?: string;
+  executorId?: string;
   mode: TaskMode;
   taskType: TaskType;
 }
@@ -38,22 +40,27 @@ function formatDateOnly(date: Date): string {
 }
 
 function createInitialFormState(): FormState {
-  const defaultDeadline = new Date();
-  defaultDeadline.setDate(defaultDeadline.getDate() + 3);
+  const defaultAuctionDeadline = new Date();
+  defaultAuctionDeadline.setDate(defaultAuctionDeadline.getDate() + 1);
+
+  const defaultTaskDeadline = new Date();
+  defaultTaskDeadline.setDate(defaultTaskDeadline.getDate() + 3);
   return {
     title: "",
     description: "",
     minimumGrade: "D",
     startingPrice: "",
-    deadlineDate: formatDateOnly(defaultDeadline),
+    auctionDeadlineDate: formatDateOnly(defaultAuctionDeadline),
+    taskDeadlineDate: formatDateOnly(defaultTaskDeadline),
     departmentId: undefined,
     divisionId: undefined,
+    executorId: undefined,
     mode: "MONEY",
     taskType: "DEPARTMENT",
   };
 }
 
-function composeDeadline(dateValue: string): Date | null {
+function composeDeadline(dateValue: string, hour = 18): Date | null {
   if (!dateValue) return null;
   const [year, month, day] = dateValue.split("-").map((part) => Number(part));
   if (!year || !month || !day) {
@@ -61,7 +68,7 @@ function composeDeadline(dateValue: string): Date | null {
   }
   const deadline = new Date();
   deadline.setFullYear(year, month - 1, day);
-  deadline.setHours(19, 0, 0, 0);
+  deadline.setHours(hour, 0, 0, 0);
   if (Number.isNaN(deadline.getTime())) {
     return null;
   }
@@ -141,6 +148,11 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
     enabled: open && formState.taskType === "INDIVIDUAL",
   });
 
+  const filteredEmployees = useMemo(() => {
+    if (!formState.departmentId) return employees;
+    return employees.filter((employee) => employee.departmentId === formState.departmentId);
+  }, [employees, formState.departmentId]);
+
   const availableDepartments = useMemo(() => {
     if (!currentUser) return [] as Department[];
     return (departments ?? []).filter((department) => {
@@ -206,6 +218,19 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
     }
   }, [availableDivisions, formState.departmentId, formState.divisionId, formState.taskType, open]);
 
+  useEffect(() => {
+    if (!open || formState.taskType !== "INDIVIDUAL") return;
+
+    if (filteredEmployees.length === 1 && !formState.executorId) {
+      setFormState((prev) => ({ ...prev, executorId: filteredEmployees[0].id }));
+    } else if (formState.executorId) {
+      const stillAvailable = filteredEmployees.some((employee) => employee.id === formState.executorId);
+      if (!stillAvailable) {
+        setFormState((prev) => ({ ...prev, executorId: undefined }));
+      }
+    }
+  }, [filteredEmployees, formState.executorId, formState.taskType, open]);
+
   const minDate = useMemo(() => formatDateOnly(new Date()), []);
 
   const mutation = useMutation({
@@ -256,8 +281,10 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
     const trimmedTitle = formState.title.trim();
     const trimmedDescription = formState.description.trim();
     const amount = Number(formState.startingPrice);
-    const deadline = composeDeadline(formState.deadlineDate);
+    const auctionDeadline = composeDeadline(formState.auctionDeadlineDate);
+    const taskDeadline = composeDeadline(formState.taskDeadlineDate);
     const isTimeMode = formState.mode === "TIME";
+    const isIndividual = formState.taskType === "INDIVIDUAL";
 
     if (availableDepartments.length > 1 && !formState.departmentId) {
       toast({ title: "Выберите департамент", variant: "destructive" });
@@ -294,8 +321,25 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
       }
     }
 
-    if (!deadline || deadline <= new Date()) {
-      toast({ title: "Выберите корректный дедлайн", variant: "destructive" });
+    if (!taskDeadline || taskDeadline <= new Date()) {
+      toast({ title: "Выберите корректный дедлайн задачи", variant: "destructive" });
+      return;
+    }
+
+    if (!isIndividual) {
+      if (!auctionDeadline || auctionDeadline <= new Date()) {
+        toast({ title: "Выберите корректный дедлайн аукциона", variant: "destructive" });
+        return;
+      }
+
+      if (taskDeadline <= auctionDeadline) {
+        toast({ title: "Дедлайн задачи должен быть позже окончания аукциона", variant: "destructive" });
+        return;
+      }
+    }
+
+    if (isIndividual && !formState.executorId) {
+      toast({ title: "Выберите исполнителя", variant: "destructive" });
       return;
     }
 
@@ -304,12 +348,13 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
       description: trimmedDescription,
       minimumGrade: formState.minimumGrade,
       startingPrice: amount,
-      deadline: deadline.toISOString(),
+      deadline: taskDeadline.toISOString(),
       departmentId: formState.departmentId,
       managementId: undefined,
       divisionId: formState.taskType === "UNIT" ? formState.divisionId : undefined,
       mode: formState.mode,
       taskType: formState.taskType,
+      executorId: isIndividual ? formState.executorId : undefined,
     });
   };
 
@@ -445,6 +490,29 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
                 </div>
               </div>
 
+              {formState.taskType === "INDIVIDUAL" && (
+                <div className="space-y-2">
+                  <Label htmlFor="executor">Исполнитель *</Label>
+                  <Select
+                    value={formState.executorId ?? ""}
+                    onValueChange={(value) => setFormState((prev) => ({ ...prev, executorId: value }))}
+                    disabled={mutation.isPending || filteredEmployees.length === 0}
+                  >
+                    <SelectTrigger id="executor">
+                      <SelectValue placeholder={filteredEmployees.length ? "Выберите исполнителя" : "Нет доступных сотрудников"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {filteredEmployees.map((employee) => (
+                        <SelectItem key={employee.id} value={employee.id}>
+                          {employee.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Выберите сотрудника для индивидуальной задачи</p>
+                </div>
+              )}
+
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="auction-minimum-grade">Минимальный грейд</Label>
@@ -489,18 +557,37 @@ export default function CreateAuctionModal({ open, onOpenChange }: CreateAuction
                 </div>
               </div>
 
+              {formState.taskType !== "INDIVIDUAL" && (
+                <div className="space-y-2">
+                  <Label htmlFor="auction-deadline">Дедлайн аукциона</Label>
+                  <Input
+                    id="auction-deadline"
+                    type="date"
+                    value={formState.auctionDeadlineDate}
+                    min={minDate}
+                    onChange={(event) => setFormState((prev) => ({ ...prev, auctionDeadlineDate: event.target.value }))}
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Торги завершатся в выбранный день в 18:00 по вашей локальной таймзоне
+                  </p>
+                </div>
+              )}
+
               <div className="space-y-2">
-                <Label htmlFor="auction-deadline">Дедлайн аукциона</Label>
+                <Label htmlFor="task-deadline">Дедлайн задачи</Label>
                 <Input
-                  id="auction-deadline"
+                  id="task-deadline"
                   type="date"
-                  value={formState.deadlineDate}
-                  min={minDate}
-                  onChange={(event) => setFormState((prev) => ({ ...prev, deadlineDate: event.target.value }))}
+                  value={formState.taskDeadlineDate}
+                  min={formState.taskType !== "INDIVIDUAL" ? formState.auctionDeadlineDate : minDate}
+                  onChange={(event) => setFormState((prev) => ({ ...prev, taskDeadlineDate: event.target.value }))}
                   required
                 />
                 <p className="text-xs text-muted-foreground">
-                  Торги завершатся в выбранный день в 19:00 по вашей локальной таймзоне
+                  {formState.taskType === "INDIVIDUAL"
+                    ? "Укажите срок выполнения индивидуальной задачи"
+                    : "Срок завершения задачи после окончания аукциона"}
                 </p>
               </div>
             </div>
