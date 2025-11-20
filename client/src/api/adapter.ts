@@ -283,7 +283,7 @@ export interface BidHistoryItem {
   bidderName: string;
   amount: number;
   timestamp: string;
-  rating?: string;
+  rating?: number;
   grade?: Grade;
 }
 
@@ -297,15 +297,21 @@ export async function getBidsForTask(taskId: string): Promise<BidHistoryItem[]> 
       return [];
     }
 
-    return data.map((bid: any) => ({
-      id: bid.id,
-      bidder: bid.bidderName ?? "Unknown",
-      bidderName: bid.bidderName ?? "Unknown",
-      amount: bid.valueMoney ? parseFloat(bid.valueMoney) : (bid.valueTimeMinutes ?? 0),
-      timestamp: new Date(bid.createdAt).toLocaleString("ru-RU"),
-      rating: bid.bidderRating,
-      grade: bid.bidderGrade,
-    }));
+    return data.map((bid: any) => {
+      const rawAmount = bid.valueMoney ?? bid.valueTimeMinutes;
+      const amount = parseNumber(rawAmount) ?? 0;
+      const rating = parseNumber(bid.bidderRating);
+
+      return {
+        id: bid.id,
+        bidder: bid.bidderName ?? "Unknown",
+        bidderName: bid.bidderName ?? "Unknown",
+        amount,
+        timestamp: new Date(bid.createdAt).toLocaleString("ru-RU"),
+        rating: rating ?? undefined,
+        grade: bid.bidderGrade,
+      } satisfies BidHistoryItem;
+    });
   } catch (error) {
     console.warn("Failed to load bids for task", taskId, error);
     return [];
