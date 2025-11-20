@@ -267,8 +267,12 @@ export async function createAuctionTask(payload: CreateAuctionTaskPayload): Prom
   return transformTask(data);
 }
 
-export async function updateTaskStatus(taskId: string, status: AuctionStatus): Promise<void> {
-  await apiRequest("PATCH", `/api/tasks/${taskId}/status`, { status });
+export async function updateTaskStatus(
+  taskId: string,
+  status: AuctionStatus,
+  comment?: string
+): Promise<void> {
+  await apiRequest("PATCH", `/api/tasks/${taskId}/status`, { status, comment });
 }
 
 export async function placeBid(
