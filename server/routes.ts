@@ -56,26 +56,7 @@ import {
   isAuctionVisibleToUser,
 } from "./utils/auctionAccess";
 import multer from "multer";
-// import { Client } from "@replit/object-storage";
-
-// Mock Client for local development
-class Client {
-  async uploadFromBytes(path: string, buffer: any) {
-    console.log(`[Mock Storage] Uploading to ${path}`);
-    return { ok: true, error: null };
-  }
-  async download(path: string) {
-    console.log(`[Mock Storage] Downloading ${path}`);
-    return { ok: true, value: Buffer.from("mock data"), error: null };
-  }
-  async delete(path: string) {
-    console.log(`[Mock Storage] Deleting ${path}`);
-    return { ok: true, error: null };
-  }
-  async list(prefix: string) {
-    return { ok: true, value: [], error: null };
-  }
-}
+import { Client } from "@replit/object-storage";
 
 // Authentication middleware
 function requireAuth(req: Request, res: Response, next: NextFunction) {
