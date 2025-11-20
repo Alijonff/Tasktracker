@@ -151,7 +151,8 @@ const decimalNumberSchema = z
     if (typeof value === "number") {
       return value;
     }
-    const normalized = value.trim().replace(",", ".");
+    // Remove ALL whitespace (including internal spaces like "999 000")
+    const normalized = value.replace(/\s/g, '').replace(",", ".");
     return Number.parseFloat(normalized);
   })
   .pipe(z.number().positive("Значение должно быть больше нуля"));
@@ -231,14 +232,20 @@ function moveToNextWeekdayStart(date: Date): Date {
 }
 
 function calculateAuctionEnd(start: Date): Date {
-  const deadline = new Date(start);
+  let deadline = new Date(start);
 
   if (Number.isNaN(deadline.getTime())) {
     return start;
   }
 
+  // Add 1 day
   deadline.setDate(deadline.getDate() + 1);
   deadline.setHours(18, 0, 0, 0);
+
+  // Skip weekends - move to next Monday if deadline falls on weekend
+  while (isWeekend(deadline)) {
+    deadline.setDate(deadline.getDate() + 1);
+  }
 
   return deadline;
 }
