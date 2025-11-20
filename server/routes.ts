@@ -1787,7 +1787,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           valueMoney: refreshedMetadata.mode === "MONEY" ? decimalToString(bidAmount) : null,
           valueTimeMinutes: refreshedMetadata.mode === "TIME" ? bidAmount : null,
         },
-        { currentAuctionAmount: auctionPrice },
+        { winningAmount: bidAmount },
       );
 
       res.status(201).json(bidRecord);

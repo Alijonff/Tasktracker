@@ -240,6 +240,7 @@ export interface CreateAuctionTaskPayload {
   minimumGrade: Grade;
   startingPrice: number;
   deadline: string;
+  executorId?: string;
   departmentId?: string;
   managementId?: string;
   divisionId?: string;
@@ -256,6 +257,7 @@ export async function createAuctionTask(payload: CreateAuctionTaskPayload): Prom
     taskType: payload.taskType ?? "DEPARTMENT",
     minimumGrade: payload.minimumGrade,
     deadline: payload.deadline,
+    executorId: payload.executorId,
     departmentId: payload.departmentId,
     managementId: payload.managementId,
     divisionId: payload.divisionId,
