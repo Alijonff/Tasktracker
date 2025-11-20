@@ -1,3 +1,5 @@
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -5,10 +7,16 @@ import { formatAuctionValue, formatDateTime, formatMoney } from "@/lib/formatter
 import StatusBadge from "./StatusBadge";
 import GradeBadge from "./GradeBadge";
 import { Badge } from "@/components/ui/badge";
-import { UsersRound, Gavel, CalendarDays, UserRound } from "lucide-react";
-import type { Grade } from "@/api/adapter";
+import { Button } from "@/components/ui/button";
+import PlaceBidDialog from "./PlaceBidDialog";
+import { UsersRound, Gavel, CalendarDays, UserRound, Wallet } from "lucide-react";
+import type { BidHistoryItem, Grade } from "@/api/adapter";
 import type { TaskMode } from "@shared/taskMetadata";
 import type { Task } from "@shared/schema";
+import { getBidsForTask, placeBid } from "@/api/adapter";
+import { useToast } from "@/hooks/use-toast";
+import type { SessionUser } from "@/types/session";
+import { extractBidErrorMessage, getBidAvailability, resolveUserGrade } from "@/lib/bidRules";
 
 interface TaskDetailDialogProps {
   open: boolean;
@@ -19,6 +27,7 @@ interface TaskDetailDialogProps {
     description: string;
     status: Task["status"];
     creator: string;
+    executorName?: string | null;
     deadline: string;
     minimumGrade: Grade;
     startingPrice: number;
@@ -26,14 +35,60 @@ interface TaskDetailDialogProps {
     mode: TaskMode;
     bidsCount: number;
     leadingBidderName?: string;
+    earnedMoney?: number | string | null;
+    earnedTimeMinutes?: number | null;
+    canBid?: boolean;
   };
 }
 
 export default function TaskDetailDialog({ open, onOpenChange, task }: TaskDetailDialogProps) {
   if (!task) return null;
 
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [bidDialogOpen, setBidDialogOpen] = useState(false);
+
+  const { data: userResponse } = useQuery<{ user: SessionUser | null }>({ queryKey: ["/api/auth/me"] });
+  const currentUser = userResponse?.user;
+  const userGrade = useMemo(() => resolveUserGrade(currentUser), [currentUser]);
+
+  const { data: bids = [] } = useQuery<BidHistoryItem[]>({
+    queryKey: ["task-bids", task.id],
+    queryFn: () => getBidsForTask(task.id),
+    enabled: bidDialogOpen,
+  });
+
+  const bidMutation = useMutation({
+    mutationFn: (amount: number) => placeBid(task.id, amount, task.mode),
+    onSuccess: () => {
+      toast({ title: "Ставка принята" });
+      queryClient.invalidateQueries({ queryKey: ["task-bids", task.id] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["auctions"], exact: false });
+      setBidDialogOpen(false);
+    },
+    onError: (error) => {
+      toast({ title: extractBidErrorMessage(error), variant: "destructive" });
+    },
+  });
+
   const price = task.currentPrice ?? task.startingPrice;
   const formattedPrice = formatAuctionValue(price, task.mode);
+  const rewardAmount =
+    task.mode === "TIME"
+      ? task.earnedTimeMinutes ?? null
+      : typeof task.earnedMoney === "number"
+        ? task.earnedMoney
+        : task.earnedMoney
+          ? Number.parseFloat(task.earnedMoney)
+          : null;
+  const rewardDisplay = rewardAmount !== null && rewardAmount !== undefined
+    ? task.mode === "TIME"
+      ? `${rewardAmount} мин`
+      : formatMoney(rewardAmount)
+    : formatAuctionValue(task.currentPrice ?? task.startingPrice, task.mode);
+  const bidAvailability = getBidAvailability(task, currentUser, userGrade);
+  const canBid = (task.canBid ?? true) && bidAvailability.canBid;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -92,26 +147,68 @@ export default function TaskDetailDialog({ open, onOpenChange, task }: TaskDetai
 
           <div className="space-y-4">
             <div className="p-4 rounded-md bg-muted/40 border space-y-3">
-              <h3 className="font-semibold">Информация по аукциону</h3>
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold">Вознаграждение исполнителя</h3>
+                <Wallet size={18} className="text-primary" />
+              </div>
               <div className="text-sm text-muted-foreground space-y-2">
                 <div className="flex items-center justify-between">
-                  <span>Начальная ставка</span>
-                  <span className="font-mono text-foreground">{formatMoney(task.startingPrice)}</span>
+                  <span>Сумма к получению</span>
+                  <span className="font-semibold text-foreground">{rewardDisplay}</span>
                 </div>
+                {task.executorName && (
+                  <div className="flex items-center justify-between">
+                    <span>Исполнитель</span>
+                    <span className="font-medium text-foreground">{task.executorName}</span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
-                  <span>Текущая ставка</span>
-                  <span className="font-mono text-foreground">{formatMoney(price)}</span>
+                  <span>Начальная ставка</span>
+                  <span className="font-mono text-foreground">{formatAuctionValue(task.startingPrice, task.mode)}</span>
                 </div>
               </div>
             </div>
 
-            <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-              Ставки подаются только в сумах. После финального перевода в колонку «Завершена» сотрудник фиксируется
-              победителем аукциона.
+            <div className="p-4 rounded-md border space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold">Участвовать в торгах</h3>
+                  <p className="text-sm text-muted-foreground">Подайте ставку прямо из карточки задачи</p>
+                </div>
+                <Gavel size={18} className="text-primary" />
+              </div>
+
+              <Button
+                className="w-full"
+                onClick={() => setBidDialogOpen(true)}
+                disabled={!canBid || bidMutation.isPending}
+                data-testid="button-bid-from-detail"
+              >
+                Сделать ставку
+              </Button>
+              {!canBid && (
+                <p className="text-xs text-muted-foreground text-center">{bidAvailability.reason}</p>
+              )}
             </div>
           </div>
         </div>
       </DialogContent>
+
+      <PlaceBidDialog
+        open={bidDialogOpen}
+        onOpenChange={setBidDialogOpen}
+        isSubmitting={bidMutation.isPending}
+        onSubmit={(amount) => bidMutation.mutate(amount)}
+        task={bidDialogOpen ? {
+          id: task.id,
+          title: task.title,
+          startingPrice: task.startingPrice,
+          currentPrice: task.currentPrice ?? task.startingPrice,
+          minimumGrade: task.minimumGrade,
+          bids,
+          mode: task.mode,
+        } : undefined}
+      />
     </Dialog>
   );
 }

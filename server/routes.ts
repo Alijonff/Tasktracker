@@ -1629,6 +1629,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await storage.assignPointsForTask(task.id, basePoints, penaltyPoints);
       }
 
+      if (targetStatus === "DONE" && task.executorId && metadata.mode === "MONEY") {
+        const reward = parseDecimal((updateData.earnedMoney ?? task.earnedMoney) as any);
+        if (reward && reward > 0) {
+          await storage.createPointTransaction({
+            userId: task.executorId,
+            userName: task.executorName ?? currentUser.name,
+            amount: Math.round(reward),
+            type: "task_completion",
+            taskId: task.id,
+            taskTitle: task.title,
+            comment: "Вознаграждение за выполненную задачу",
+          });
+        }
+      }
+
       res.json(normalizeTaskResponse(updated));
     } catch (error) {
       console.error("Ошибка при обновлении статуса задачи:", error);

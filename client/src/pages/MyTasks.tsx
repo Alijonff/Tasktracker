@@ -92,6 +92,7 @@ export default function MyTasks() {
           description: selectedTask.description,
           status: selectedTask.status,
           creator: selectedTask.creatorName,
+          executorName: selectedTask.executorName,
           deadline: selectedTask.deadline,
           minimumGrade: selectedTask.minimumGrade,
           startingPrice: selectedTask.startingPrice,
@@ -99,6 +100,9 @@ export default function MyTasks() {
           mode: selectedTask.mode,
           bidsCount: selectedTask.bidsCount,
           leadingBidderName: selectedTask.leadingBidderName,
+          earnedMoney: selectedTask.earnedMoney,
+          earnedTimeMinutes: selectedTask.earnedTimeMinutes,
+          canBid: selectedTask.canBid,
         } : undefined}
       />
     </div>
