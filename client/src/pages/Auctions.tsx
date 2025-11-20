@@ -3,70 +3,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import TaskCard from "@/components/TaskCard";
 import PlaceBidDialog from "@/components/PlaceBidDialog";
 import CreateAuctionModal from "@/components/CreateAuctionModal";
-import { listAuctions, placeBid, getBidsForTask, type AuctionTaskSummary, type Grade } from "@/api/adapter";
+import { listAuctions, placeBid, getBidsForTask, type AuctionTaskSummary } from "@/api/adapter";
 import { useToast } from "@/hooks/use-toast";
 import { Gavel, PlusCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SessionUser } from "@/types/session";
-import { calculateGrade } from "@shared/utils";
 import type { TaskMode } from "@shared/taskMetadata";
-
-const gradeWeights: Record<Grade, number> = {
-  D: 0,
-  C: 1,
-  B: 2,
-  A: 3,
-};
-
-function getBidAvailability(
-  task: AuctionTaskSummary,
-  user: SessionUser | null | undefined,
-  userGrade: Grade | null,
-): { canBid: boolean; reason?: string } {
-  if (!user) {
-    return { canBid: false, reason: "Необходимо войти в систему" };
-  }
-
-  if (user.id === task.creatorId) {
-    return { canBid: false, reason: "Создатель задачи не может делать ставки" };
-  }
-
-  if (user.role !== "admin") {
-    if (!user.departmentId || user.departmentId !== task.departmentId) {
-      return { canBid: false, reason: "Только для сотрудников департамента задачи" };
-    }
-
-    if (task.taskType === "UNIT") {
-      if (task.divisionId && user.divisionId !== task.divisionId) {
-        return { canBid: false, reason: "Только для отдела задачи" };
-      }
-    }
-  }
-
-  if (userGrade && gradeWeights[userGrade] < gradeWeights[task.minimumGrade]) {
-    return { canBid: false, reason: `Ставка доступна с грейда ${task.minimumGrade}` };
-  }
-
-  return { canBid: true };
-}
-
-function extractErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    const [, ...rest] = error.message.split(":");
-    const payload = rest.join(":").trim();
-    if (payload) {
-      try {
-        const parsed = JSON.parse(payload);
-        if (parsed?.error) return String(parsed.error);
-      } catch (err) {
-        console.debug("Не удалось распарсить ошибку ставки", err);
-      }
-      return payload;
-    }
-    return error.message;
-  }
-  return "Не удалось отправить ставку";
-}
+import { extractBidErrorMessage, getBidAvailability, resolveUserGrade } from "@/lib/bidRules";
 
 export default function Auctions() {
   const queryClient = useQueryClient();
@@ -80,15 +23,7 @@ export default function Auctions() {
   });
   const currentUser = userResponse?.user;
 
-  const userGrade = useMemo<Grade | null>(() => {
-    if (!currentUser) return null;
-    if (currentUser.grade) {
-      return currentUser.grade as Grade;
-    }
-    const rawPoints = typeof currentUser.points === "number" ? currentUser.points : Number(currentUser.points ?? 0);
-    const safePoints = Number.isFinite(rawPoints) ? Number(rawPoints) : 0;
-    return calculateGrade(safePoints);
-  }, [currentUser]);
+  const userGrade = useMemo(() => resolveUserGrade(currentUser), [currentUser]);
 
   const { data: tasks = [], isLoading } = useQuery<AuctionTaskSummary[]>({
     queryKey: ["auctions", "BACKLOG"],
@@ -114,7 +49,7 @@ export default function Auctions() {
       setBidDialogOpen(false);
     },
     onError: (error) => {
-      toast({ title: extractErrorMessage(error), variant: "destructive" });
+      toast({ title: extractBidErrorMessage(error), variant: "destructive" });
     },
   });
 
