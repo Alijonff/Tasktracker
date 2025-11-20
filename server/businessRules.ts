@@ -66,10 +66,10 @@ export function calculateAuctionPrice(
     return null;
   }
 
-  // Get base value depending on mode
-  const baseValue = mode === "MONEY"
-    ? (task.basePrice ? Number(task.basePrice) : null)
-    : (task.baseTimeMinutes ? Number(task.baseTimeMinutes) : null);
+  const baseValue = getAuctionBaseValue(task, mode);
+  if (task.auctionHasBids) {
+    return getAuctionCurrentValue(task, mode) ?? baseValue;
+  }
 
   if (baseValue === null) {
     return null;
@@ -121,25 +121,21 @@ export function calculateAuctionPrice(
   const effectiveNow = now > endAt ? endAt : now;
   const passedCheckpoints = countCheckpoints(startAt, effectiveNow);
 
-  // "Growth starts from the second control moment"
-  // So 0 or 1 checkpoint passed => no increase (multiplier 1.0)
-  // 2 checkpoints passed => 1 increase
-  const increases = Math.max(0, passedCheckpoints - 1);
-
   const totalCheckpoints = countCheckpoints(startAt, endAt);
+  const effectiveSteps = Math.max(0, totalCheckpoints - 3);
+  const increases = Math.max(0, passedCheckpoints - 3);
 
-  if (totalCheckpoints < 2) {
+  if (effectiveSteps === 0) {
     return baseValue;
   }
 
-  // We have (totalCheckpoints - 1) steps to reach AUCTION_RANGE_MULTIPLIER
+  // We have `effectiveSteps` steps to reach AUCTION_RANGE_MULTIPLIER
   const maxMultiplier = AUCTION_RANGE_MULTIPLIER;
-  const fraction = increases / Math.max(1, totalCheckpoints - 1);
-  const cappedFraction = Math.min(1, fraction);
+  const fraction = Math.min(1, increases / effectiveSteps);
 
-  const multiplier = 1 + (maxMultiplier - 1) * cappedFraction;
+  const multiplier = 1 + (maxMultiplier - 1) * fraction;
 
-  return Math.round(baseValue * multiplier);
+  return baseValue * multiplier;
 }
 
 export function getBidValue(bid: AuctionBid, mode: TaskMode): number | null {
@@ -206,7 +202,8 @@ export function shouldAutoAssignToCreator(task: Task, now: Date = new Date()): b
 }
 
 export function calculateOverduePenaltyHours(deadline: Date, completedAt: Date): number {
-  return Math.max(0, Math.ceil(diffWorkingHours(deadline, completedAt)));
+  const hours = diffWorkingHours(deadline, completedAt, { useTashkentTime: false });
+  return Math.max(0, Math.ceil(hours));
 }
 
 export function calculateEarnedValue(
